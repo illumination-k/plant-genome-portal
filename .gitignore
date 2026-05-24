@@ -5,5 +5,7 @@ dist/
 !.env.example
 *.tsbuildinfo
 target/
+mutants.out/
+mutants.out.old/
 data/
 .miserc.toml
