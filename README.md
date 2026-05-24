@@ -26,3 +26,15 @@ Useful endpoints:
 - `GET /v2/genome/accession/GCA_037833805.1/region/chr1:1-100000/features`
 - `GET /sequence/service-info`
 - `GET /openapi.json`
+
+Run OpenAPI-driven property-based tests against the backend:
+
+```bash
+mise run pbt:backend
+```
+
+The task starts the API with `tests/fixtures/backend-pbt`, then runs Schemathesis against `/openapi.json`. Extra Schemathesis options can be passed through the script:
+
+```bash
+bash scripts/pbt/backend-schemathesis.sh --max-examples 200 --continue-on-failure
+```

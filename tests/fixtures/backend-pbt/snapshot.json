@@ -1,0 +1,76 @@
+{
+  "manifest": {
+    "source_base_url": "https://example.test/backend-pbt",
+    "fasta_file": "reference.fa",
+    "gff_file": "reference.gff3"
+  },
+  "dataset": {
+    "taxon": {
+      "tax_id": 3197,
+      "scientific_name": "Marchantia polymorpha",
+      "common_name": "liverwort",
+      "rank": "species"
+    },
+    "assembly": {
+      "accession": "GCA_PBT000001.1",
+      "tax_id": 3197,
+      "name": "PBT fixture assembly",
+      "source": "local",
+      "refget_checksum": null
+    },
+    "sequences": [
+      {
+        "name": "chr1",
+        "assembly_accession": "GCA_PBT000001.1",
+        "length": 40,
+        "refget_checksum": "71mfZw47FLWJKQ_wvBCMgGungdTJFoft"
+      }
+    ],
+    "genes": [
+      {
+        "id": "MpPBT00010",
+        "assembly_accession": "GCA_PBT000001.1",
+        "symbol": "PBT1",
+        "locus_tag": "MpPBT00010",
+        "sequence_name": "chr1",
+        "region": {
+          "sequence_name": "chr1",
+          "start": 0,
+          "end": 20
+        },
+        "strand": "forward",
+        "feature_type": "gene",
+        "attributes": {
+          "Name": "PBT1"
+        }
+      }
+    ],
+    "transcripts": [
+      {
+        "id": "MpPBT00010.1",
+        "gene_id": "MpPBT00010",
+        "sequence_name": "chr1",
+        "region": {
+          "sequence_name": "chr1",
+          "start": 0,
+          "end": 20
+        },
+        "strand": "forward",
+        "feature_type": "mRNA",
+        "attributes": {}
+      }
+    ],
+    "exons": [
+      {
+        "transcript_id": "MpPBT00010.1",
+        "sequence_name": "chr1",
+        "region": {
+          "sequence_name": "chr1",
+          "start": 0,
+          "end": 20
+        },
+        "strand": "forward"
+      }
+    ]
+  }
+}

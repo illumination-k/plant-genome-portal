@@ -31,6 +31,10 @@ run = [
   "cargo test --doc --locked --all-features",
 ]
 
+[tasks."pbt:backend"]
+description = "Run Schemathesis property-based tests against the API"
+run = "bash scripts/pbt/backend-schemathesis.sh"
+
 [tasks."mutants:rust:diff"]
 description = "Run cargo-mutants only on Rust lines changed vs a base git ref (default: main)"
 usage = '''
