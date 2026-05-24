@@ -4,10 +4,11 @@ use std::io::BufReader;
 use std::path::Path;
 
 use genome_core::{
-    AssemblyAccession, Exon, Gene, GeneId, HalfOpenRegion, Position0, Position1, SequenceName,
+    AssemblyAccession, Cds, Exon, Gene, GeneId, HalfOpenRegion, Position0, Position1, SequenceName,
     Strand, Transcript, TranscriptId,
 };
 use noodles_gff as gff;
+use noodles_gff::feature::record::Phase;
 use noodles_gff::feature::record_buf::Attributes;
 
 use crate::error::StorageError;
@@ -17,6 +18,7 @@ pub(crate) struct ParsedGff {
     pub genes: Vec<Gene>,
     pub transcripts: Vec<Transcript>,
     pub exons: Vec<Exon>,
+    pub cdss: Vec<Cds>,
 }
 
 pub(crate) fn parse_gff3(
@@ -51,6 +53,9 @@ pub(crate) fn parse_gff3(
         } else if feature_type == "exon" {
             let exons = parse_exons(&record, line_number, &transcript_parent)?;
             parsed.exons.extend(exons);
+        } else if feature_type == "CDS" {
+            let cdss = parse_cdss(&record, line_number, &transcript_parent)?;
+            parsed.cdss.extend(cdss);
         }
     }
 
@@ -136,6 +141,43 @@ fn parse_exons(
     }
 
     Ok(exons)
+}
+
+fn parse_cdss(
+    record: &gff::feature::RecordBuf,
+    line: usize,
+    transcript_parent: &HashMap<TranscriptId, GeneId>,
+) -> Result<Vec<Cds>, StorageError> {
+    let attrs = collect_attributes(record.attributes());
+    let parent = attr(&attrs, "Parent", line)?;
+    let sequence_name = SequenceName::new(bytes_to_string(record.reference_sequence_name()))?;
+    let strand = convert_strand(record.strand());
+    let region = parse_region(record, line)?;
+    let phase = record.phase().map(convert_phase);
+    let mut cdss = Vec::new();
+
+    for transcript_id in parent.split(',') {
+        let transcript_id = TranscriptId::new(transcript_id)?;
+        if transcript_parent.contains_key(&transcript_id) {
+            cdss.push(Cds {
+                transcript_id,
+                sequence_name: sequence_name.clone(),
+                region: region.clone(),
+                strand,
+                phase,
+            });
+        }
+    }
+
+    Ok(cdss)
+}
+
+fn convert_phase(phase: Phase) -> u8 {
+    match phase {
+        Phase::Zero => 0,
+        Phase::One => 1,
+        Phase::Two => 2,
+    }
 }
 
 fn parse_region(

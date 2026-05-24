@@ -32,6 +32,7 @@ export type {
   AssemblySequencesResponse,
   AssemblySequencesResponses,
   AssemblySource,
+  Cds,
   ClientOptions,
   ClosedRegion,
   ErrorResponse,

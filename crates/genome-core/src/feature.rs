@@ -42,10 +42,22 @@ pub struct Exon {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct Cds {
+    pub transcript_id: TranscriptId,
+    pub sequence_name: SequenceName,
+    pub region: HalfOpenRegion,
+    pub strand: Strand,
+    /// GFF phase: 0, 1, or 2. Number of bases to remove from the 5' end of
+    /// this CDS segment to reach the first complete codon.
+    pub phase: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct GeneRecord {
     pub gene: Gene,
     pub transcripts: Vec<Transcript>,
     pub exons: Vec<Exon>,
+    pub cdss: Vec<Cds>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -56,4 +68,5 @@ pub struct GenomeDataset {
     pub genes: Vec<Gene>,
     pub transcripts: Vec<Transcript>,
     pub exons: Vec<Exon>,
+    pub cdss: Vec<Cds>,
 }

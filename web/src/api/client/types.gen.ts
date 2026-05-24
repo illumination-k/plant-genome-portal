@@ -33,6 +33,18 @@ export type AssemblyAccession = string;
 
 export type AssemblySource = "ncbi" | "marpol_base" | "tair" | "phytozome" | "community" | "local";
 
+export type Cds = {
+  /**
+   * GFF phase: 0, 1, or 2. Number of bases to remove from the 5' end of
+   * this CDS segment to reach the first complete codon.
+   */
+  phase?: number | null;
+  region: HalfOpenRegion;
+  sequence_name: SequenceName;
+  strand: Strand;
+  transcript_id: TranscriptId;
+};
+
 export type ClosedRegion = {
   end: Position1;
   sequence_name: SequenceName;
@@ -88,6 +100,7 @@ export type Gene = {
 export type GeneId = string;
 
 export type GeneRecord = {
+  cdss: Array<Cds>;
   exons: Array<Exon>;
   gene: Gene;
   transcripts: Array<Transcript>;

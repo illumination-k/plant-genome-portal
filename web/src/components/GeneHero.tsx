@@ -9,7 +9,7 @@ const GeneHero = (props: { geneRecord: GeneRecord }): ReactElement => (
   <div className="col-span-12 rounded-lg border border-zinc-200 bg-white p-6">
     <GeneHeroHeader gene={props.geneRecord.gene} />
     <GeneMetricGrid geneRecord={props.geneRecord} />
-    <GeneModel gene={props.geneRecord.gene} />
+    <GeneModel geneRecord={props.geneRecord} />
     <GeneGenomeBrowser gene={props.geneRecord.gene} />
   </div>
 );
