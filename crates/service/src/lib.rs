@@ -13,7 +13,10 @@ pub use homology::{
     AnnotatedHomologyHit, AnnotatedHomologySearchResult, HomologyAnnotationRepository,
     HomologyService,
 };
-pub use job::{Worker, WorkerJob};
+pub use job::{
+    InMemoryJobManager, JobExecutor, JobManager, JobManagerError, JobRecord, JobStatus, Worker,
+    WorkerExecutor, WorkerJob,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
