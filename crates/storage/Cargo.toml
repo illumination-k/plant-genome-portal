@@ -8,6 +8,8 @@ license.workspace = true
 base64.workspace = true
 flate2.workspace = true
 genome-core = { path = "../genome-core", version = "0.1.0" }
+noodles-fasta = "0.61"
+noodles-gff = "0.57"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
