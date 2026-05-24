@@ -1,6 +1,7 @@
 [tools]
 node = "25.9.0"
 pnpm = "11.0.1"
+"npm:@playwright/test" = "1.60.0"
 
 [tasks."fmt:ts"]
 description = "Format with oxfmt"
