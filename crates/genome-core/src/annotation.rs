@@ -198,7 +198,10 @@ mod tests {
         assert_eq!(KeggEntryKind::from_entry_id("X00001"), KeggEntryKind::Other);
         // Right prefix letter but wrong length — length check must reject.
         assert_eq!(KeggEntryKind::from_entry_id("K0001"), KeggEntryKind::Other);
-        assert_eq!(KeggEntryKind::from_entry_id("M0000001"), KeggEntryKind::Other);
+        assert_eq!(
+            KeggEntryKind::from_entry_id("M0000001"),
+            KeggEntryKind::Other
+        );
         assert_eq!(KeggEntryKind::from_entry_id("R0001"), KeggEntryKind::Other);
         assert_eq!(KeggEntryKind::from_entry_id("C0001"), KeggEntryKind::Other);
         assert_eq!(KeggEntryKind::from_entry_id("G0001"), KeggEntryKind::Other);
@@ -210,6 +213,9 @@ mod tests {
         assert_eq!(KeggEntryKind::from_entry_id("Gabcde"), KeggEntryKind::Other);
         // Pathway prefix arms must each be required: dropping one prefix string would
         // still hit the others, so verify "ec" alone classifies even with no map/ko.
-        assert_eq!(KeggEntryKind::from_entry_id("ec99999"), KeggEntryKind::Pathway);
+        assert_eq!(
+            KeggEntryKind::from_entry_id("ec99999"),
+            KeggEntryKind::Pathway
+        );
     }
 }

@@ -25,10 +25,7 @@ const GeneGenomeBrowser = (props: { gene: Gene }): ReactElement => (
     <p className="mb-3 mt-1 text-sm text-zinc-600">
       Region around {props.gene.sequence_name} containing this gene.
     </p>
-    <GenomeBrowser
-      accession={props.gene.assembly_accession}
-      location={buildLocation(props.gene)}
-    />
+    <GenomeBrowser accession={props.gene.assembly_accession} location={buildLocation(props.gene)} />
   </div>
 );
 

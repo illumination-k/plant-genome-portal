@@ -24,10 +24,7 @@ const emptyAccession = "";
 
 const buildTrackId = (accession: string): string => `${accession}-pgp-genes`;
 
-const buildViewState = (
-  config: JBrowseRootConfig,
-  location: string | undefined,
-): ViewState => {
+const buildViewState = (config: JBrowseRootConfig, location: string | undefined): ViewState => {
   const { plantGenomePortal: portal, assemblies, defaultSession: session } = config;
   const [assembly] = assemblies;
   const trackId = buildTrackId(portal.assemblyAccession);
