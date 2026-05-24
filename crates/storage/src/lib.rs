@@ -99,6 +99,10 @@ impl FileGenomeRepository {
         let snapshot = read_snapshot(path)?;
         Ok(Self::new(snapshot.dataset))
     }
+
+    pub fn default_assembly_accession(&self) -> AssemblyAccession {
+        self.dataset.assembly.accession.clone()
+    }
 }
 
 impl GenomeRepository for FileGenomeRepository {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "openapi:generate": "openapi-ts",
+    "lint": "oxlint .",
+    "openapi:generate": "cargo run -p api -- openapi --output ../target/openapi/api.json && openapi-ts",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run"
   },

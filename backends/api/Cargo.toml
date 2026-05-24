@@ -9,9 +9,11 @@ axum.workspace = true
 clap.workspace = true
 genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
 serde.workspace = true
+serde_json.workspace = true
 service = { path = "../../crates/service", version = "0.1.0" }
 storage = { path = "../../crates/storage", version = "0.1.0" }
 tokio.workspace = true
+tower-http = { workspace = true, features = ["cors"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 utoipa.workspace = true
