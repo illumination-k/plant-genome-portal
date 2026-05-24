@@ -193,28 +193,80 @@ Serif は採用しない (組版感は spacing と階層で出す)。
 
 スマホ最適化は副。ラップトップ以上 (`lg` 以上) を主戦場とする。`md` 未満では sidebar が drawer に畳まれ、3-pane が 1-pane に潰れる。
 
-### 4.3 Application shell
+### 4.3 12-column grid
+
+すべてのページレイアウトは **12-column grid** の上に組む。Tailwind v4 の `grid grid-cols-12 gap-6` を基本クラスとし、子要素は `col-span-*` で領域を取る。
+
+#### 仕様
+
+| 項目 | 値 |
+| --- | --- |
+| Columns | **12** (固定) |
+| Gutter | `gap-6` = 24px (`md` 以上) / `gap-4` = 16px (`md` 未満) |
+| Container max-width | 1440px (`max-w-[1440px]`) |
+| Outer padding | `px-6` (24px, `md` 以下) / `px-8` (32px, `md` 以上) |
+
+#### Breakpoint ごとの挙動
+
+| Breakpoint | Columns | Gutter | 備考 |
+| --- | --- | --- | --- |
+| `< md` (< 960px) | 4 (mobile sub-grid) | 16px | 12-col 維持は破綻するため 4-col に縮退、`col-span-12` → `col-span-4`、`col-span-6` → `col-span-4`、`col-span-4` → `col-span-2` のマッピング |
+| `md` (≥ 960px) | 12 | 24px | 標準 |
+| `lg` (≥ 1280px) | 12 | 24px | 標準 |
+| `xl` (≥ 1600px) | 12 | 32px (`gap-8`) | 視覚的に締まる |
+
+#### 代表的な span パターン
+
+| 用途 | span |
+| --- | --- |
+| Full-bleed (hero / table) | `col-span-12` |
+| Main + Sidebar | `col-span-8` + `col-span-4` |
+| Half / Half | `col-span-6` + `col-span-6` |
+| Triptych (metric grid) | `col-span-4` × 3 |
+| Quartet | `col-span-3` × 4 |
+| Main + Aside (狭) | `col-span-9` + `col-span-3` |
+| Centered form | `col-start-3 col-span-8` (centered, 余白 2/2) |
+
+`col-span-5`, `col-span-7`, `col-span-11` のような割り切れない span は原則禁止 (やむを得ない場合のみ、コメントで理由を残す)。
+
+### 4.4 Application shell
+
+App shell は grid の外側にある独立した layer。**TopBar** と **SideRail** はフレーム、**Main** だけが 12-col grid のキャンバスを提供する。Inspector は Main の grid を侵食しない overlay として右から滑り込む。
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Top bar (48px)                                                 │
-│  ─ Logo ─ Assembly switcher ─ ⌘K ──── ─ theme ─ docs ─ account  │
-├──────────┬──────────────────────────────────┬───────────────────┤
-│          │                                  │                   │
-│  Side    │       Main content               │  Inspector        │
-│  rail    │       (routed)                   │  (contextual,     │
-│  240px   │       max-w 1280, padded         │   collapsible,    │
-│          │                                  │   360px)          │
-│          │                                  │                   │
-└──────────┴──────────────────────────────────┴───────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  Top bar (48px, sticky)                                                        │
+│  ─ Logo ─ Assembly switcher ─ ⌘K ──────────── ─ theme ─ docs ─ account ─       │
+├──────────┬─────────────────────────────────────────────────────┬───────────────┤
+│          │  Main content (max-w 1440, px-6/px-8)               │               │
+│  Side    │  ┌─────────────────────────────────────────────┐    │  Inspector    │
+│  rail    │  │   12-column grid · gap-6                    │    │  (overlay,    │
+│  240px   │  │ ┌──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──┐       │    │   collapsible,│
+│          │  │ │ 1│ 2│ 3│ 4│ 5│ 6│ 7│ 8│ 9│10│11│12│       │    │   360px)      │
+│          │  │ └──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──┴──┘       │    │               │
+│          │  └─────────────────────────────────────────────┘    │               │
+└──────────┴─────────────────────────────────────────────────────┴───────────────┘
 ```
 
-- **Top bar**: 48px, sticky, border-bottom 1px。Logo (text-only) + assembly switcher (現在の MpTak1_v7.1 表示) + ⌘K trigger (中央寄りに大きく) + 右端に theme toggle / docs / API キー (将来)。
-- **Side rail**: 240px、collapse 時 56px (icon のみ)。`g+s`, `g+g` でセクションジャンプ。
-- **Main**: 最大幅 1280px、`px-6` (24px)、`py-8` (32px)。
-- **Inspector**: 任意。遺伝子検索結果で行を hover/select すると右に preview。閉じられる、`Esc` で閉じる。
+- **Top bar**: 48px, sticky, border-bottom 1px。Logo (text-only) + assembly switcher + ⌘K trigger (中央寄りに大きく) + 右端に theme toggle / docs / account。
+- **Side rail**: 240px、collapse 時 56px (icon のみ)。grid の外、`grid-cols-12` の参照基準には入らない。
+- **Main**: `max-w-[1440px]` (xl 未満では 100%)、`mx-auto`、`px-6/px-8`、内側に `grid grid-cols-12 gap-6`。すべてのページは `col-span-*` の合計が 12 になるよう構成する。
+- **Inspector**: 任意。grid の上に乗る overlay (もしくは main の幅を `col-span-8` に絞って右に `col-span-4` で並列表示する push mode、ユーザー選択可)。`Esc` で閉じる。
 
-### 4.4 Navigation 構造
+### 4.5 Nested grids (sub-grid)
+
+Card / panel 内部でさらに分割する場合は **同じ 12-col grid を入れ子** にし、`grid grid-cols-12 gap-4` を使う。例: gene detail header 内で `<Title col-span-8>` + `<Actions col-span-4>`。CSS Grid の `subgrid` (Tailwind v4 で `grid-cols-subgrid`) を活用して、子の column line が親と揃うことを保証する。
+
+```tsx
+<section className="col-span-12 grid grid-cols-subgrid gap-6">
+  <h2 className="col-span-8">Functional annotation</h2>
+  <div className="col-span-4 text-right">…actions</div>
+</section>
+```
+
+これで「外側 grid の 7 列目」と「内側 grid の 7 列目」が常に揃う — 表組のような視覚整列が無料で手に入る。
+
+### 4.6 Navigation 構造
 
 Side rail は **目的別** に切る。`Gene` `Genome` `Tools` `Data` の 4 区分:
 
@@ -246,26 +298,31 @@ DATA
 
 ### 5.1 `/` — Search-first landing
 
+12-col 上での組み方:
+
 ```
-                  Plant Genome Portal
-        Marchantia polymorpha MpTak1 v7.1 · 19,138 genes
-
-   ┌──────────────────────────────────────────────────┐
-   │  🔍  Search genes, accessions, or regions…  ⌘K  │
-   └──────────────────────────────────────────────────┘
-        e.g.  Mp1g00010   ·   MpARF1   ·   Chr1:1-100000
-
-   Recent          Popular entry points
-   • Mp1g00010     • Browse Chr1
-   • MpARF1        • Download GFF3
-                   • API reference
+ 1  2  3 │ 4  5  6  7  8  9 10 │11 12
+─────────┼─────────────────────┼───────
+         │  hero title         │
+         │  (col-start-3 col-span-8, text-center)
+         │  search input       │
+         │  (col-start-3 col-span-8)
+         │  hint row           │
+─────────┼──────────┬──────────┼───────
+         │ recent   │ popular  │
+         │ col-     │ col-     │
+         │ span-4   │ span-4   │
+         │ (start-3)│          │
 ```
 
-中央寄せの大きな検索入力。下にサジェスチョン (recent + popular)。metrics は表示しない (ノイズ)。
+具体的には:
+- Hero + 検索入力: `col-start-3 col-span-8` で中央 8 列に集約。
+- Suggestion: `col-start-3 col-span-4` (recent) + `col-span-4` (popular)。
+- metrics は表示しない (ノイズ)。
 
 ### 5.2 `/genes` — Search & results
 
-二段構成: 上部 sticky な検索バー (symbol / locus_tag / free-text / chromosome filter)、下に結果テーブル。
+上部 sticky な検索バー (`col-span-12`)、下に結果テーブル (`col-span-12`)。Inspector 展開時は table を `col-span-8` に絞り、右に `col-span-4` で preview を並べる。
 
 テーブルカラム:
 
@@ -294,10 +351,22 @@ DATA
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### Overview タブ
-- 左 2/3: **GeneStructure** (proper exon/intron 図、strand-aware、UTR は薄い fill、CDS は濃い fill、transcript ごとに行を分けて重畳表示)。
-- 右 1/3: 主要属性 (definition list — `dt`/`dd` で組む、Tailwind grid-cols-[auto_1fr])。
-- 下段: Functional annotation のサマリ (GO / Pfam / InterPro / KEGG の chip cluster、grouped、各 chip クリックで対象 DB の該当 term/family にリンク)。
+#### Overview タブ (12-col grid)
+
+```
+ 1  2  3  4  5  6  7  8 │ 9 10 11 12
+────────────────────────┼───────────
+  GeneStructure         │  Key attributes
+  col-span-8            │  col-span-4
+  (gene model viz)      │  (definition list)
+────────────────────────┴───────────
+  Functional annotation summary           col-span-12
+  (GO / Pfam / InterPro / KEGG chips, grouped)
+```
+
+- 左 `col-span-8`: **GeneStructure** (proper exon/intron 図、strand-aware、UTR は薄い fill、CDS は濃い fill、transcript ごとに行を分けて重畳表示)。
+- 右 `col-span-4`: 主要属性 (definition list — `dt`/`dd` で組む、Tailwind `grid-cols-[auto_1fr]`)。
+- 下段 `col-span-12`: Functional annotation のサマリ (GO / Pfam / InterPro / KEGG の chip cluster、grouped、各 chip クリックで対象 DB の該当 term/family にリンク)。
 
 #### Annotation タブ
 - GO terms をテーブルで (`GO:0008150` mono · namespace · term name · evidence · source)。
@@ -326,11 +395,11 @@ DATA
 
 ### 5.5 `/species` — Species index
 
-カード grid (1 列 / md:2 列 / xl:3 列)、各カードに種学名 (italic) + TaxID + assembly 数 + 代表 thumbnail (chromosomes の小さな karyotype mini)。MVP は Marchantia 1 種のみだが、layout は複数前提で作る。
+カード grid。12-col 上で各カードは `col-span-4` (xl: 3 列) / `md:col-span-6` (md: 2 列) / `col-span-12` (sm: 1 列)。カード内容は種学名 (italic) + TaxID + assembly 数 + 代表 thumbnail (chromosomes の小さな karyotype mini)。MVP は Marchantia 1 種のみだが、layout は複数前提で作る。
 
 ### 5.6 `/downloads`
 
-カテゴリ別テーブル (Assembly / Annotation / Functional annotation / Snapshot)。各行: file name (mono) · size · sha256 · download。
+カテゴリ別テーブル (`col-span-12`、Assembly / Annotation / Functional annotation / Snapshot)。各行: file name (mono) · size · sha256 · download。
 
 ---
 
@@ -587,6 +656,7 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 - 🚫 全画面 spinner で画面を覆う (skeleton にする)。
 - 🚫 hover でしか出ない情報を critical path に置く (タッチ環境で死ぬ)。
 - 🚫 学名のローマン体 (italic を忘れない)。
+- 🚫 12-col grid からの逸脱 (`col-span-5` `col-span-7` 等の割り切れない span、固定 px width で grid を無視した layout)。やむを得ない場合はコメントで理由を残す。
 
 ---
 
