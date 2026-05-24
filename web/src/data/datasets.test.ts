@@ -3,6 +3,8 @@ import datasetExport from "./datasets";
 
 describe("datasetExport", () => {
   it("lists the Marchantia MVP assembly", () => {
+    expect.assertions(1);
+
     expect(datasetExport.datasets).toEqual([
       {
         assembly: "MpTak1_v7.1",

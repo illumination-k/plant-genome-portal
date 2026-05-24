@@ -7,7 +7,7 @@ const GeneSearchForm = (props: { searchText: string }): ReactElement => (
     </label>
     <input
       aria-label="Gene search"
-      className="min-h-10 flex-1 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
+      className="min-h-10 flex-1 rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
       defaultValue={props.searchText}
       id="gene-search"
       name="q"
@@ -15,7 +15,7 @@ const GeneSearchForm = (props: { searchText: string }): ReactElement => (
       type="search"
     />
     <button
-      className="min-h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2"
+      className="min-h-10 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white transition hover:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2"
       type="submit"
     >
       Search

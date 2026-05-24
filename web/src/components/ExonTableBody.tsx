@@ -4,7 +4,7 @@ import geneRecordUtils from "@/lib/geneRecordUtils";
 import ExonRow from "@/components/ExonRow";
 
 const ExonTableBody = (props: { exons: Exon[] }): ReactElement => (
-  <tbody className="divide-y divide-zinc-200">
+  <tbody className="divide-y divide-border-subtle">
     {props.exons.map((exon) => (
       <ExonRow exon={exon} key={geneRecordUtils.exonKey(exon)} />
     ))}

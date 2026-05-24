@@ -66,8 +66,9 @@ export default defineConfig({
       },
     },
     {
-      files: ["src/**/*.tsx"],
+      files: ["src/**/*.tsx", "src/**/*.ts"],
       rules: {
+        "no-undefined": "off",
         "react/no-multi-comp": "off",
       },
     },

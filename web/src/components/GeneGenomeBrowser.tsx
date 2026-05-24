@@ -22,7 +22,7 @@ const buildLocation = (gene: Gene): string => {
 const GeneGenomeBrowser = (props: { gene: Gene }): ReactElement => (
   <div className="mt-6">
     <h3 className="text-base font-semibold">Genome browser</h3>
-    <p className="mb-3 mt-1 text-sm text-zinc-600">
+    <p className="mb-3 mt-1 text-sm text-text-muted">
       Region around {props.gene.sequence_name} containing this gene.
     </p>
     <GenomeBrowser accession={props.gene.assembly_accession} location={buildLocation(props.gene)} />

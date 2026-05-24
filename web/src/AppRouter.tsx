@@ -2,6 +2,7 @@ import { RouterProvider, createBrowserRouter } from "react-router";
 import type { ReactElement } from "react";
 import RootLayout from "@/layouts/RootLayout";
 import AnalysisPage from "@/pages/AnalysisPage";
+import BrowserPage from "@/pages/BrowserPage";
 import DashboardPage from "@/pages/DashboardPage";
 import DatasetsPage from "@/pages/DatasetsPage";
 import GeneDetailPage from "@/pages/GeneDetailPage";
@@ -11,6 +12,7 @@ const routes = createBrowserRouter([
   {
     children: [
       { element: <DashboardPage />, index: true },
+      { element: <BrowserPage />, path: "browser" },
       { element: <DatasetsPage />, path: "datasets" },
       { element: <GenesPage />, path: "genes" },
       { element: <GeneDetailPage />, path: "genes/:geneId" },
