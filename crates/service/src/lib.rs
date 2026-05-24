@@ -1,3 +1,6 @@
+mod homology;
+mod job;
+
 use genome_core::{
     Assembly, AssemblyAccession, ClosedRegion, Gene, GeneId, GeneRecord, GeneSearch,
     GenomeRepository, Sequence, TaxId, Taxon,
@@ -5,6 +8,12 @@ use genome_core::{
 use std::str::FromStr;
 use std::sync::Arc;
 use storage::FastaReference;
+
+pub use homology::{
+    AnnotatedHomologyHit, AnnotatedHomologySearchResult, HomologyAnnotationRepository,
+    HomologyService,
+};
+pub use job::{Worker, WorkerJob};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
@@ -128,6 +137,17 @@ mod tests {
 
     #[test]
     fn search_uses_repository_trait() {
+        let service = make_service();
+
+        let results = service.search_genes(GeneSearch {
+            query: Some("foo".to_owned()),
+            ..GeneSearch::default()
+        });
+
+        assert_eq!(results.len(), 1);
+    }
+
+    fn make_service() -> GenomeService<FileGenomeRepository> {
         let accession = AssemblyAccession::new("GCA_test").unwrap();
         let dataset = GenomeDataset {
             taxon: Taxon {
@@ -165,13 +185,7 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
         };
-        let service = GenomeService::new(FileGenomeRepository::new(dataset), None);
 
-        let results = service.search_genes(GeneSearch {
-            query: Some("foo".to_owned()),
-            ..GeneSearch::default()
-        });
-
-        assert_eq!(results.len(), 1);
+        GenomeService::new(FileGenomeRepository::new(dataset), None)
     }
 }

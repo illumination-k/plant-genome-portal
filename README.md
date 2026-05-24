@@ -52,6 +52,30 @@ Useful endpoints:
 - `GET /sequence/service-info`
 - `GET /openapi.json`
 
+Prepare a BLASTN database from the genome FASTA:
+
+```bash
+cargo run -p portal-cli -- prepare blastn \
+  --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz \
+  --out target/blast
+```
+
+Then run one worker-side BLASTN homology search and write the domain-normalized result:
+
+```bash
+cargo run -p worker -- blastn-once \
+  --assembly-accession GCA_037833805.1 \
+  --blast-db-prefix target/blast/MpTak1_v7.1 \
+  --snapshot data/marpolbase/MpTak1_v7.1/snapshot.json \
+  --query ACGTACGTACGT \
+  --output target/blast/result.json
+```
+
+Worker jobs use the shared `service::WorkerJob<Input>` application envelope. The
+worker's current infra adapter supports MessagePack job/result payloads via
+`worker blastn-job`, while `blastn-once` is a developer-friendly wrapper that builds
+the same typed job from CLI arguments.
+
 Generate the OpenAPI schema and TypeScript client:
 
 ```bash

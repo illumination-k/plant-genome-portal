@@ -33,10 +33,7 @@ const configSchema = ConfigurationSchema(
   { explicitlyTyped: true },
 );
 
-const fetchFeatures = async (
-  featuresUrl: string,
-  region: Region,
-): Promise<FeatureResponse[]> => {
+const fetchFeatures = async (featuresUrl: string, region: Region): Promise<FeatureResponse[]> => {
   const params = new URLSearchParams({
     end: String(region.end),
     refName: region.refName,
