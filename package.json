@@ -1,0 +1,13 @@
+{
+  "name": "plant-genome-portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "oxfmt": "^0",
+    "oxlint": "^1",
+    "typescript": "^6",
+    "vite": "^8",
+    "vitest": "^4"
+  }
+}
