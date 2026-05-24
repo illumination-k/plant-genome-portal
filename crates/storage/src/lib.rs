@@ -25,6 +25,8 @@ pub enum StorageError {
     InvalidGffColumns { line: usize },
     #[error("invalid gff line {line}: {message}")]
     InvalidGffValue { line: usize, message: String },
+    #[error("invalid tsv line {line}: {message}")]
+    InvalidTsvValue { line: usize, message: String },
     #[error("missing gff attribute {attribute} on line {line}")]
     MissingGffAttribute {
         line: usize,
@@ -39,6 +41,8 @@ pub struct SnapshotManifest {
     pub source_base_url: String,
     pub fasta_file: String,
     pub gff_file: String,
+    pub functional_annotation_file: Option<String>,
+    pub nomenclature_file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,6 +228,10 @@ fn search_query(gene: &Gene, query: Option<&str>) -> bool {
             .locus_tag
             .as_deref()
             .is_some_and(|value| value.to_ascii_lowercase().contains(&query))
+        || gene
+            .attributes
+            .values()
+            .any(|value| value.to_ascii_lowercase().contains(&query))
 }
 
 pub fn read_snapshot(path: impl AsRef<Path>) -> Result<GenomeSnapshot, StorageError> {
@@ -245,6 +253,8 @@ pub fn write_snapshot(
 pub struct GenomeSnapshotBuild {
     pub fasta_path: PathBuf,
     pub gff_path: PathBuf,
+    pub functional_annotation_path: Option<PathBuf>,
+    pub nomenclature_path: Option<PathBuf>,
     pub manifest: SnapshotManifest,
     pub taxon: Taxon,
     pub assembly: Assembly,
@@ -252,7 +262,8 @@ pub struct GenomeSnapshotBuild {
 
 pub fn build_genome_snapshot(config: &GenomeSnapshotBuild) -> Result<GenomeSnapshot, StorageError> {
     let sequences = read_fasta_sequences(&config.fasta_path)?;
-    let parsed_gff = parse_gff3(&config.gff_path, &config.assembly.accession)?;
+    let mut parsed_gff = parse_gff3(&config.gff_path, &config.assembly.accession)?;
+    enrich_parsed_gff(&mut parsed_gff, config)?;
 
     let sequence_models = sequences
         .values()
@@ -450,6 +461,250 @@ fn parse_gff3(
     }
 
     Ok(parsed)
+}
+
+fn enrich_parsed_gff(
+    parsed: &mut ParsedGff,
+    config: &GenomeSnapshotBuild,
+) -> Result<(), StorageError> {
+    if let Some(path) = &config.functional_annotation_path {
+        apply_functional_annotations(parsed, &parse_functional_annotations(path)?);
+    }
+    if let Some(path) = &config.nomenclature_path {
+        apply_nomenclature(parsed, &parse_nomenclature(path)?);
+    }
+
+    Ok(())
+}
+
+fn apply_functional_annotations(
+    parsed: &mut ParsedGff,
+    annotations: &HashMap<TranscriptId, String>,
+) {
+    let mut annotations_by_gene: HashMap<GeneId, Vec<String>> = HashMap::new();
+
+    for transcript in &mut parsed.transcripts {
+        let Some(annotation) = annotations.get(&transcript.id) else {
+            continue;
+        };
+        transcript
+            .attributes
+            .insert("functional_annotation".to_owned(), annotation.clone());
+        annotations_by_gene
+            .entry(transcript.gene_id.clone())
+            .or_default()
+            .push(annotation.clone());
+    }
+
+    for gene in &mut parsed.genes {
+        let Some(values) = annotations_by_gene.get(&gene.id) else {
+            continue;
+        };
+        gene.attributes.insert(
+            "functional_annotation".to_owned(),
+            join_unique(values.iter().map(String::as_str), " | "),
+        );
+    }
+}
+
+fn parse_functional_annotations(
+    path: impl AsRef<Path>,
+) -> Result<HashMap<TranscriptId, String>, StorageError> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut annotations = HashMap::new();
+
+    for (index, line) in reader.lines().enumerate() {
+        let line_number = index + 1;
+        let line = line?;
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((transcript_id, annotation)) = line.split_once('\t') else {
+            return Err(StorageError::InvalidTsvValue {
+                line: line_number,
+                message: "expected transcript id and annotation columns".to_owned(),
+            });
+        };
+        annotations.insert(TranscriptId::new(transcript_id)?, annotation.to_owned());
+    }
+
+    Ok(annotations)
+}
+
+#[derive(Debug, Clone, Default)]
+struct NomenclatureEntry {
+    attributes: BTreeMap<String, String>,
+}
+
+fn apply_nomenclature(parsed: &mut ParsedGff, nomenclature: &HashMap<GeneId, NomenclatureEntry>) {
+    for gene in &mut parsed.genes {
+        let Some(entry) = nomenclature.get(&gene.id) else {
+            continue;
+        };
+
+        if gene.symbol.is_none() {
+            gene.symbol = entry
+                .attributes
+                .get("nomenclature_symbol")
+                .and_then(|value| value.split(" | ").next())
+                .map(str::to_owned);
+        }
+        for (key, value) in &entry.attributes {
+            gene.attributes
+                .entry(key.clone())
+                .or_insert_with(|| value.clone());
+        }
+    }
+}
+
+fn parse_nomenclature(
+    path: impl AsRef<Path>,
+) -> Result<HashMap<GeneId, NomenclatureEntry>, StorageError> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines();
+    let Some(header) = lines.next().transpose()? else {
+        return Ok(HashMap::new());
+    };
+    validate_nomenclature_header(&header)?;
+
+    let mut by_gene = HashMap::new();
+    for (index, line) in lines.enumerate() {
+        let line_number = index + 2;
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let columns = line.split('\t').collect::<Vec<_>>();
+        if columns.len() != 10 {
+            return Err(StorageError::InvalidTsvValue {
+                line: line_number,
+                message: format!("expected 10 columns, got {}", columns.len()),
+            });
+        }
+
+        let attributes = nomenclature_attributes(&columns);
+        for gene_id in nomenclature_gene_ids(columns[5])? {
+            merge_attributes(by_gene.entry(gene_id).or_default(), &attributes);
+        }
+    }
+
+    Ok(by_gene)
+}
+
+fn validate_nomenclature_header(header: &str) -> Result<(), StorageError> {
+    let expected = [
+        "gene_symbol",
+        "full_name",
+        "synonym",
+        "product",
+        "description",
+        "GeneID/Location",
+        "reference",
+        "PMID",
+        "DOI",
+        "status",
+    ];
+    let columns = header.split('\t').collect::<Vec<_>>();
+    if columns != expected {
+        return Err(StorageError::InvalidTsvValue {
+            line: 1,
+            message: "unexpected nomenclature header".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn nomenclature_attributes(columns: &[&str]) -> BTreeMap<String, String> {
+    [
+        ("nomenclature_symbol", columns[0]),
+        ("nomenclature_full_name", columns[1]),
+        ("nomenclature_synonym", columns[2]),
+        ("nomenclature_product", columns[3]),
+        ("nomenclature_description", columns[4]),
+        ("nomenclature_reference", columns[6]),
+        ("nomenclature_pmid", columns[7]),
+        ("nomenclature_doi", columns[8]),
+        ("nomenclature_status", columns[9]),
+    ]
+    .into_iter()
+    .filter_map(|(key, value)| clean_optional_value(value).map(|value| (key.to_owned(), value)))
+    .collect()
+}
+
+fn nomenclature_gene_ids(value: &str) -> Result<Vec<GeneId>, StorageError> {
+    value
+        .split(';')
+        .filter_map(clean_gene_reference)
+        .map(GeneId::new)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StorageError::from)
+}
+
+fn clean_gene_reference(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty()
+        || value == "-"
+        || value.starts_with("Mapoly")
+        || !value.starts_with("Mp")
+        || value.contains(':')
+    {
+        return None;
+    }
+
+    Some(strip_transcript_suffix(value))
+}
+
+fn strip_transcript_suffix(value: &str) -> String {
+    let Some((gene_id, suffix)) = value.rsplit_once('.') else {
+        return value.to_owned();
+    };
+    if suffix.chars().all(|character| character.is_ascii_digit()) {
+        gene_id.to_owned()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn clean_optional_value(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value == "-" {
+        None
+    } else {
+        Some(value.to_owned())
+    }
+}
+
+fn merge_attributes(entry: &mut NomenclatureEntry, attributes: &BTreeMap<String, String>) {
+    for (key, value) in attributes {
+        match entry.attributes.get_mut(key) {
+            Some(existing) => append_unique(existing, value, " | "),
+            None => {
+                entry.attributes.insert(key.clone(), value.clone());
+            }
+        }
+    }
+}
+
+fn append_unique(existing: &mut String, value: &str, separator: &str) {
+    if existing.split(separator).any(|part| part == value) {
+        return;
+    }
+    existing.push_str(separator);
+    existing.push_str(value);
+}
+
+fn join_unique<'a>(values: impl Iterator<Item = &'a str>, separator: &str) -> String {
+    let mut joined = String::new();
+    for value in values {
+        if joined.is_empty() {
+            joined.push_str(value);
+        } else {
+            append_unique(&mut joined, value, separator);
+        }
+    }
+    joined
 }
 
 fn parse_gene(
@@ -658,7 +913,11 @@ mod tests {
                 source_base_url: "https://example.test".to_owned(),
                 fasta_file: "test.fa".to_owned(),
                 gff_file: "test.gff".to_owned(),
+                functional_annotation_file: None,
+                nomenclature_file: None,
             },
+            functional_annotation_path: None,
+            nomenclature_path: None,
             taxon: Taxon {
                 tax_id: genome_core::TaxId::new(3197),
                 scientific_name: "Marchantia polymorpha".to_owned(),
@@ -683,5 +942,107 @@ mod tests {
         assert_eq!(snapshot.dataset.genes[0].id.as_str(), "Mp1g00010");
         assert_eq!(snapshot.dataset.transcripts.len(), 1);
         assert_eq!(snapshot.dataset.exons.len(), 1);
+    }
+
+    #[test]
+    fn snapshot_builder_imports_functional_annotation_and_nomenclature() {
+        let dir = tempfile::tempdir().unwrap();
+        let fasta_path = dir.path().join("test.fa");
+        let gff_path = dir.path().join("test.gff");
+        let functional_annotation_path = dir.path().join("func.tsv");
+        let nomenclature_path = dir.path().join("nomenclature.tsv");
+
+        let mut fasta = File::create(&fasta_path).unwrap();
+        writeln!(fasta, ">chr1").unwrap();
+        writeln!(fasta, "ACGTACGTACGT").unwrap();
+
+        let mut gff = File::create(&gff_path).unwrap();
+        writeln!(gff, "##gff-version 3").unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=Mp1g00010"
+        )
+        .unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tmRNA\t1\t8\t.\t+\t.\tID=Mp1g00010.1;Parent=Mp1g00010"
+        )
+        .unwrap();
+
+        let mut functional_annotation = File::create(&functional_annotation_path).unwrap();
+        writeln!(
+            functional_annotation,
+            "# This file contains annotation only from KEGG,KOG,Pfam,NCBIfam."
+        )
+        .unwrap();
+        writeln!(
+            functional_annotation,
+            "Mp1g00010.1\tKEGG:K00001:example annotation; Pfam:PF00001:example domain"
+        )
+        .unwrap();
+
+        let mut nomenclature = File::create(&nomenclature_path).unwrap();
+        writeln!(
+            nomenclature,
+            "gene_symbol\tfull_name\tsynonym\tproduct\tdescription\tGeneID/Location\treference\tPMID\tDOI\tstatus"
+        )
+        .unwrap();
+        writeln!(
+            nomenclature,
+            "MpFOO\tFOO FULL\tMpBAR\ttranscription factor\tmanual note\tMapoly0001s0001.1; Mp1g00010.1\tExample reference\t12345\t10.0000/example\tPublished"
+        )
+        .unwrap();
+
+        let snapshot = build_genome_snapshot(&GenomeSnapshotBuild {
+            fasta_path,
+            gff_path,
+            manifest: SnapshotManifest {
+                source_base_url: "https://example.test".to_owned(),
+                fasta_file: "test.fa".to_owned(),
+                gff_file: "test.gff".to_owned(),
+                functional_annotation_file: Some("func.tsv".to_owned()),
+                nomenclature_file: Some("nomenclature.tsv".to_owned()),
+            },
+            functional_annotation_path: Some(functional_annotation_path),
+            nomenclature_path: Some(nomenclature_path),
+            taxon: Taxon {
+                tax_id: genome_core::TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: AssemblyAccession::new("GCA_test").unwrap(),
+                tax_id: genome_core::TaxId::new(3197),
+                name: "test".to_owned(),
+                source: genome_core::AssemblySource::Local,
+                refget_checksum: None,
+            },
+        })
+        .unwrap();
+
+        let gene = &snapshot.dataset.genes[0];
+        let transcript = &snapshot.dataset.transcripts[0];
+
+        assert_eq!(gene.symbol.as_deref(), Some("MpFOO"));
+        assert_eq!(
+            gene.attributes
+                .get("nomenclature_full_name")
+                .map(String::as_str),
+            Some("FOO FULL")
+        );
+        assert_eq!(
+            gene.attributes
+                .get("functional_annotation")
+                .map(String::as_str),
+            Some("KEGG:K00001:example annotation; Pfam:PF00001:example domain")
+        );
+        assert_eq!(
+            transcript
+                .attributes
+                .get("functional_annotation")
+                .map(String::as_str),
+            Some("KEGG:K00001:example annotation; Pfam:PF00001:example domain")
+        );
     }
 }
