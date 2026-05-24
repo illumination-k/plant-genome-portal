@@ -240,12 +240,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_gff3_reports_line_number_on_invalid_record() {
+    fn parse_gff3_reports_line_number_on_noodles_parse_error() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("invalid.gff");
         let mut file = std::fs::File::create(&path).unwrap();
         writeln!(file, "##gff-version 3").unwrap();
-        // Valid record on row 2 of the file.
         writeln!(file, "chr1\tsrc\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=ok").unwrap();
         // Bad start coordinate triggers parse error on the second record.
         writeln!(
@@ -257,10 +256,29 @@ mod tests {
         let assembly = AssemblyAccession::new("GCA_test").unwrap();
         let error = parse_gff3(&path, &assembly).expect_err("should fail");
         match error {
-            StorageError::InvalidGffValue { line, .. } => {
-                // record_bufs iterates over records only; the bad record is the
-                // second emitted record so line index must reflect that (>= 2).
-                assert!(line >= 2, "expected line >= 2, got {line}");
+            StorageError::InvalidGffValue { line, .. } => assert_eq!(line, 2),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_gff3_reports_line_number_on_domain_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("invalid.gff");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "##gff-version 3").unwrap();
+        writeln!(file, "chr1\tsrc\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=ok").unwrap();
+        // mRNA without a Parent attribute is parsed successfully by noodles
+        // but rejected downstream — exercising the `line_number` value passed
+        // to `parse_transcript`.
+        writeln!(file, "chr1\tsrc\tmRNA\t1\t8\t.\t+\t.\tID=Mp1g00010.1").unwrap();
+
+        let assembly = AssemblyAccession::new("GCA_test").unwrap();
+        let error = parse_gff3(&path, &assembly).expect_err("should fail");
+        match error {
+            StorageError::MissingGffAttribute { line, attribute } => {
+                assert_eq!(line, 2);
+                assert_eq!(attribute, "Parent");
             }
             other => panic!("unexpected error: {other:?}"),
         }

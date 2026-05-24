@@ -124,12 +124,10 @@ fn nomenclature_gene_ids(value: &str) -> Result<Vec<GeneId>, StorageError> {
 
 fn clean_gene_reference(value: &str) -> Option<String> {
     let value = value.trim();
-    if value.is_empty()
-        || value == "-"
-        || value.starts_with("Mapoly")
-        || !value.starts_with("Mp")
-        || value.contains(':')
-    {
+    // `!starts_with("Mp")` already excludes the empty string, `-`, `Mapoly*`,
+    // and anything from another species, so we only need to additionally reject
+    // qualified references like `chr1:Mp...`.
+    if !value.starts_with("Mp") || value.contains(':') {
         return None;
     }
 
