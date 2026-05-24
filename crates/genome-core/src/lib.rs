@@ -12,6 +12,12 @@ use utoipa::ToSchema;
 pub enum DomainError {
     #[error("{kind} must not be empty")]
     EmptyIdentifier { kind: &'static str },
+    #[error("invalid GO term id: {0}")]
+    InvalidGoTermId(String),
+    #[error("invalid InterPro id: {0}")]
+    InvalidInterProId(String),
+    #[error("invalid Pfam accession: {0}")]
+    InvalidPfamAccession(String),
     #[error("1-based positions must be greater than zero")]
     ZeroPosition1,
     #[error("region start must be <= end")]
@@ -67,8 +73,137 @@ macro_rules! string_id {
 
 string_id!(AssemblyAccession, "assembly accession");
 string_id!(GeneId, "gene id");
+string_id!(KeggEntryId, "KEGG entry id");
+string_id!(KogEntryId, "KOG entry id");
+string_id!(NcbiFamAccession, "NCBIfam accession");
 string_id!(SequenceName, "sequence name");
 string_id!(TranscriptId, "transcript id");
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema)]
+pub struct GoTermId(String);
+
+impl GoTermId {
+    pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
+        let value = value.into();
+        if !is_go_term_id(&value) {
+            return Err(DomainError::InvalidGoTermId(value));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl Display for GoTermId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for GoTermId {
+    type Err = DomainError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+fn is_go_term_id(value: &str) -> bool {
+    let Some(digits) = value.strip_prefix("GO:") else {
+        return false;
+    };
+    digits.len() == 7 && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema)]
+pub struct InterProId(String);
+
+impl InterProId {
+    pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
+        let value = value.into();
+        if !is_interpro_id(&value) {
+            return Err(DomainError::InvalidInterProId(value));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl Display for InterProId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for InterProId {
+    type Err = DomainError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+fn is_interpro_id(value: &str) -> bool {
+    let Some(digits) = value.strip_prefix("IPR") else {
+        return false;
+    };
+    digits.len() == 6 && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema)]
+pub struct PfamAccession(String);
+
+impl PfamAccession {
+    pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
+        let value = value.into();
+        if !is_pfam_accession(&value) {
+            return Err(DomainError::InvalidPfamAccession(value));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl Display for PfamAccession {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for PfamAccession {
+    type Err = DomainError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+fn is_pfam_accession(value: &str) -> bool {
+    let Some(digits) = value.strip_prefix("PF") else {
+        return false;
+    };
+    digits.len() == 5 && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema,
@@ -276,6 +411,166 @@ pub struct Sequence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AnnotationSource {
+    InterProScan,
+    Go,
+    Kegg,
+    Manual,
+    Other(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct AnnotationEvidence {
+    pub source: AnnotationSource,
+    pub method: Option<String>,
+    pub attributes: BTreeMap<String, String>,
+}
+
+impl AnnotationEvidence {
+    pub fn new(source: AnnotationSource) -> Self {
+        Self {
+            source,
+            method: None,
+            attributes: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FunctionalAnnotation {
+    InterPro(InterProAnnotation),
+    Pfam(PfamAnnotation),
+    NcbiFam(NcbiFamAnnotation),
+    Kog(KogAnnotation),
+    GoTerm(GoTermAnnotation),
+    Kegg(KeggAnnotation),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct InterProAnnotation {
+    pub interpro_id: InterProId,
+    pub name: Option<String>,
+    pub evidence: AnnotationEvidence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct PfamAnnotation {
+    pub accession: PfamAccession,
+    pub name: Option<String>,
+    pub interpro_id: Option<InterProId>,
+    pub evidence: AnnotationEvidence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct NcbiFamAnnotation {
+    pub accession: NcbiFamAccession,
+    pub name: Option<String>,
+    pub interpro_id: Option<InterProId>,
+    pub evidence: AnnotationEvidence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct KogAnnotation {
+    pub entry_id: KogEntryId,
+    pub name: Option<String>,
+    pub interpro_id: Option<InterProId>,
+    pub evidence: AnnotationEvidence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct GoTermAnnotation {
+    pub term_id: GoTermId,
+    pub name: Option<String>,
+    pub namespace: Option<GoNamespace>,
+    pub evidence: AnnotationEvidence,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GoNamespace {
+    BiologicalProcess,
+    MolecularFunction,
+    CellularComponent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct KeggAnnotation {
+    pub entry_id: KeggEntryId,
+    pub entry_kind: KeggEntryKind,
+    pub name: Option<String>,
+    pub evidence: AnnotationEvidence,
+}
+
+impl KeggAnnotation {
+    pub fn new(entry_id: KeggEntryId, name: Option<String>, evidence: AnnotationEvidence) -> Self {
+        let entry_kind = KeggEntryKind::from_entry_id(entry_id.as_str());
+        Self {
+            entry_id,
+            entry_kind,
+            name,
+            evidence,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KeggEntryKind {
+    Orthology,
+    Pathway,
+    Module,
+    Reaction,
+    Compound,
+    Glycan,
+    Other,
+}
+
+impl KeggEntryKind {
+    pub fn from_entry_id(entry_id: &str) -> Self {
+        let normalized = entry_id
+            .strip_prefix("ko:")
+            .or_else(|| entry_id.strip_prefix("path:"))
+            .unwrap_or(entry_id);
+
+        if normalized.len() == 6
+            && normalized.starts_with('K')
+            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            Self::Orthology
+        } else if normalized.starts_with("map")
+            || normalized.starts_with("ko")
+            || normalized.starts_with("ec")
+        {
+            Self::Pathway
+        } else if normalized.len() == 6
+            && normalized.starts_with('M')
+            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            Self::Module
+        } else if normalized.len() == 6
+            && normalized.starts_with('R')
+            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            Self::Reaction
+        } else if normalized.len() == 6
+            && normalized.starts_with('C')
+            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            Self::Compound
+        } else if normalized.len() == 6
+            && normalized.starts_with('G')
+            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            Self::Glycan
+        } else {
+            Self::Other
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Gene {
     pub id: GeneId,
     pub assembly_accession: AssemblyAccession,
@@ -285,6 +580,7 @@ pub struct Gene {
     pub region: HalfOpenRegion,
     pub strand: Strand,
     pub feature_type: String,
+    pub annotations: Vec<FunctionalAnnotation>,
     pub attributes: BTreeMap<String, String>,
 }
 
@@ -296,6 +592,7 @@ pub struct Transcript {
     pub region: HalfOpenRegion,
     pub strand: Strand,
     pub feature_type: String,
+    pub annotations: Vec<FunctionalAnnotation>,
     pub attributes: BTreeMap<String, String>,
 }
 
@@ -385,5 +682,35 @@ mod tests {
 
         assert!(a.overlaps(&b));
         assert!(!a.overlaps(&c));
+    }
+
+    #[test]
+    fn go_term_id_requires_canonical_accession() {
+        assert_eq!(GoTermId::new("GO:0008150").unwrap().as_str(), "GO:0008150");
+        assert!(GoTermId::new("0008150").is_err());
+        assert!(GoTermId::new("GO:8150").is_err());
+    }
+
+    #[test]
+    fn interpro_id_requires_canonical_identifier() {
+        assert_eq!(InterProId::new("IPR000001").unwrap().as_str(), "IPR000001");
+        assert!(InterProId::new("PF00001").is_err());
+        assert_eq!(PfamAccession::new("PF00001").unwrap().as_str(), "PF00001");
+    }
+
+    #[test]
+    fn kegg_entry_kind_infers_common_entry_types() {
+        assert_eq!(
+            KeggEntryKind::from_entry_id("K00001"),
+            KeggEntryKind::Orthology
+        );
+        assert_eq!(
+            KeggEntryKind::from_entry_id("path:map00010"),
+            KeggEntryKind::Pathway
+        );
+        assert_eq!(
+            KeggEntryKind::from_entry_id("M00001"),
+            KeggEntryKind::Module
+        );
     }
 }

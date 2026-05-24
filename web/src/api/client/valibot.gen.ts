@@ -2,6 +2,22 @@
 
 import * as v from 'valibot';
 
+export const vAnnotationSource = v.union([
+    v.picklist(['inter_pro_scan']),
+    v.picklist(['go']),
+    v.picklist(['kegg']),
+    v.picklist(['manual']),
+    v.object({
+        other: v.string()
+    })
+]);
+
+export const vAnnotationEvidence = v.object({
+    attributes: v.record(v.string(), v.string()),
+    method: v.nullish(v.string()),
+    source: vAnnotationSource
+});
+
 export const vAssemblyAccession = v.string();
 
 export const vAssemblySource = v.picklist([
@@ -27,8 +43,31 @@ export const vGeneSearchQuery = v.object({
     tax_id: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647')))
 });
 
+export const vGoNamespace = v.picklist([
+    'biological_process',
+    'molecular_function',
+    'cellular_component'
+]);
+
+export const vGoTermId = v.string();
+
+export const vGoTermAnnotation = v.object({
+    evidence: vAnnotationEvidence,
+    name: v.nullish(v.string()),
+    namespace: v.nullish(vGoNamespace),
+    term_id: vGoTermId
+});
+
 export const vHealthResponse = v.object({
     ok: v.boolean()
+});
+
+export const vInterProId = v.string();
+
+export const vInterProAnnotation = v.object({
+    evidence: vAnnotationEvidence,
+    interpro_id: vInterProId,
+    name: v.nullish(v.string())
 });
 
 export const vJBrowseConfigQuery = v.object({
@@ -129,6 +168,73 @@ export const vJBrowseRootConfig = v.object({
     tracks: v.array(vJBrowseTrack)
 });
 
+export const vKeggEntryId = v.string();
+
+export const vKeggEntryKind = v.picklist([
+    'orthology',
+    'pathway',
+    'module',
+    'reaction',
+    'compound',
+    'glycan',
+    'other'
+]);
+
+export const vKeggAnnotation = v.object({
+    entry_id: vKeggEntryId,
+    entry_kind: vKeggEntryKind,
+    evidence: vAnnotationEvidence,
+    name: v.nullish(v.string())
+});
+
+export const vKogEntryId = v.string();
+
+export const vKogAnnotation = v.object({
+    entry_id: vKogEntryId,
+    evidence: vAnnotationEvidence,
+    interpro_id: v.nullish(vInterProId),
+    name: v.nullish(v.string())
+});
+
+export const vNcbiFamAccession = v.string();
+
+export const vNcbiFamAnnotation = v.object({
+    accession: vNcbiFamAccession,
+    evidence: vAnnotationEvidence,
+    interpro_id: v.nullish(vInterProId),
+    name: v.nullish(v.string())
+});
+
+export const vPfamAccession = v.string();
+
+export const vPfamAnnotation = v.object({
+    accession: vPfamAccession,
+    evidence: vAnnotationEvidence,
+    interpro_id: v.nullish(vInterProId),
+    name: v.nullish(v.string())
+});
+
+export const vFunctionalAnnotation = v.union([
+    v.intersect([vInterProAnnotation, v.object({
+            kind: v.picklist(['inter_pro'])
+        })]),
+    v.intersect([vPfamAnnotation, v.object({
+            kind: v.picklist(['pfam'])
+        })]),
+    v.intersect([vNcbiFamAnnotation, v.object({
+            kind: v.picklist(['ncbi_fam'])
+        })]),
+    v.intersect([vKogAnnotation, v.object({
+            kind: v.picklist(['kog'])
+        })]),
+    v.intersect([vGoTermAnnotation, v.object({
+            kind: v.picklist(['go_term'])
+        })]),
+    v.intersect([vKeggAnnotation, v.object({
+            kind: v.picklist(['kegg'])
+        })])
+]);
+
 export const vPosition0 = v.pipe(v.union([
     v.number(),
     v.string(),
@@ -197,6 +303,7 @@ export const vStrand = v.picklist([
 ]);
 
 export const vGene = v.object({
+    annotations: v.array(vFunctionalAnnotation),
     assembly_accession: vAssemblyAccession,
     attributes: v.record(v.string(), v.string()),
     feature_type: v.string(),
@@ -240,6 +347,7 @@ export const vExon = v.object({
 });
 
 export const vTranscript = v.object({
+    annotations: v.array(vFunctionalAnnotation),
     attributes: v.record(v.string(), v.string()),
     feature_type: v.string(),
     gene_id: vGeneId,

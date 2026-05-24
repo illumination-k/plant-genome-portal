@@ -158,6 +158,7 @@ mod tests {
                 .unwrap(),
                 strand: Strand::Forward,
                 feature_type: "gene".to_owned(),
+                annotations: Vec::new(),
                 attributes: BTreeMap::new(),
             }],
             transcripts: Vec::new(),

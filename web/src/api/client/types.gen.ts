@@ -4,6 +4,18 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AnnotationEvidence = {
+    attributes: {
+        [key: string]: string;
+    };
+    method?: string | null;
+    source: AnnotationSource;
+};
+
+export type AnnotationSource = 'inter_pro_scan' | 'go' | 'kegg' | 'manual' | {
+    other: string;
+};
+
 export type Assembly = {
     accession: AssemblyAccession;
     name: string;
@@ -33,7 +45,22 @@ export type Exon = {
     transcript_id: TranscriptId;
 };
 
+export type FunctionalAnnotation = (InterProAnnotation & {
+    kind: 'inter_pro';
+}) | (PfamAnnotation & {
+    kind: 'pfam';
+}) | (NcbiFamAnnotation & {
+    kind: 'ncbi_fam';
+}) | (KogAnnotation & {
+    kind: 'kog';
+}) | (GoTermAnnotation & {
+    kind: 'go_term';
+}) | (KeggAnnotation & {
+    kind: 'kegg';
+});
+
 export type Gene = {
+    annotations: Array<FunctionalAnnotation>;
     assembly_accession: AssemblyAccession;
     attributes: {
         [key: string]: string;
@@ -63,6 +90,17 @@ export type GeneSearchQuery = {
     tax_id?: number | null;
 };
 
+export type GoNamespace = 'biological_process' | 'molecular_function' | 'cellular_component';
+
+export type GoTermAnnotation = {
+    evidence: AnnotationEvidence;
+    name?: string | null;
+    namespace?: null | GoNamespace;
+    term_id: GoTermId;
+};
+
+export type GoTermId = string;
+
 export type HalfOpenRegion = {
     end: Position0;
     sequence_name: SequenceName;
@@ -72,6 +110,14 @@ export type HalfOpenRegion = {
 export type HealthResponse = {
     ok: boolean;
 };
+
+export type InterProAnnotation = {
+    evidence: AnnotationEvidence;
+    interpro_id: InterProId;
+    name?: string | null;
+};
+
+export type InterProId = string;
 
 export type JBrowseAssembly = {
     aliases: Array<string>;
@@ -159,6 +205,44 @@ export type JBrowseUriLocation = {
     uri: string;
 };
 
+export type KeggAnnotation = {
+    entry_id: KeggEntryId;
+    entry_kind: KeggEntryKind;
+    evidence: AnnotationEvidence;
+    name?: string | null;
+};
+
+export type KeggEntryId = string;
+
+export type KeggEntryKind = 'orthology' | 'pathway' | 'module' | 'reaction' | 'compound' | 'glycan' | 'other';
+
+export type KogAnnotation = {
+    entry_id: KogEntryId;
+    evidence: AnnotationEvidence;
+    interpro_id?: null | InterProId;
+    name?: string | null;
+};
+
+export type KogEntryId = string;
+
+export type NcbiFamAccession = string;
+
+export type NcbiFamAnnotation = {
+    accession: NcbiFamAccession;
+    evidence: AnnotationEvidence;
+    interpro_id?: null | InterProId;
+    name?: string | null;
+};
+
+export type PfamAccession = string;
+
+export type PfamAnnotation = {
+    accession: PfamAccession;
+    evidence: AnnotationEvidence;
+    interpro_id?: null | InterProId;
+    name?: string | null;
+};
+
 export type Position0 = number;
 
 export type Position1 = number;
@@ -201,6 +285,7 @@ export type TaxonResponse = {
 };
 
 export type Transcript = {
+    annotations: Array<FunctionalAnnotation>;
     attributes: {
         [key: string]: string;
     };

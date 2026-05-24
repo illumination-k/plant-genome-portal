@@ -1,9 +1,11 @@
 use base64::Engine;
 use flate2::read::GzDecoder;
 use genome_core::{
-    Assembly, AssemblyAccession, Exon, Gene, GeneId, GeneRecord, GeneSearch, GenomeDataset,
-    GenomeRepository, HalfOpenRegion, Position0, Position1, Sequence, SequenceName, Strand, TaxId,
-    Taxon, Transcript, TranscriptId,
+    AnnotationEvidence, AnnotationSource, Assembly, AssemblyAccession, Exon, FunctionalAnnotation,
+    Gene, GeneId, GeneRecord, GeneSearch, GenomeDataset, GenomeRepository, GoTermAnnotation,
+    GoTermId, HalfOpenRegion, InterProAnnotation, InterProId, KeggAnnotation, KeggEntryId,
+    KogAnnotation, KogEntryId, NcbiFamAccession, NcbiFamAnnotation, PfamAccession, PfamAnnotation,
+    Position0, Position1, Sequence, SequenceName, Strand, TaxId, Taxon, Transcript, TranscriptId,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
@@ -479,37 +481,32 @@ fn enrich_parsed_gff(
 
 fn apply_functional_annotations(
     parsed: &mut ParsedGff,
-    annotations: &HashMap<TranscriptId, String>,
+    annotations: &HashMap<TranscriptId, Vec<FunctionalAnnotation>>,
 ) {
-    let mut annotations_by_gene: HashMap<GeneId, Vec<String>> = HashMap::new();
+    let mut annotations_by_gene: HashMap<GeneId, Vec<FunctionalAnnotation>> = HashMap::new();
 
     for transcript in &mut parsed.transcripts {
-        let Some(annotation) = annotations.get(&transcript.id) else {
+        let Some(transcript_annotations) = annotations.get(&transcript.id) else {
             continue;
         };
-        transcript
-            .attributes
-            .insert("functional_annotation".to_owned(), annotation.clone());
+        transcript.annotations = transcript_annotations.clone();
         annotations_by_gene
             .entry(transcript.gene_id.clone())
             .or_default()
-            .push(annotation.clone());
+            .extend(transcript_annotations.iter().cloned());
     }
 
     for gene in &mut parsed.genes {
-        let Some(values) = annotations_by_gene.get(&gene.id) else {
+        let Some(gene_annotations) = annotations_by_gene.get(&gene.id) else {
             continue;
         };
-        gene.attributes.insert(
-            "functional_annotation".to_owned(),
-            join_unique(values.iter().map(String::as_str), " | "),
-        );
+        gene.annotations = unique_annotations(gene_annotations.iter().cloned());
     }
 }
 
 fn parse_functional_annotations(
     path: impl AsRef<Path>,
-) -> Result<HashMap<TranscriptId, String>, StorageError> {
+) -> Result<HashMap<TranscriptId, Vec<FunctionalAnnotation>>, StorageError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut annotations = HashMap::new();
@@ -526,10 +523,133 @@ fn parse_functional_annotations(
                 message: "expected transcript id and annotation columns".to_owned(),
             });
         };
-        annotations.insert(TranscriptId::new(transcript_id)?, annotation.to_owned());
+        annotations.insert(
+            TranscriptId::new(transcript_id)?,
+            parse_functional_annotation_value(annotation),
+        );
     }
 
     Ok(annotations)
+}
+
+fn parse_functional_annotation_value(value: &str) -> Vec<FunctionalAnnotation> {
+    unique_annotations(
+        value
+            .split(';')
+            .filter_map(parse_functional_annotation_part),
+    )
+}
+
+fn parse_functional_annotation_part(value: &str) -> Option<FunctionalAnnotation> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    parse_kegg_annotation(value)
+        .or_else(|| parse_go_annotation(value))
+        .or_else(|| parse_interpro_annotation(value))
+        .or_else(|| parse_pfam_annotation(value))
+        .or_else(|| parse_ncbi_fam_annotation(value))
+        .or_else(|| parse_kog_annotation(value))
+}
+
+fn parse_kegg_annotation(value: &str) -> Option<FunctionalAnnotation> {
+    let rest = value.strip_prefix("KEGG:")?;
+    let (entry_id, name) = split_kegg_id_and_name(rest);
+    let entry_id = KeggEntryId::new(entry_id).ok()?;
+    Some(FunctionalAnnotation::Kegg(KeggAnnotation::new(
+        entry_id,
+        clean_optional_value(name),
+        AnnotationEvidence::new(AnnotationSource::Kegg),
+    )))
+}
+
+fn parse_go_annotation(value: &str) -> Option<FunctionalAnnotation> {
+    let go_id = value.get(..10)?;
+    let term_id = GoTermId::new(go_id).ok()?;
+    let name = value
+        .get(10..)
+        .and_then(|rest| rest.strip_prefix(':'))
+        .and_then(clean_optional_value);
+    Some(FunctionalAnnotation::GoTerm(GoTermAnnotation {
+        term_id,
+        name,
+        namespace: None,
+        evidence: AnnotationEvidence::new(AnnotationSource::Go),
+    }))
+}
+
+fn parse_interpro_annotation(value: &str) -> Option<FunctionalAnnotation> {
+    let rest = value.strip_prefix("InterPro:").unwrap_or(value);
+    let (interpro_id, name) = split_annotation_id_and_name(rest);
+    let interpro_id = InterProId::new(interpro_id).ok()?;
+    Some(FunctionalAnnotation::InterPro(InterProAnnotation {
+        interpro_id,
+        name: clean_optional_value(name),
+        evidence: AnnotationEvidence::new(AnnotationSource::InterProScan),
+    }))
+}
+
+fn parse_pfam_annotation(value: &str) -> Option<FunctionalAnnotation> {
+    let rest = value.strip_prefix("Pfam:")?;
+    let (accession, name) = split_annotation_id_and_name(rest);
+    Some(FunctionalAnnotation::Pfam(PfamAnnotation {
+        accession: PfamAccession::new(accession).ok()?,
+        name: clean_optional_value(name),
+        interpro_id: None,
+        evidence: AnnotationEvidence::new(AnnotationSource::InterProScan),
+    }))
+}
+
+fn parse_ncbi_fam_annotation(value: &str) -> Option<FunctionalAnnotation> {
+    let rest = value.strip_prefix("NCBIfam:")?;
+    let (accession, name) = split_annotation_id_and_name(rest);
+    Some(FunctionalAnnotation::NcbiFam(NcbiFamAnnotation {
+        accession: NcbiFamAccession::new(accession).ok()?,
+        name: clean_optional_value(name),
+        interpro_id: None,
+        evidence: AnnotationEvidence::new(AnnotationSource::InterProScan),
+    }))
+}
+
+fn parse_kog_annotation(value: &str) -> Option<FunctionalAnnotation> {
+    let rest = value.strip_prefix("KOG:")?;
+    let (entry_id, name) = split_annotation_id_and_name(rest);
+    Some(FunctionalAnnotation::Kog(KogAnnotation {
+        entry_id: KogEntryId::new(entry_id).ok()?,
+        name: clean_optional_value(name),
+        interpro_id: None,
+        evidence: AnnotationEvidence::new(AnnotationSource::InterProScan),
+    }))
+}
+
+fn split_annotation_id_and_name(value: &str) -> (&str, &str) {
+    value.split_once(':').unwrap_or((value, ""))
+}
+
+fn split_kegg_id_and_name(value: &str) -> (&str, &str) {
+    for prefix in ["ko:", "path:"] {
+        if let Some(rest) = value.strip_prefix(prefix) {
+            let (id, name) = split_annotation_id_and_name(rest);
+            let id_end = prefix.len() + id.len();
+            return (&value[..id_end], name);
+        }
+    }
+
+    split_annotation_id_and_name(value)
+}
+
+fn unique_annotations(
+    values: impl IntoIterator<Item = FunctionalAnnotation>,
+) -> Vec<FunctionalAnnotation> {
+    let mut annotations = Vec::new();
+    for annotation in values {
+        if !annotations.contains(&annotation) {
+            annotations.push(annotation);
+        }
+    }
+    annotations
 }
 
 #[derive(Debug, Clone, Default)]
@@ -695,18 +815,6 @@ fn append_unique(existing: &mut String, value: &str, separator: &str) {
     existing.push_str(value);
 }
 
-fn join_unique<'a>(values: impl Iterator<Item = &'a str>, separator: &str) -> String {
-    let mut joined = String::new();
-    for value in values {
-        if joined.is_empty() {
-            joined.push_str(value);
-        } else {
-            append_unique(&mut joined, value, separator);
-        }
-    }
-    joined
-}
-
 fn parse_gene(
     columns: &[&str],
     line: usize,
@@ -725,6 +833,7 @@ fn parse_gene(
         region,
         strand: Strand::from_str(columns[6])?,
         feature_type: columns[2].to_owned(),
+        annotations: Vec::new(),
         attributes: attrs,
     })
 }
@@ -748,6 +857,7 @@ fn parse_transcript(columns: &[&str], line: usize) -> Result<Transcript, Storage
         region: parse_region(columns, line)?,
         strand: Strand::from_str(columns[6])?,
         feature_type: columns[2].to_owned(),
+        annotations: Vec::new(),
         attributes: attrs,
     })
 }
@@ -977,7 +1087,7 @@ mod tests {
         .unwrap();
         writeln!(
             functional_annotation,
-            "Mp1g00010.1\tKEGG:K00001:example annotation; Pfam:PF00001:example domain"
+            "Mp1g00010.1\tKEGG:K00001:example annotation; GO:0008150:biological_process; InterPro:IPR000001:example family; Pfam:PF00001:example domain; NCBIfam:NF000001:example family; KOG:KOG0001:example ortholog"
         )
         .unwrap();
 
@@ -1032,17 +1142,44 @@ mod tests {
             Some("FOO FULL")
         );
         assert_eq!(
-            gene.attributes
-                .get("functional_annotation")
-                .map(String::as_str),
-            Some("KEGG:K00001:example annotation; Pfam:PF00001:example domain")
+            gene.annotations
+                .iter()
+                .filter(|annotation| matches!(annotation, FunctionalAnnotation::Kegg(_)))
+                .count(),
+            1
         );
         assert_eq!(
             transcript
-                .attributes
-                .get("functional_annotation")
-                .map(String::as_str),
-            Some("KEGG:K00001:example annotation; Pfam:PF00001:example domain")
+                .annotations
+                .iter()
+                .filter(|annotation| matches!(annotation, FunctionalAnnotation::GoTerm(_)))
+                .count(),
+            1
         );
+        assert_eq!(
+            transcript
+                .annotations
+                .iter()
+                .filter(|annotation| matches!(annotation, FunctionalAnnotation::Pfam(_)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            transcript
+                .annotations
+                .iter()
+                .filter(|annotation| matches!(annotation, FunctionalAnnotation::NcbiFam(_)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            transcript
+                .annotations
+                .iter()
+                .filter(|annotation| matches!(annotation, FunctionalAnnotation::Kog(_)))
+                .count(),
+            1
+        );
+        assert_eq!(transcript.annotations.len(), 6);
     }
 }
