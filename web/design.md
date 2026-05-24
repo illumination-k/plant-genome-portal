@@ -2,7 +2,7 @@
 
 植物ゲノムポータルの UI/UX 設計指針。`web/` 配下の React + Tailwind v4 + @base-ui/react 実装の指針となる。
 
-> Status: **proposal**。現在の `web/src/` の実装はこの設計書より前のもので、当面は混在する。新規コンポーネントとリファクタはこの設計書に従う。
+> Status: **adopted**。P0〜P6 のスケルトンが入り、`web/src/design/` のトークン・`web/src/ui/` の primitive・`web/src/bio/` の biology primitive・サイドレールシェル・search-first landing・gene detail のタブ・⌘K command palette・`/browser` ルートが稼働中。残りは P7 (motion・i18n・a11y audit・印刷スタイル) と、後述する未実装項目 (BLAST / 領域検索 / `/downloads` / `/api` 等)。
 
 ---
 
@@ -589,6 +589,19 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 - 必ず `retry` ボタンを出す。`expand` で技術詳細 (stack / request id) を見られるようにする。
 - 404 (`GeneNotFound` 等) は「該当遺伝子が見つかりません」+ 検索に戻る CTA。
 
+### 8.4 External boundary validation
+
+外界から入ってくる値 (URL 検索パラメータ・URL パスパラメータ・`localStorage`・API
+レスポンス・ユーザー入力) は **必ず valibot で正しい型に変換** してから内側のコードに
+渡す。`string | null | undefined` のような曖昧な型をページ／コンポーネント内で扱わない。
+
+- URL search-param は `useValidatedSearchParam(key, schema, fallback)` (`web/src/lib/useValidatedSearchParam.ts`) を経由する。
+- URL path-param は `useValidatedParam(key, schema, fallback)` (`web/src/lib/useValidatedParam.ts`) を経由する。
+- `localStorage` から読む値はその場で `v.safeParse` を通す (例: `web/src/lib/theme.ts`)。
+- API レスポンスは `web/src/api/client/valibot.gen.ts` 由来のスキーマで既に validate されている (hey-api 経由)。
+
+これにより JSX 内で `undefined` リテラルを書かなくて済み、`unicorn/no-null` / `no-undefined` といった lint ルールとも自然に整合する。
+
 ---
 
 ## 9. Accessibility
@@ -642,16 +655,16 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 
 ## 13. Implementation roadmap
 
-| Phase                         | Scope                                                                                                                          | Definition of done                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| **P0 Tokens**                 | `design/tokens.css`, `typography.css`, theme switcher                                                                          | light/dark で既存ページが破綻せず動く                    |
-| **P1 Primitives**             | `ui/` 一式 (Button, Input, Card, Table, Tabs, Dialog, Tooltip, Chip, Code, Skeleton, EmptyState)                               | 単体テスト + Storybook 的な playground page (`/_dev/ui`) |
-| **P2 Shell**                  | TopBar, SideRail, Inspector slot を持つ RootLayout                                                                             | `lg` 以上で 3-pane、`md` 以下で 1-pane に潰れる          |
-| **P3 Bio primitives**         | `bio/` 一式 (Accession, StrandBadge, CoordinateRange, ScientificName, GeneStructure, SequenceBlock, FunctionalAnnotationGroup) | gene detail で使用、unit + visual test                   |
-| **P4 Search-first home + ⌘K** | `/` を search-first に置き換え、Command palette 稼働                                                                           | キーボードのみで gene 詳細まで到達できる                 |
-| **P5 Gene detail v2**         | タブ構成、新 GeneStructure、SequenceBlock 採用                                                                                 | API は既存のまま、表示のみ刷新                           |
-| **P6 Browser route**          | `/browser` に JBrowse 2 embed、deep-link 対応                                                                                  | URL `?loc=...` で領域指定が可能                          |
-| **P7 Polish**                 | Motion, a11y audit, i18n 切替、印刷スタイル                                                                                    | axe / lighthouse a11y 95+                                |
+| Phase                         | Scope                                                                                                                                              | Status    | 現状                                                                                                                                                                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0 Tokens**                 | `design/tokens.css`, `typography.css`, theme switcher                                                                                              | ✅ done   | `web/src/design/{tokens,typography}.css` + `@theme inline` で Tailwind に公開、`web/src/lib/theme.ts` + `web/src/ui/ThemeToggle.tsx` で light / dark / system 切替。`pgp:theme` を valibot で validate。                          |
+| **P1 Primitives**             | `ui/` 一式 (Tabs, Dialog wrapper, Skeleton, EmptyState, ErrorState, CopyButton, KbdKey, CommandPalette\* …)                                        | ◐ partial | 現在の gene detail / palette / 状態表示に必要な分だけ実装。Button / Input / Tooltip / Toast / Sheet / Code / Chip 等の汎用 primitive と `/_dev/ui` playground は未着手。                                                          |
+| **P2 Shell**                  | TopBar, SideRail, Inspector slot を持つ RootLayout                                                                                                 | ◐ partial | TopBar (48px sticky / brand / assembly chip / ⌘K trigger / theme toggle) と SideRail (240px, 目的別 4 グループ) は稼働。`md` 未満では sidebar が drawer に畳まれる挙動、Inspector overlay (gene detail の preview 用) は未実装。  |
+| **P3 Bio primitives**         | `bio/` 一式 (Accession, StrandBadge, CoordinateRange, Sci, GeneIdLink, RefgetChecksum, FunctionalAnnotationGroup/Chip, GeneHeader, GeneSymbolLine) | ◐ partial | gene detail / table で使用中。`SequenceBlock`、`KaryotypeBar`、`RegionMiniMap` は未実装 (refget proxy 入りで対応予定)。                                                                                                           |
+| **P4 Search-first home + ⌘K** | `/` を search-first に置き換え、Command palette 稼働                                                                                               | ✅ done   | `DashboardPage` を `LandingHero` + `LandingSearchForm` + Recent/Popular に置き換え。⌘K / Ctrl+K / `/` で `CommandPalette` (base-ui Dialog + Pages/Genes section) が開く。グローバルショートカットは `GlobalShortcuts` が listen。 |
+| **P5 Gene detail v2**         | タブ構成 (Overview / Annotation / Sequence / Transcripts / Browser)、新 GeneStructure                                                              | ✅ done   | `GeneDetailTabs` (`useValidatedSearchParam` + valibot で `?tab=` を validate)。各タブは `GeneOverviewTab` / `GeneAnnotationTab` / `GeneSequenceTab` / `GeneTranscriptsTab` / `GeneBrowserTab`。SequenceBlock の本体は未着手。     |
+| **P6 Browser route**          | `/browser` に JBrowse 2 embed、deep-link 対応                                                                                                      | ✅ done   | `BrowserPage` が `?loc=Chr1:1-100000` を valibot で validate、`GenomeBrowser` を full-bleed で表示。                                                                                                                              |
+| **P7 Polish**                 | Motion, a11y audit, i18n 切替、印刷スタイル                                                                                                        | ⬜ todo   | `prefers-reduced-motion` ガードと focus-visible ring は入っているが、Motion 全体 / axe / lighthouse / 印刷 / `@lingui/react` 等は未着手。                                                                                         |
 
 各 phase ごとに既存 `components/` から該当機能を `ui/` + `bio/` へ徐々に移送する。big-bang ではなく漸進。
 

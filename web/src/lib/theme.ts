@@ -1,21 +1,23 @@
-type Theme = "dark" | "light" | "system";
+import { type InferOutput, picklist, safeParse } from "valibot";
 
 const STORAGE_KEY = "pgp:theme";
+const DEFAULT_CANVAS = "#faf9f6";
 
-const isTheme = (value: string | null): value is Theme =>
-  value === "light" || value === "dark" || value === "system";
+const themeSchema = picklist(["dark", "light", "system"]);
+type Theme = InferOutput<typeof themeSchema>;
 
-const syncMetaThemeColor = (): void => {
-  const meta = globalThis.document.querySelector('meta[name="theme-color"]');
-  if (meta === null) {
-    return;
-  }
-  const canvas = globalThis
+const readCanvas = (): string => {
+  const value = globalThis
     .getComputedStyle(globalThis.document.documentElement)
     .getPropertyValue("--canvas")
     .trim();
-  if (canvas !== "") {
-    meta.setAttribute("content", canvas);
+  return value || DEFAULT_CANVAS;
+};
+
+const syncMetaThemeColor = (): void => {
+  const meta = globalThis.document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute("content", readCanvas());
   }
 };
 
@@ -30,9 +32,10 @@ const applyTheme = (theme: Theme): void => {
 };
 
 const getStoredTheme = (): Theme => {
-  const value = globalThis.localStorage.getItem(STORAGE_KEY);
-  if (isTheme(value)) {
-    return value;
+  const raw = globalThis.localStorage.getItem(STORAGE_KEY);
+  const parsed = safeParse(themeSchema, raw);
+  if (parsed.success) {
+    return parsed.output;
   }
   return "system";
 };
