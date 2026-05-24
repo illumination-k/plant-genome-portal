@@ -5,7 +5,12 @@
   "dockerfile": {},
   "yaml": {},
   "excludes": [
-    "**/*-lock.json"
+    "**/*-lock.json",
+    "**/target/**",
+    "**/mutants.out/**",
+    "**/data/**",
+    "**/.miserc.toml",
+    "pnpm-lock.yaml"
   ],
   "plugins": [
     "https://plugins.dprint.dev/json-0.21.1.wasm",

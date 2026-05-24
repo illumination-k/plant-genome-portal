@@ -14,7 +14,7 @@ const GeneStructureViz = (props: { geneRecord: GeneRecord }): ReactElement => {
 
   if (geneStructure.isEmpty(groups.length)) {
     return (
-      <div className="mt-4 rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
+      <div className="mt-4 rounded-md border border-dashed border-border-subtle bg-surface-muted px-4 py-6 text-center text-sm text-text-muted">
         No transcripts to visualize.
       </div>
     );

@@ -42,7 +42,29 @@
         "feature_type": "gene",
         "attributes": {
           "Name": "PBT1"
-        }
+        },
+        "annotations": [
+          {
+            "kind": "go_term",
+            "term_id": "GO:0008150",
+            "namespace": "biological_process",
+            "name": "biological process",
+            "evidence": { "attributes": {}, "source": "go" }
+          },
+          {
+            "kind": "pfam",
+            "accession": "PF00010",
+            "name": "Helix-loop-helix DNA-binding domain",
+            "evidence": { "attributes": {}, "source": "inter_pro_scan" }
+          },
+          {
+            "kind": "kegg",
+            "entry_id": "K00001",
+            "entry_kind": "orthology",
+            "name": "alcohol dehydrogenase",
+            "evidence": { "attributes": {}, "source": "kegg" }
+          }
+        ]
       }
     ],
     "transcripts": [
@@ -57,7 +79,8 @@
         },
         "strand": "forward",
         "feature_type": "mRNA",
-        "attributes": {}
+        "attributes": {},
+        "annotations": []
       }
     ],
     "exons": [

@@ -2,10 +2,10 @@ import type { ReactElement } from "react";
 
 const GeneBackLink = (): ReactElement => (
   <a
-    className="col-span-12 text-sm font-medium text-emerald-800 hover:text-emerald-950"
+    className="inline-flex items-center gap-1 text-[13px] text-text-muted hover:text-text"
     href="/genes"
   >
-    Back to genes
+    ← Back to genes
   </a>
 );
 

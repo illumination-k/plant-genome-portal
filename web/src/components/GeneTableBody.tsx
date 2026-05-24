@@ -3,7 +3,7 @@ import GeneRow from "@/components/GeneRow";
 import type { ReactElement } from "react";
 
 const GeneTableBody = (props: { genes: Gene[] }): ReactElement => (
-  <tbody className="divide-y divide-zinc-200">
+  <tbody className="divide-y divide-border-subtle">
     {props.genes.map((gene) => (
       <GeneRow gene={gene} key={gene.id} />
     ))}

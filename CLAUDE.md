@@ -201,19 +201,24 @@ GET /jbrowse/assemblies/{accession}/features?refName=&start=&end=
 ```
 backends/
   api/          [bin]       # axum HTTP server (+ `openapi` subcommand to dump schema)
-  portal-cli/   [bin]       # operational CLI: import marpolbase-mptak1-v7-1, ...
+  portal-cli/   [bin]       # operational CLI: import marpolbase-mptak1-v7-1,
+                            # prepare blastn databases with makeblastdb, ...
+  worker/       [bin]       # background worker entrypoint; homology BLASTN jobs use generic
+                            # WorkerJob<Input> envelopes and MessagePack payload/result transport
 
 crates/
   genome-core/              # 型のみ (no IO, no async, no axum/tokio/sqlx)
                             # TaxId, AssemblyAccession, GeneId, GoTermId, InterProId,
                             # Position0/1, HalfOpenRegion, ClosedRegion, Strand,
                             # Gene/Transcript/Exon/GeneRecord, GenomeDataset,
+                            # HomologySearchResult/HomologyHit domain result types,
                             # FunctionalAnnotation (GO/KEGG/Pfam/InterPro/NCBIfam/KOG),
                             # GenomeRepository trait, GeneSearch
   storage/                  # noodles FASTA/GFF parsers, nomenclature/functional-annotation
                             # TSV parsers, refget checksum, FastaReference,
                             # FileGenomeRepository (in-memory), GenomeSnapshot I/O
   service/                  # GenomeService: ユースケース層、薄い (lookup + region → half-open)
+                            # WorkerJob<Input> / Worker trait live here as application contracts.
 ```
 
 Workspace `lints.clippy` denies `print_stdout`, `print_stderr`, `unwrap_used`, `expect_used`. Tests opt out with `#[allow(clippy::unwrap_used, clippy::expect_used)]` and gate behind `#[cfg(test)]`.

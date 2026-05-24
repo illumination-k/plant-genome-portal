@@ -8,7 +8,7 @@ const GeneResultsPanel = (props: {
   genes: Gene[];
   isFetching: boolean;
 }): ReactElement => (
-  <div className="col-span-12 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+  <div className="col-span-12 overflow-hidden rounded-lg border border-border-subtle bg-surface">
     <GeneResultsHeader isFetching={props.isFetching} />
     <GeneResultsContent error={props.error} genes={props.genes} />
   </div>

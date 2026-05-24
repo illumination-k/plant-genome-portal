@@ -6,8 +6,11 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
+flate2.workspace = true
 genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
 reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 storage = { path = "../../crates/storage", version = "0.1.0" }
 tokio.workspace = true
 tracing.workspace = true
