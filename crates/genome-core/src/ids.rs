@@ -208,15 +208,46 @@ mod tests {
 
     #[test]
     fn go_term_id_requires_canonical_accession() {
-        assert_eq!(GoTermId::new("GO:0008150").unwrap().as_str(), "GO:0008150");
+        let id = GoTermId::new("GO:0008150").unwrap();
+        assert_eq!(id.as_str(), "GO:0008150");
+        assert_eq!(id.to_string(), "GO:0008150");
+        assert_eq!(id.clone().into_string(), "GO:0008150");
         assert!(GoTermId::new("0008150").is_err());
         assert!(GoTermId::new("GO:8150").is_err());
+        assert!(GoTermId::new("GO:abcdefg").is_err());
     }
 
     #[test]
     fn interpro_id_requires_canonical_identifier() {
-        assert_eq!(InterProId::new("IPR000001").unwrap().as_str(), "IPR000001");
+        let id = InterProId::new("IPR000001").unwrap();
+        assert_eq!(id.as_str(), "IPR000001");
+        assert_eq!(id.to_string(), "IPR000001");
+        assert_eq!(id.clone().into_string(), "IPR000001");
         assert!(InterProId::new("PF00001").is_err());
-        assert_eq!(PfamAccession::new("PF00001").unwrap().as_str(), "PF00001");
+        // Right prefix, wrong digit-only-tail: catches && -> || in is_interpro_id.
+        assert!(InterProId::new("IPRabcdef").is_err());
+        // Right prefix, wrong length: catches len-check mutations.
+        assert!(InterProId::new("IPR0000001").is_err());
+    }
+
+    #[test]
+    fn pfam_accession_requires_canonical_identifier() {
+        let acc = PfamAccession::new("PF00001").unwrap();
+        assert_eq!(acc.as_str(), "PF00001");
+        assert_eq!(acc.to_string(), "PF00001");
+        assert_eq!(acc.clone().into_string(), "PF00001");
+        // Wrong prefix: catches `is_pfam_accession -> true` mutation.
+        assert!(PfamAccession::new("XX00001").is_err());
+        // Right prefix, non-digit tail: catches && -> || in is_pfam_accession.
+        assert!(PfamAccession::new("PFabcde").is_err());
+        // Right prefix, wrong length: catches len-check mutations.
+        assert!(PfamAccession::new("PF000001").is_err());
+    }
+
+    #[test]
+    fn tax_id_exposes_inner_value() {
+        let tax = TaxId::new(3197);
+        assert_eq!(tax.get(), 3197);
+        assert_eq!(tax.to_string(), "3197");
     }
 }

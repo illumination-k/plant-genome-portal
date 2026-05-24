@@ -170,18 +170,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kegg_entry_kind_infers_common_entry_types() {
-        assert_eq!(
-            KeggEntryKind::from_entry_id("K00001"),
-            KeggEntryKind::Orthology
-        );
-        assert_eq!(
-            KeggEntryKind::from_entry_id("path:map00010"),
-            KeggEntryKind::Pathway
-        );
-        assert_eq!(
-            KeggEntryKind::from_entry_id("M00001"),
-            KeggEntryKind::Module
-        );
+    fn kegg_entry_kind_classifies_each_branch() {
+        let cases = [
+            ("K00001", KeggEntryKind::Orthology),
+            ("ko:K12345", KeggEntryKind::Orthology),
+            ("path:map00010", KeggEntryKind::Pathway),
+            ("map00010", KeggEntryKind::Pathway),
+            ("ko00010", KeggEntryKind::Pathway),
+            ("ec00010", KeggEntryKind::Pathway),
+            ("M00001", KeggEntryKind::Module),
+            ("R00001", KeggEntryKind::Reaction),
+            ("C00001", KeggEntryKind::Compound),
+            ("G00001", KeggEntryKind::Glycan),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                KeggEntryKind::from_entry_id(input),
+                expected,
+                "input: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn kegg_entry_kind_falls_back_to_other() {
+        // Wrong prefix letter — none of the 6-char single-letter branches match.
+        assert_eq!(KeggEntryKind::from_entry_id("X00001"), KeggEntryKind::Other);
+        // Right prefix letter but wrong length — length check must reject.
+        assert_eq!(KeggEntryKind::from_entry_id("K0001"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("M0000001"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("R0001"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("C0001"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("G0001"), KeggEntryKind::Other);
+        // Right prefix letter and length but non-digit tail — digit check must reject.
+        assert_eq!(KeggEntryKind::from_entry_id("Kabcde"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("Mabcde"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("Rabcde"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("Cabcde"), KeggEntryKind::Other);
+        assert_eq!(KeggEntryKind::from_entry_id("Gabcde"), KeggEntryKind::Other);
+        // Pathway prefix arms must each be required: dropping one prefix string would
+        // still hit the others, so verify "ec" alone classifies even with no map/ko.
+        assert_eq!(KeggEntryKind::from_entry_id("ec99999"), KeggEntryKind::Pathway);
     }
 }

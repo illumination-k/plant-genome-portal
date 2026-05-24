@@ -191,4 +191,23 @@ mod tests {
         assert!(a.overlaps(&b));
         assert!(!a.overlaps(&c));
     }
+
+    #[test]
+    fn touching_half_open_regions_do_not_overlap() {
+        let a = HalfOpenRegion::new(
+            SequenceName::new("chr1").unwrap(),
+            Position0::new(0),
+            Position0::new(10),
+        )
+        .unwrap();
+        let b = HalfOpenRegion::new(
+            SequenceName::new("chr1").unwrap(),
+            Position0::new(10),
+            Position0::new(20),
+        )
+        .unwrap();
+
+        assert!(!a.overlaps(&b));
+        assert!(!b.overlaps(&a));
+    }
 }
