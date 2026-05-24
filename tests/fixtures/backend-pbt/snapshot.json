@@ -40,6 +40,7 @@
         },
         "strand": "forward",
         "feature_type": "gene",
+        "annotations": [],
         "attributes": {
           "Name": "PBT1"
         }
@@ -57,6 +58,7 @@
         },
         "strand": "forward",
         "feature_type": "mRNA",
+        "annotations": [],
         "attributes": {}
       }
     ],

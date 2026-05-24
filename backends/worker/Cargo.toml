@@ -1,20 +1,18 @@
 [package]
-name = "portal-cli"
+name = "worker"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 clap.workspace = true
-flate2.workspace = true
 genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
-reqwest.workspace = true
+rmp-serde.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+service = { path = "../../crates/service", version = "0.1.0" }
 storage = { path = "../../crates/storage", version = "0.1.0" }
-tokio.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

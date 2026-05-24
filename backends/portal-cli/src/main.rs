@@ -1,7 +1,11 @@
 use clap::{Args, Parser, Subcommand};
+use flate2::read::GzDecoder;
 use genome_core::{Assembly, AssemblyAccession, AssemblySource, TaxId, Taxon};
-use std::io::Write;
+use serde::Serialize;
+use std::fs::File;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command as ProcessCommand, Stdio};
 use storage::{GenomeSnapshotBuild, SnapshotManifest, build_genome_snapshot, write_snapshot};
 use tracing_subscriber::EnvFilter;
 
@@ -20,6 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
         Command::Import(command) => command.run().await?,
+        Command::Prepare(command) => command.run()?,
     }
 
     Ok(())
@@ -41,6 +46,140 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Import(ImportCommand),
+    Prepare(PrepareCommand),
+}
+
+#[derive(Debug, Args)]
+struct PrepareCommand {
+    #[command(subcommand)]
+    target: PrepareTarget,
+}
+
+impl PrepareCommand {
+    fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+        match self.target {
+            PrepareTarget::Blastn(command) => command.run(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum PrepareTarget {
+    /// Prepare a nucleotide BLAST database from a genome FASTA.
+    Blastn(BlastnPrepare),
+}
+
+#[derive(Debug, Args)]
+struct BlastnPrepare {
+    #[arg(long)]
+    fasta: PathBuf,
+    #[arg(long, default_value = "target/blast")]
+    out: PathBuf,
+    #[arg(long, default_value = "makeblastdb")]
+    makeblastdb: PathBuf,
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+}
+
+impl BlastnPrepare {
+    fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+        let prepared = prepare_blastn_database(&self.fasta, &self.out, &self.makeblastdb)?;
+
+        match self.manifest {
+            Some(path) => {
+                if let Some(parent) = path
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                {
+                    std::fs::create_dir_all(parent)?;
+                }
+                serde_json::to_writer_pretty(File::create(path)?, &prepared)?;
+            }
+            None => {
+                let stdout = std::io::stdout();
+                let mut stdout = stdout.lock();
+                serde_json::to_writer_pretty(&mut stdout, &prepared)?;
+                stdout.write_all(b"\n")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreparedBlastDatabase {
+    db_prefix: PathBuf,
+    fasta: PathBuf,
+}
+
+fn prepare_blastn_database(
+    fasta: &Path,
+    out: &Path,
+    makeblastdb: &Path,
+) -> Result<PreparedBlastDatabase, Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(out)?;
+    let fasta = materialize_fasta(fasta, out)?;
+    let db_prefix = out.join(database_name(&fasta));
+    let output = ProcessCommand::new(makeblastdb)
+        .arg("-in")
+        .arg(&fasta)
+        .arg("-dbtype")
+        .arg("nucl")
+        .arg("-parse_seqids")
+        .arg("-out")
+        .arg(&db_prefix)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "{} exited with status {:?}: {}",
+            makeblastdb.display(),
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
+
+    Ok(PreparedBlastDatabase { db_prefix, fasta })
+}
+
+fn materialize_fasta(fasta: &Path, out: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if fasta.extension().is_none_or(|extension| extension != "gz") {
+        return Ok(fasta.to_path_buf());
+    }
+
+    let materialized = out.join(format!("{}.fa", database_name(fasta)));
+    let mut reader = GzDecoder::new(File::open(fasta)?);
+    let mut writer = File::create(&materialized)?;
+    io::copy(&mut reader, &mut writer)?;
+    Ok(materialized)
+}
+
+fn database_name(fasta: &Path) -> String {
+    let name_path = fasta
+        .extension()
+        .filter(|extension| *extension == "gz")
+        .and_then(|_| fasta.file_stem())
+        .map(Path::new)
+        .unwrap_or(fasta);
+
+    name_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("genome")
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Args)]
