@@ -5,6 +5,8 @@ dist/
 !.env.example
 *.tsbuildinfo
 target/
+mutants.out/
+mutants.out.old/
 /data/
 mutants.out/
 mutants.out.old/
