@@ -1,56 +1,85 @@
 # AGENTS Guideline
 
-This repository is pre-alpha and under active development. The API is not stable and may change without a major version bump, so backwards compatibility is not guaranteed at this stage.
-So developers of this repository DO NOT need to worry about breaking changes or maintaining backwards compatibility. We prefer to iterate quickly and make breaking changes as needed, rather than trying to maintain backwards compatibility.
+This repository is pre-alpha and under active development. The API is not stable and may change without a major version bump, so backwards compatibility is not guaranteed at this stage. Developers DO NOT need to worry about breaking changes — prefer iterating quickly and making breaking changes as needed over preserving compatibility.
 
 ## Policy
 
-Follow the YANGI, SOLID, DRY, and KISS principles in all code and documentation. Prioritize simplicity, readability, and maintainability over cleverness or optimization. Avoid premature optimization and over-engineering. Strive for clear and concise code that is easy to understand and modify.
+Follow YAGNI, SOLID, DRY, and KISS in all code and documentation. Prioritize simplicity, readability, and maintainability over cleverness. Avoid premature optimization and over-engineering. Strive for clear, concise code that is easy to understand and modify.
 
-## Development Process
+## Development workflow
 
-Run `mise install` first to install the toolchain and project tools.
+Run `mise install` first to install the toolchain and project tools (mise auto-installs cargo-nextest, cargo-deny, cargo-audit, cargo-mutants, cargo-watch, dprint, shfmt, oxlint/oxfmt, Node/pnpm, uv, etc.).
 
-At the end of a session, run `mise run ci` and make sure it passes. Use the narrower tasks while iterating:
+Use the narrower tasks while iterating, then run the full `ci` task at the end of a session:
 
 ```bash
 mise run fmt      # Format
 mise run lint     # Lint and policy checks
 mise run test     # Tests
-mise run ci       # Full required verification
+mise run ci       # Full required verification (lint + test for all stacks)
 ```
 
-## Commands
+Tasks are split across three mise files selected by `MISE_ENV`:
 
-Run `mise install` first to install all tools.
+- `mise.base.toml` — dprint, shfmt, shellcheck, GitHub Actions linters (`MISE_ENV=base`)
+- `mise.rust.toml` — cargo fmt/clippy/deny/audit, nextest, doctests, cargo-watch, mutants (`MISE_ENV=rust`)
+- `mise.ts.toml` — Node/pnpm, oxlint, oxfmt, tsc, vitest, vite (`MISE_ENV=ts`)
+
+The top-level `.mise.toml` aggregates them via `depends = "fmt:*"` etc., so running `mise run ci` runs `ci:rust` + `ci:ts`.
+
+### Development servers
+
+Start the API and web dev servers together (they write PID files into `target/dev/pids`):
 
 ```bash
-mise run ci    # Run all ci:* tasks
-mise run fmt   # Run all fmt:* tasks
-mise run lint  # Run all lint:* tasks
-mise run test  # Run all test:* tasks
+mise r dev          # runs dev:api (cargo watch on backends/api + crates) and dev:web (Vite)
+mise r stop_dev     # stops both processes via the PID files and removes stale pids
 ```
 
-## Development Servers
+`dev:api` serves the API on `127.0.0.1:3000` from the local Marchantia snapshot. `dev:web` runs Vite on `127.0.0.1:5173` (default) and proxies `/v2`, `/jbrowse`, `/sequence`, `/openapi.json`, `/health` to the API. Never use `pkill` to stop the dev servers; always use `mise r stop_dev` so PID files stay consistent.
 
-Start the API and web development servers together:
+### Data import
+
+Marchantia is the only species so far. The `portal-cli` binary downloads MarpolBase MpTak1_v7.1 (FASTA + GFF3 + functional annotation + nomenclature) and builds a local snapshot:
 
 ```bash
-mise r dev
+cargo run -p portal-cli -- import marpolbase-mptak1-v7-1 --out data/marpolbase/MpTak1_v7.1
+cargo run -p portal-cli -- import marpolbase-mptak1-v7-1 --rebuild-snapshot   # re-parse existing inputs
 ```
 
-This runs `dev:*` tasks:
-
-- `dev:api`: watches Rust API code with `cargo watch` and serves the API on `127.0.0.1:3000`.
-- `dev:web`: runs Vite for the web app and proxies API paths to `127.0.0.1:3000`.
-
-Stop both dev servers from another shell:
+Run the API directly against the snapshot (no database):
 
 ```bash
-mise r stop_dev
+cargo run -p api -- \
+  --bind 127.0.0.1:3000 \
+  --snapshot data/marpolbase/MpTak1_v7.1/snapshot.json \
+  --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz
 ```
 
-The dev tasks write PID files under `target/dev/pids`. `stop_dev` reads those files, stops the running processes, and removes stale PID files. You do not use `pkill` directly to stop the dev servers, as that may kill other processes if multiple instances are running. Always use `stop_dev` to cleanly stop the dev servers and remove PID files.
+### OpenAPI client generation
+
+The Rust API serves `GET /openapi.json` (utoipa) and can dump the schema offline via `cargo run -p api -- openapi --output <path>`. The Hey API TypeScript client lives at `web/src/api/client/` and is regenerated by:
+
+```bash
+pnpm --dir web run openapi:generate
+```
+
+This runs `cargo run -p api -- openapi --output ../target/openapi/api.json` then `openapi-ts` per `web/openapi-ts.config.ts` (plugins: client-fetch, typescript, valibot, sdk, tanstack/react-query). **Always regenerate when API types change.** The client is checked in so the frontend builds without running cargo.
+
+### Property-based testing
+
+Schemathesis is driven against the live API with a deterministic fixture:
+
+```bash
+mise run pbt:backend
+bash scripts/pbt/backend-schemathesis.sh --max-examples 200 --continue-on-failure   # extra options
+```
+
+The script starts the API with `tests/fixtures/backend-pbt/{snapshot.json,reference.fa}`, waits for `/health`, and runs `uvx schemathesis run /openapi.json` with the config in `schemathesis.toml`. Reports land in `target/schemathesis/`.
+
+### Mutation testing
+
+`mise run mutants:rust:diff [base]` runs cargo-mutants on Rust lines changed vs a base ref (default `main`). CI also runs `cargo mutants --in-diff` on every PR via `.github/workflows/mutants-rust.yml`; the manual full run shards 8 ways.
 
 ## Purpose
 
@@ -59,9 +88,9 @@ Rust backend + React SPA frontend の monorepo。
 
 参考にする既存DB:
 
-- **NCBI Datasets v2** — API デザイン(accession-first, TaxID-driven, 階層モデル)を踏襲
+- **NCBI Datasets v2** — API デザイン (accession-first, TaxID-driven, 階層モデル) を踏襲
 - **MarpolBase / TAIR / Phytozome** — 植物コミュニティDBの先例
-- **ATTED-II** — 共発現解析の参照モデル(MR / HRR / LS)
+- **ATTED-II** — 共発現解析の参照モデル (MR / HRR / LS)
 
 最終的に統合したいデータ:
 
@@ -74,17 +103,17 @@ Rust backend + React SPA frontend の monorepo。
 ## MVP scope
 
 **MVP は genome レイヤーのみ。** 他のオミクスは v2 以降。
-初期データは **Marchantia polymorpha** (TaxID: 3197) 1種。
+初期データは **Marchantia polymorpha** (TaxID: 3197) 1種、assembly は `GCA_037833805.1` (MpTak1_v7.1)。
 MVP 段階では annotation = assembly に固定 (annotation の別バージョン管理は v2 以降)。
 
 ### MVP に入れる
 
 - 種 / アセンブリ一覧・詳細
-- 遺伝子検索 (symbol / locus_tag)
-- 遺伝子詳細 (座標 + 配列 + annotation)
+- 遺伝子検索 (symbol / locus_tag / free-text)
+- 遺伝子詳細 (座標 + 配列 + functional annotation: GO/Pfam/InterPro/KEGG/KOG/NCBIfam + nomenclature)
 - 領域内 feature 取得 (`Chr1:1000-2000` → 遺伝子リスト)
 - refget 準拠の参照配列取得
-- JBrowse 2 によるゲノムブラウザ表示
+- JBrowse 2 によるゲノムブラウザ表示 (バックエンドは `/jbrowse/*` 提供済み、フロント側 wrapper は未実装)
 
 ### MVP に入れない (v2 以降)
 
@@ -97,25 +126,35 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
 
 ### Stack 概要
 
-| 層                      | 採用                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| Backend lang            | Rust (axum + sqlx + tokio)                                                            |
-| Bio I/O                 | [noodles](https://github.com/zaeleus/noodles) (FASTA/GFF/VCF/BAM) + bigtools (BigWig) |
-| Metadata DB             | PostgreSQL                                                                            |
-| 発現マトリクス (将来)   | Parquet on disk + DuckDB クエリ (hybrid)                                              |
-| 共発現 (将来)           | PostgreSQL (top-N pre-computed edges)                                                 |
-| Sequence / signal files | ファイルストア (FS / S3 / MinIO) + index (`.fai` / `.tbi` / `.csi` / `.bbi`)          |
-| Frontend                | React + Vite + TypeScript                                                             |
-| Genome browser          | JBrowse 2 (@jbrowse/react-linear-genome-view)                                         |
-| State/query             | TanStack Query + TanStack Router                                                      |
+| 層                     | 採用                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| Backend lang           | Rust 1.95.0 (edition 2024), `axum` + `tokio` + `clap`                                     |
+| Bio I/O                | [noodles](https://github.com/zaeleus/noodles) (`noodles-fasta`, `noodles-gff`) + `flate2` |
+| Sequence checksum      | SHA-512 / 24 bytes / URL-safe base64 (GA4GH refget)                                       |
+| Metadata store         | **In-memory snapshot loaded from `snapshot.json`** (PostgreSQL は将来)                    |
+| Sequence file          | FASTA on disk (plain or `.gz`), indexed by refget checksum in memory                      |
+| API schema             | `utoipa` → OpenAPI 3 (`GET /openapi.json` + `api openapi` subcommand)                     |
+| Frontend lang          | TypeScript (strict), React 19                                                             |
+| Frontend build         | Vite 8, Tailwind v4                                                                       |
+| Frontend routing       | `react-router` v7                                                                         |
+| Frontend data fetching | `@tanstack/react-query` + Hey API generated client (fetch + valibot)                      |
+| Frontend UI            | `@base-ui/react`                                                                          |
+| Frontend lint/format   | oxlint, oxfmt, `tsc --noEmit`                                                             |
+| Frontend tests         | Vitest                                                                                    |
+| PBT                    | Schemathesis (`uvx`) against live API                                                     |
+| Genome browser         | JBrowse 2 (planned — endpoints exist, frontend wrapper TBD)                               |
 
-### データ階層 (3 層)
+### Snapshot-based data flow (MVP)
+
+The current implementation deliberately skips PostgreSQL. The `portal-cli` parses input files (FASTA + GFF + functional annotation TSV + nomenclature TSV) into a single `GenomeSnapshot` (`crates/storage/src/snapshot.rs`), serialized as `snapshot.json`. At boot, `api` loads the snapshot into an in-memory `FileGenomeRepository` (`crates/storage/src/repository.rs`) that implements `GenomeRepository` from `genome-core`. PostgreSQL + `sqlx` move in when multi-assembly support arrives.
+
+### データ階層 (3 層) — 将来像
 
 オミクスデータは「重さ」と「クエリ形態」が全く違うので 3 層に分離:
 
-1. **Metadata** (PostgreSQL) — 種・アセンブリ・サンプル・実験条件
-2. **Annotation** (PostgreSQL / 将来 Parquet) — 遺伝子・ピーク・バリアント・発現マトリクス(集約済み)
-3. **Signal/Sequence** (ファイルストア + index) — FASTA/BigWig/BAM/VCF 等の生データ
+1. **Metadata** (現在: snapshot / 将来: PostgreSQL) — 種・アセンブリ・サンプル・実験条件
+2. **Annotation** (現在: snapshot / 将来: PostgreSQL + Parquet) — 遺伝子・ピーク・バリアント・発現マトリクス
+3. **Signal/Sequence** (FASTA on disk + refget checksum index / 将来: BigWig/BAM/VCF + `.fai`/`.tbi`/`.bbi`)
 
 **原則**: 生 BigWig / FASTA / VCF は DB に入れない。`.fai`/`.tbi`/`.bbi` 経由で領域クエリ。
 
@@ -127,105 +166,151 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
   (S3 への byte-range Range リクエストでサーバ無負荷配信)
 - **その他オミクス (発現/共発現/ChIP/ATAC/methylation) は独自 REST**
   (GA4GH に該当仕様なし)
-- URL は NCBI Datasets v2 スタイル:
-  ```
-  /v2/genome/accession/{accession}
-  /v2/genome/taxon/{tax_id}
-  /v2/gene/id/{gene_id}
-  /v2/gene/search?symbol=...&tax_id=...
-  /v2/genome/accession/{acc}/region/{chr}:{start}-{end}/features
-  ```
+- URL は NCBI Datasets v2 スタイル。実装済み routes (see `backends/api/src/main.rs:91`):
+
+```
+GET /health
+GET /openapi.json
+GET /v2/genome/accession/{accession}
+GET /v2/genome/accession/{accession}/sequences
+GET /v2/genome/accession/{accession}/region/{chr}:{start}-{end}/features
+GET /v2/genome/taxon/{tax_id}
+GET /v2/gene/id/{gene_id}
+GET /v2/gene/search?tax_id=&symbol=&locus_tag=&q=&limit=
+GET /sequence/service-info                                       # refget service-info
+GET /sequence/{checksum}?start=&end=                             # refget sequence
+GET /jbrowse/config                                              # default assembly
+GET /jbrowse/config/{accession}
+GET /jbrowse/assemblies/{accession}/chrom.sizes
+GET /jbrowse/assemblies/{accession}/features?refName=&start=&end=
+```
 
 ### 座標系の規約
 
-- **API 境界は 1-based closed** (GFF/VCF 慣習、NCBI 互換)
-- **DB 内部は 0-based half-open** で統一 (範囲 index の自然な扱い)
-- `genome-core` で `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を型レベルで区別、暗黙変換禁止
+- **API 境界は 1-based closed** (GFF/VCF 慣習、NCBI 互換)。
+  例: `region/chr1:1-100000/features` の `start=1, end=100000` は両端を含む。
+- **内部 (storage/service) は 0-based half-open** で統一 (範囲 index の自然な扱い)。
+- `genome-core::coord` で `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を型レベルで区別。
+  暗黙変換禁止 — `ClosedRegion::to_half_open()` を明示的に呼ぶ。
+- JBrowse の `/jbrowse/assemblies/{accession}/features` だけは **0-based half-open** (JBrowse 慣習)。ハンドラ内で 1-based closed に変換してから service 層に渡す (`backends/api/src/main.rs:226`)。
 
-### スキーマ要点
+### Workspace 構成 (Cargo)
 
-```sql
-taxa             (tax_id PK, scientific_name, common_name, rank)
-assemblies       (accession PK, tax_id FK, name, source, refget_checksum, ...)
-sequences        (id PK, assembly_accession FK, name, length, refget_checksum, fasta_path)
-genes            (id PK, assembly_accession FK, symbol, locus_tag, sequence_id, start, end, strand)
-transcripts      (id PK, gene_id FK, ...)
-exons            (id PK, transcript_id FK, start, end)
-```
-
-`assemblies.source` は `'ncbi' | 'marpolbase' | 'tair' | 'phytozome' | 'community' | 'local'`。
-植物では NCBI 以外の一次ソースが多いため、最初から複数 source を受け入れる前提。
-
-### Cargo workspace 構成 (target: 8 crate)
+`Cargo.toml` の workspace は `backends/*` + `crates/*` (注: 旧 README の `backend/crates/*` ではない)。
 
 ```
-backend/crates/
-  genome-core/         # 型のみ (no IO, no async)
-                       # TaxId, Accession, GeneId, Position0/1, Region
-  coexpression/        # MR / HRR / LS, Pearson/Spearman, top-N (pure lib, OSS化候補)
-  storage/             # FS/S3 抽象, refget checksum, .fai/.tbi index 操作
-  db/                  # sqlx + migrations + repository
-  expression-store/    # Parquet/DuckDB (発現マトリクス専用)
-  service/             # ユースケース層 (太ったらドメイン別に分割)
-  api/      [bin]      # axum HTTP サーバ
-  ingest/   [bin]      # データ取り込み CLI
+backends/
+  api/          [bin]       # axum HTTP server (+ `openapi` subcommand to dump schema)
+  portal-cli/   [bin]       # operational CLI: import marpolbase-mptak1-v7-1, ...
+
+crates/
+  genome-core/              # 型のみ (no IO, no async, no axum/tokio/sqlx)
+                            # TaxId, AssemblyAccession, GeneId, GoTermId, InterProId,
+                            # Position0/1, HalfOpenRegion, ClosedRegion, Strand,
+                            # Gene/Transcript/Exon/GeneRecord, GenomeDataset,
+                            # FunctionalAnnotation (GO/KEGG/Pfam/InterPro/NCBIfam/KOG),
+                            # GenomeRepository trait, GeneSearch
+  storage/                  # noodles FASTA/GFF parsers, nomenclature/functional-annotation
+                            # TSV parsers, refget checksum, FastaReference,
+                            # FileGenomeRepository (in-memory), GenomeSnapshot I/O
+  service/                  # GenomeService: ユースケース層、薄い (lookup + region → half-open)
 ```
 
-**依存方向**:
+Workspace `lints.clippy` denies `print_stdout`, `print_stderr`, `unwrap_used`, `expect_used`. Tests opt out with `#[allow(clippy::unwrap_used, clippy::expect_used)]` and gate behind `#[cfg(test)]`.
+
+**Dependency direction** (enforced by the crate structure):
 
 ```
-             genome-core
-      /     /    |    \     \
-storage  db  expression-store  coexpression
-      \     |     /                /
-           service ────────────────
-            /   \
-          api   ingest
+      genome-core
+    /     |      \
+storage   |       (future: db, expression-store, coexpression)
+    \    |
+    service
+    /    \
+  api    portal-cli
 ```
 
-**MVP 時点で実装するのは 6 crate** (`coexpression`, `expression-store` は将来):
-`genome-core` / `storage` / `db` / `service` / `api` / `ingest`
-
-### 実装順 (MVP)
-
-1. `genome-core` (型決め — 後から変更が一番痛い)
-2. `db` + migrations (schema 決め打ち)
-3. `storage` (refget だけまず動く状態に)
-4. `service` 薄く + `api` で `GET /v2/gene/id/{id}` レベル
-5. `ingest` CLI で Marchantia GFF/FASTA 取り込み
-6. frontend で 種/遺伝子検索 + JBrowse 表示
+**まだ存在しない crate** (旧 CLAUDE.md で計画されていたもの):
+`db` (sqlx + migrations) / `expression-store` (Parquet/DuckDB) / `coexpression` (MR/HRR/LS — pure lib, OSS化候補)。
 
 ### Frontend 構成
 
-monorepo だが frontend は workspace 化しない (シンプル維持):
+`web/` は pnpm 単独 (monorepo に追加せず simple に保つ)。strict TypeScript。
 
 ```
-frontend/
+web/
   src/
-    pages/
-      Home.tsx                # 種一覧
-      TaxonDetail.tsx         # 種詳細 + アセンブリ一覧
-      AssemblyDetail.tsx
-      GeneSearch.tsx
-      GeneDetail.tsx          # 座標 + 配列 + JBrowse 埋め込み
-    components/
-      GenomeBrowser.tsx       # JBrowse 2 wrapper
+    main.tsx                       # bootstraps AppProviders → QueryProvider → AppRouter
+    AppProviders.tsx               # <StrictMode>
+    QueryProvider.tsx              # @tanstack/react-query QueryClient
+    AppRouter.tsx                  # react-router routes: /, /datasets, /genes, /genes/:geneId, /analysis
+    layouts/                       # RootLayout, SiteHeader, PrimaryNavigation
+    pages/                         # DashboardPage, DatasetsPage, GenesPage, GeneDetailPage, AnalysisPage
+    components/                    # Dashboard*, Gene*, Dataset*, Exon*, Transcript*, Pipeline*
+                                   # — 1 component per file, presentational, very small
+    lib/                           # geneFormat, geneRecordUtils
+    api/client/                    # Hey API generated client (DO NOT edit; run openapi:generate)
+      index.ts                     # re-exports SDK + types
+      sdk.gen.ts / types.gen.ts / valibot.gen.ts / client.gen.ts
+      @tanstack/react-query.gen.ts # *Options helpers for useQuery
+      client/, core/
+    styles.css                     # Tailwind entry
 ```
+
+Components are intentionally small and single-purpose (e.g. `GeneTitleCell`, `GeneStatusGrid`) — follow the same granularity when adding new ones. Use the generated `*Options` helpers (e.g. `geneSearchOptions`, `geneOptions`) with `useQuery`; don't hand-roll fetch calls. The `@/` alias resolves to `web/src/`.
+
+### スキーマ要点 (将来の PostgreSQL)
+
+```sql
+taxa            (tax_id PK, scientific_name, common_name, rank)
+assemblies      (accession PK, tax_id FK, name, source, refget_checksum, ...)
+sequences       (id PK, assembly_accession FK, name, length, refget_checksum, fasta_path)
+genes           (id PK, assembly_accession FK, symbol, locus_tag, sequence_id, start, end, strand)
+transcripts     (id PK, gene_id FK, ...)
+exons           (id PK, transcript_id FK, start, end)
+```
+
+`assemblies.source` is `'ncbi' | 'marpolbase' | 'tair' | 'phytozome' | 'community' | 'local'` (enum `AssemblySource` in `genome-core`). 植物では NCBI 以外の一次ソースが多いため、最初から複数 source を受け入れる前提。
 
 ## Coding guidelines
 
-- **解析ロジックと永続化/HTTP は分離する**。`coexpression` のような解析 crate は
-  `sqlx` / `axum` / `tokio` に依存しない。pure lib として保つ
-- **座標系は型で区別**。`u64` を生で持ち回さない。`genome-core` の型を経由する
-- **GA4GH 既存標準が使える場所では使う**(refget, htsget)。植物特有/オミクス特有の
-  部分だけ独自に設計する
-- **アセンブリ accession は first-class identifier**。表示名 (`TAIR10` 等) は
-  二次属性として持つが、内部参照は accession (`GCA_xxx` / `LOCAL_xxx`) で行う
-- **MVP は genome に集中**。将来のオミクス層を意識した crate 境界は引いておくが、
-  実装は genome に絞る
+- **解析ロジックと永続化 / HTTP は分離**。将来追加する解析 crate (`coexpression` 等) は `sqlx` / `axum` / `tokio` に依存しない pure lib として保つ。
+- **座標系は型で区別**。`u64` を生で持ち回さない。`genome-core::coord` の `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を経由する。
+- **識別子は newtype**。`AssemblyAccession::new("GCA_…")?`, `GeneId::new(…)?`, `GoTermId::new("GO:0008150")?` 等。`GoTermId` / `InterProId` / `PfamAccession` は形式まで検証する。
+- **GA4GH 既存標準が使える場所では使う** (refget, htsget)。植物特有 / オミクス特有の部分だけ独自に設計する。
+- **アセンブリ accession は first-class identifier**。表示名 (`TAIR10` 等) は二次属性として持つが、内部参照は accession (`GCA_xxx` / `LOCAL_xxx`) で行う。
+- **`unwrap` / `expect` / `print*!` は禁止** (workspace `lints`)。エラーは `thiserror` で型を定義し、`?` で伝播する (`DomainError`, `StorageError`, `ServiceError`)。
+- **API ハンドラは薄く**: `ServiceError` を `ApiError` 経由で `IntoResponse` に落とし、status は `TaxonNotFound|AssemblyNotFound|GeneNotFound|SequenceNotFound → 404`, `InvalidRequest → 400` にマップする。
+- **utoipa スキーマを忘れず更新**。新しい response / request 型は `ApiDoc` の `components(schemas(...))` と `paths(...)` 両方に登録 → `pnpm --dir web run openapi:generate` で TS 側にも反映。
+- **MVP は genome に集中**。将来のオミクス層を意識した crate 境界は引いておくが、実装は genome に絞る。
+
+## Testing
+
+- Rust unit tests live next to code in `#[cfg(test)] mod tests { ... }` blocks. Use `cargo-nextest` (the configured runner) for fast feedback; `cargo test --doc` covers doctests.
+- Repository tests in `crates/storage/src/repository.rs` build `FileGenomeRepository` directly from in-memory `GenomeDataset` — copy that pattern for new repository behavior.
+- Snapshot round-trip tests in `crates/storage/src/snapshot.rs` are the canonical example for parser additions.
+- API integration is covered by Schemathesis PBT (`mise run pbt:backend`) — when you add a new endpoint, update `schemathesis.toml` `[parameters]` if the existing identifiers don't match your route.
+- Frontend tests with Vitest live alongside source; run with `pnpm --dir web run test` or `mise run test:ts`.
+- Mutation testing is part of CI — be especially deliberate with parsers and validators (e.g. ID format checks): write tests that pin down both positive and negative branches so mutants get killed.
+
+## CI / GitHub Actions
+
+Workflows live in `.github/workflows/`:
+
+| Workflow                                                                                                   | Trigger              | Job                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| `ci_rust.yml`                                                                                              | push main / PR       | `cargo build` + `mise run ci:rust` (clippy, fmt check, deny, audit, nextest, doctests) |
+| `ci_ts.yml`                                                                                                | push main / PR       | `pnpm install --frozen-lockfile` + `mise run ci:ts` (oxlint, tsc, vitest)              |
+| `lint_base.yml`                                                                                            | push main / PR       | `prek run --all-files` + `mise run lint:base` (dprint check, shfmt -d, shellcheck)     |
+| `lint_gha.yml`                                                                                             | `.github/**` changes | actionlint, zizmor, ghalint, pinact --check                                            |
+| `mutants-rust.yml`                                                                                         | PR with `**/*.rs`    | `cargo mutants --in-diff` on PR diff (sharded full run on `workflow_dispatch`)         |
+| `check-large-files.yaml`, `codeql.yml`, `dependency-review.yml`, `sbom.yml`, `trivy.yml`, `trufflehog.yml` | various              | Security / supply-chain checks                                                         |
+
+`pre-commit` (via `prek`) enforces trailing whitespace, EOF newlines, YAML/JSON/TOML syntax, merge-conflict markers, large-file (>500 KB) blocks, LF line endings, and private-key detection.
 
 ## Notes
 
-- 初期データ取り込み時に確定する事項: Marchantia の使用 assembly 版 (Tak-1 v6.1 等)、
-  ソース (NCBI / MarpolBase), accession 表記
-- 設計議論の経緯は repo-admins 側の対話履歴を参照
+- 初期データ取り込み時に確定: Marchantia の使用 assembly は MpTak1_v7.1 / `GCA_037833805.1` / source = MarpolBase, downloaded from `https://marchantia.info/data/MpTak1_v7.1/`.
+- `pnpm-workspace.yaml` enforces `minimumReleaseAge: 4320` (3 days) and `trustPolicy: no-downgrade` — be aware when bumping npm deps.
+- 設計議論の経緯は repo-admins 側の対話履歴を参照。
+- `AGENTS.md` is a single-line `@CLAUDE.md` re-export — keep that file as the canonical guide.
