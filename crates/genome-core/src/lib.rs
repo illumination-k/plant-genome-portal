@@ -18,7 +18,7 @@ pub use annotation::{
 pub use assembly::{Assembly, AssemblySource, Sequence, Taxon};
 pub use coord::{ClosedRegion, HalfOpenRegion, Position0, Position1, Strand};
 pub use error::DomainError;
-pub use feature::{Exon, Gene, GeneRecord, GenomeDataset, Transcript};
+pub use feature::{Cds, Exon, Gene, GeneRecord, GenomeDataset, Transcript};
 pub use ids::{
     AssemblyAccession, GeneId, GoTermId, InterProId, KeggEntryId, KogEntryId, NcbiFamAccession,
     PfamAccession, SequenceName, TaxId, TranscriptId,

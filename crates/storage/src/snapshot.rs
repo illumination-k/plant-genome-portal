@@ -82,6 +82,7 @@ pub fn build_genome_snapshot(config: &GenomeSnapshotBuild) -> Result<GenomeSnaps
             genes: parsed_gff.genes,
             transcripts: parsed_gff.transcripts,
             exons: parsed_gff.exons,
+            cdss: parsed_gff.cdss,
         },
     })
 }
@@ -134,6 +135,7 @@ mod tests {
                 genes: Vec::new(),
                 transcripts: Vec::new(),
                 exons: Vec::new(),
+                cdss: Vec::new(),
             },
         }
     }

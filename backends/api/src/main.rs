@@ -445,6 +445,7 @@ enum Command {
         genome_core::Assembly,
         genome_core::AssemblyAccession,
         genome_core::AssemblySource,
+        genome_core::Cds,
         genome_core::ClosedRegion,
         genome_core::Exon,
         genome_core::FunctionalAnnotation,

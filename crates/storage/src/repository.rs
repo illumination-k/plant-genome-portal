@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use genome_core::{
-    Assembly, AssemblyAccession, Exon, Gene, GeneId, GeneRecord, GeneSearch, GenomeDataset,
+    Assembly, AssemblyAccession, Cds, Exon, Gene, GeneId, GeneRecord, GeneSearch, GenomeDataset,
     GenomeRepository, HalfOpenRegion, Sequence, TaxId, Taxon, Transcript, TranscriptId,
 };
 
@@ -15,6 +15,7 @@ pub struct FileGenomeRepository {
     genes_by_id: HashMap<GeneId, Gene>,
     transcripts_by_gene: HashMap<GeneId, Vec<Transcript>>,
     exons_by_transcript: HashMap<TranscriptId, Vec<Exon>>,
+    cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>>,
     sequence_by_checksum: HashMap<String, Sequence>,
 }
 
@@ -42,6 +43,14 @@ impl FileGenomeRepository {
                 .push(exon.clone());
         }
 
+        let mut cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>> = HashMap::new();
+        for cds in &dataset.cdss {
+            cdss_by_transcript
+                .entry(cds.transcript_id.clone())
+                .or_default()
+                .push(cds.clone());
+        }
+
         let sequence_by_checksum = dataset
             .sequences
             .iter()
@@ -53,6 +62,7 @@ impl FileGenomeRepository {
             genes_by_id,
             transcripts_by_gene,
             exons_by_transcript,
+            cdss_by_transcript,
             sequence_by_checksum,
         }
     }
@@ -112,11 +122,21 @@ impl GenomeRepository for FileGenomeRepository {
                     .unwrap_or_default()
             })
             .collect::<Vec<_>>();
+        let cdss = transcripts
+            .iter()
+            .flat_map(|transcript| {
+                self.cdss_by_transcript
+                    .get(&transcript.id)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
 
         Some(GeneRecord {
             gene,
             transcripts,
             exons,
+            cdss,
         })
     }
 
@@ -198,8 +218,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use genome_core::{
-        Assembly, AssemblySource, Exon, GenomeDataset, HalfOpenRegion, Position0, SequenceName,
-        Strand, Taxon, Transcript,
+        Assembly, AssemblySource, Cds, Exon, GenomeDataset, HalfOpenRegion, Position0,
+        SequenceName, Strand, Taxon, Transcript,
     };
 
     use super::*;
@@ -267,6 +287,13 @@ mod tests {
             region: region(0, 50),
             strand: Strand::Forward,
         };
+        let cds = Cds {
+            transcript_id: TranscriptId::new("Mp1g00010.1").unwrap(),
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: region(10, 40),
+            strand: Strand::Forward,
+            phase: Some(0),
+        };
 
         FileGenomeRepository::new(GenomeDataset {
             taxon: Taxon {
@@ -286,6 +313,7 @@ mod tests {
             genes: vec![gene_a, gene_b],
             transcripts: vec![transcript],
             exons: vec![exon],
+            cdss: vec![cds],
         })
     }
 
@@ -338,6 +366,10 @@ mod tests {
         assert_eq!(record.gene.id.as_str(), "Mp1g00010");
         assert_eq!(record.transcripts.len(), 1);
         assert_eq!(record.exons.len(), 1);
+        assert_eq!(record.cdss.len(), 1);
+        assert_eq!(record.cdss[0].region.start.get(), 10);
+        assert_eq!(record.cdss[0].region.end.get(), 40);
+        assert_eq!(record.cdss[0].phase, Some(0));
 
         assert!(repo.gene(&GeneId::new("Mp9g99999").unwrap()).is_none());
     }

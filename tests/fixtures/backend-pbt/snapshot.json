@@ -71,6 +71,19 @@
         },
         "strand": "forward"
       }
+    ],
+    "cdss": [
+      {
+        "transcript_id": "MpPBT00010.1",
+        "sequence_name": "chr1",
+        "region": {
+          "sequence_name": "chr1",
+          "start": 3,
+          "end": 18
+        },
+        "strand": "forward",
+        "phase": 0
+      }
     ]
   }
 }

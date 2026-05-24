@@ -52,6 +52,11 @@ mod tests {
             "chr1\tMarpolBase\texon\t1\t4\t.\t+\t.\tParent=Mp1g00010.1"
         )
         .unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tCDS\t2\t4\t.\t+\t0\tID=Mp1g00010.1.CDS;Parent=Mp1g00010.1"
+        )
+        .unwrap();
 
         let snapshot = build_genome_snapshot(&GenomeSnapshotBuild {
             fasta_path,
@@ -89,6 +94,10 @@ mod tests {
         assert_eq!(snapshot.dataset.genes[0].id.as_str(), "Mp1g00010");
         assert_eq!(snapshot.dataset.transcripts.len(), 1);
         assert_eq!(snapshot.dataset.exons.len(), 1);
+        assert_eq!(snapshot.dataset.cdss.len(), 1);
+        assert_eq!(snapshot.dataset.cdss[0].region.start.get(), 1);
+        assert_eq!(snapshot.dataset.cdss[0].region.end.get(), 4);
+        assert_eq!(snapshot.dataset.cdss[0].phase, Some(0));
     }
 
     #[test]

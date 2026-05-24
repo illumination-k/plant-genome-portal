@@ -416,6 +416,21 @@ export const vTaxonResponse = v.object({
 
 export const vTranscriptId = v.string();
 
+export const vCds = v.object({
+  phase: v.nullish(
+    v.pipe(
+      v.number(),
+      v.integer(),
+      v.minValue(0),
+      v.maxValue(2147483647, "Invalid value: Expected int32 to be <= 2147483647"),
+    ),
+  ),
+  region: vHalfOpenRegion,
+  sequence_name: vSequenceName,
+  strand: vStrand,
+  transcript_id: vTranscriptId,
+});
+
 export const vExon = v.object({
   region: vHalfOpenRegion,
   sequence_name: vSequenceName,
@@ -435,6 +450,7 @@ export const vTranscript = v.object({
 });
 
 export const vGeneRecord = v.object({
+  cdss: v.array(vCds),
   exons: v.array(vExon),
   gene: vGene,
   transcripts: v.array(vTranscript),

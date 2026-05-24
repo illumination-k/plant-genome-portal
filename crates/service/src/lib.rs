@@ -163,6 +163,7 @@ mod tests {
             }],
             transcripts: Vec::new(),
             exons: Vec::new(),
+            cdss: Vec::new(),
         };
         let service = GenomeService::new(FileGenomeRepository::new(dataset), None);
 
