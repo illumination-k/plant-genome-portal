@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/control-has-associated-label, max-lines, max-lines-per-function, max-statements, no-magic-numbers, no-ternary, no-use-before-define, oxc/no-optional-chaining, oxc/no-rest-spread-properties, prefer-destructuring, react-perf/jsx-no-new-function-as-prop, react/jsx-max-depth, react/no-array-index-key, unicorn/no-null */
+/* eslint-disable jsx-a11y/control-has-associated-label, max-lines, max-lines-per-function, max-statements, no-magic-numbers, no-ternary, no-use-before-define, oxc/no-optional-chaining, oxc/no-rest-spread-properties, prefer-destructuring, react-perf/jsx-no-new-function-as-prop, react/jsx-max-depth, unicorn/no-null */
 import {
   blastnJobOptions,
   createBlastnJobMutation,
@@ -9,8 +9,16 @@ import type {
   CreateBlastnJobError,
 } from "@/api/client/types.gen";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ErrorState from "@/ui/ErrorState";
 
 const defaultAssemblyAccession = "GCA_037833805.1";
@@ -24,6 +32,10 @@ type BlastForm = {
   maxTargetSeqs: string;
   query: string;
   task: string;
+};
+
+type BlastHitRowData = AnnotatedHomologyHitResponse & {
+  rowId: string;
 };
 
 const initialForm: BlastForm = {
@@ -58,6 +70,71 @@ const errorMessage = (error: CreateBlastnJobError | Error | unknown): string | n
   }
   return "BLAST job failed";
 };
+
+const regionText = (hit: AnnotatedHomologyHitResponse): string => {
+  const subject = hit.hit.subjectRegion;
+  return `${hit.hit.sequenceName}:${subject.start}-${subject.end}`;
+};
+
+const sortLabel = (sort: false | "asc" | "desc"): string => {
+  if (sort === "asc") {
+    return " ↑";
+  }
+  if (sort === "desc") {
+    return " ↓";
+  }
+  return "";
+};
+
+const blastHitColumns: Array<ColumnDef<BlastHitRowData>> = [
+  {
+    accessorFn: (row) => row.hit.sequenceName,
+    cell: (info) => (
+      <span className="font-mono text-[12px] text-text-muted">{info.getValue<string>()}</span>
+    ),
+    header: "Subject",
+    id: "subject",
+  },
+  {
+    accessorFn: regionText,
+    cell: (info) => <BlastRegionCell hit={info.row.original} />,
+    header: "Region",
+    id: "region",
+  },
+  {
+    accessorFn: (row) => row.hit.percentIdentity,
+    cell: (info) => `${formatScore(info.getValue<number>())}%`,
+    header: "Identity",
+    id: "identity",
+  },
+  {
+    accessorFn: (row) => row.hit.alignmentLength,
+    cell: (info) => formatNumber(info.getValue<number>()),
+    header: "Length",
+    id: "length",
+  },
+  {
+    accessorFn: (row) => row.hit.evalue,
+    cell: (info) => (
+      <span className="font-mono text-[12px]">{formatScore(info.getValue<number>())}</span>
+    ),
+    header: "E-value",
+    id: "evalue",
+  },
+  {
+    accessorFn: (row) => row.hit.bitScore,
+    cell: (info) => formatScore(info.getValue<number>()),
+    header: "Bit score",
+    id: "bitScore",
+  },
+  {
+    accessorFn: (row) => row.overlappingGeneIds.join(" "),
+    cell: (info) => <GeneLinks geneIds={info.row.original.overlappingGeneIds} />,
+    enableSorting: false,
+    header: "Genes",
+    id: "genes",
+  },
+];
 
 const BlastPage = (): ReactElement => {
   const [form, setForm] = useState<BlastForm>(initialForm);
@@ -231,59 +308,113 @@ const BlastResults = (props: {
   return <BlastHitTable hits={props.job.result.hits} />;
 };
 
-const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactElement => (
-  <div className="overflow-x-auto">
-    <table className="w-full min-w-[960px] text-left text-sm">
-      <thead className="bg-surface-muted text-xs uppercase text-text-muted">
-        <tr>
-          <th className="px-4 py-3 font-medium">Subject</th>
-          <th className="px-4 py-3 font-medium">Region</th>
-          <th className="px-4 py-3 font-medium">Identity</th>
-          <th className="px-4 py-3 font-medium">Length</th>
-          <th className="px-4 py-3 font-medium">E-value</th>
-          <th className="px-4 py-3 font-medium">Bit score</th>
-          <th className="px-4 py-3 font-medium">Genes</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-border-subtle">
-        {props.hits.map((hit, index) => (
-          <BlastHitRow hit={hit} key={`${hit.hit.queryId}-${hit.hit.sequenceName}-${index}`} />
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
-
-const BlastHitRow = (props: { hit: AnnotatedHomologyHitResponse }): ReactElement => {
-  const hit = props.hit.hit;
-  const region = `${hit.sequenceName}:${hit.subjectRegion.start}-${hit.subjectRegion.end}`;
+const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactElement => {
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const data = useMemo(
+    () =>
+      props.hits.map((hit) => ({
+        ...hit,
+        rowId: [
+          hit.hit.queryId,
+          hit.hit.sequenceName,
+          hit.hit.subjectStart,
+          hit.hit.subjectEnd,
+          hit.hit.queryStart,
+          hit.hit.queryEnd,
+          hit.hit.bitScore,
+        ].join(":"),
+      })),
+    [props.hits],
+  );
+  const table = useReactTable({
+    columns: blastHitColumns,
+    data,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getRowId: (row) => row.rowId,
+    getSortedRowModel: getSortedRowModel(),
+    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: setSorting,
+    state: {
+      globalFilter,
+      sorting,
+    },
+  });
+  const rows = table.getRowModel().rows;
 
   return (
-    <tr className="align-top hover:bg-surface-muted">
-      <td className="px-4 py-3 font-mono text-[12px] text-text-muted">{hit.sequenceName}</td>
-      <td className="px-4 py-3">
-        <a
-          className="font-mono text-[12px] text-primary-800 hover:underline"
-          href={`/browser?loc=${encodeURIComponent(region)}`}
-        >
-          {region}
-        </a>
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-text-subtle">Alignment</summary>
-          <pre className="mt-2 max-w-[40rem] overflow-x-auto rounded-md bg-surface-muted p-3 font-mono text-[11px] leading-5 text-text-muted">
-            {`query   ${hit.queryStart}-${hit.queryEnd}   ${hit.queryAlignment}
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
+        <input
+          className="min-h-9 w-full max-w-sm rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
+          onChange={(event) => setGlobalFilter(event.target.value)}
+          placeholder="Filter subject, region, or gene"
+          type="search"
+          value={globalFilter}
+        />
+        <span className="text-xs text-text-muted">
+          {formatNumber(rows.length)} / {formatNumber(data.length)} hits
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[960px] text-left text-sm">
+          <thead className="bg-surface-muted text-xs uppercase text-text-muted">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <th className="px-4 py-3 font-medium" key={header.id}>
+                    <button
+                      className="inline-flex items-center text-left uppercase disabled:cursor-default"
+                      disabled={!header.column.getCanSort()}
+                      onClick={header.column.getToggleSortingHandler()}
+                      type="button"
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      {sortLabel(header.column.getIsSorted())}
+                    </button>
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rows.map((row) => (
+              <tr className="align-top hover:bg-surface-muted" key={row.id}>
+                {row.getVisibleCells().map((cell) => (
+                  <td className="px-4 py-3 tabular-nums" key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const BlastRegionCell = (props: { hit: AnnotatedHomologyHitResponse }): ReactElement => {
+  const hit = props.hit.hit;
+  const region = regionText(props.hit);
+
+  return (
+    <div>
+      <a
+        className="font-mono text-[12px] text-primary-800 hover:underline"
+        href={`/browser?loc=${encodeURIComponent(region)}`}
+      >
+        {region}
+      </a>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-text-subtle">Alignment</summary>
+        <pre className="mt-2 max-w-[40rem] overflow-x-auto rounded-md bg-surface-muted p-3 font-mono text-[11px] leading-5 text-text-muted">
+          {`query   ${hit.queryStart}-${hit.queryEnd}   ${hit.queryAlignment}
 subject ${hit.subjectStart}-${hit.subjectEnd}   ${hit.subjectAlignment}`}
-          </pre>
-        </details>
-      </td>
-      <td className="px-4 py-3 tabular-nums">{formatScore(hit.percentIdentity)}%</td>
-      <td className="px-4 py-3 tabular-nums">{formatNumber(hit.alignmentLength)}</td>
-      <td className="px-4 py-3 font-mono text-[12px]">{formatScore(hit.evalue)}</td>
-      <td className="px-4 py-3 tabular-nums">{formatScore(hit.bitScore)}</td>
-      <td className="px-4 py-3">
-        <GeneLinks geneIds={props.hit.overlappingGeneIds} />
-      </td>
-    </tr>
+        </pre>
+      </details>
+    </div>
   );
 };
 
