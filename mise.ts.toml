@@ -1,20 +1,16 @@
 [tools]
-
 node = "25.9.0"
 pnpm = "11.0.1"
-
 
 [tasks."fmt:ts"]
 description = "Format with oxfmt"
 
 run = "pnpm --dir web exec oxfmt --write src"
 
-
 [tasks."lint:ts"]
 description = "Lint and type-check TypeScript"
 
 run = ["pnpm --dir web exec oxlint .", "pnpm --dir web exec tsc --noEmit"]
-
 
 [tasks."test:ts"]
 description = "Run tests with vitest"
@@ -59,7 +55,6 @@ case "$status" in
     ;;
 esac
 '''
-
 
 [tasks."ci:ts"]
 description = "Run TypeScript lint, type-check, and test tasks"

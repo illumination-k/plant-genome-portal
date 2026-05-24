@@ -31,30 +31,26 @@ mise run lint  # Run all lint:* tasks
 mise run test  # Run all test:* tasks
 ```
 
-## Tools
+## Development Servers
 
-All tools are managed by mise. Run `mise install` to install them.
+Start the API and web development servers together:
 
-| Tool           | Purpose                                 |
-| -------------- | --------------------------------------- |
-| uv             | Python package manager                  |
-| dprint         | Code formatter                          |
-| prek           | Pre-commit hook runner                  |
-| shfmt          | Shell script formatter                  |
-| actionlint     | GitHub Actions linter                   |
-| zizmor         | GitHub Actions security linter          |
-| shellcheck     | Shell script linter                     |
-| ghalint        | GitHub Actions linter                   |
-| pinact         | Pin GitHub Actions versions to SHAs     |
-| rust           | Rust toolchain                          |
-| cargo-binstall |                                         |
-| cargo-nextest  | Fast Rust test runner                   |
-| cargo-deny     | Dependency license and advisory checker |
-| cargo-audit    | Security advisory checker for Rust      |
-| cargo-mutants  |                                         |
-| cargo-llvm-cov |                                         |
-| node           | Node.js runtime                         |
-| pnpm           | Node.js package manager                 |
+```bash
+mise r dev
+```
+
+This runs `dev:*` tasks:
+
+- `dev:api`: watches Rust API code with `cargo watch` and serves the API on `127.0.0.1:3000`.
+- `dev:web`: runs Vite for the web app and proxies API paths to `127.0.0.1:3000`.
+
+Stop both dev servers from another shell:
+
+```bash
+mise r stop_dev
+```
+
+The dev tasks write PID files under `target/dev/pids`. `stop_dev` reads those files, stops the running processes, and removes stale PID files. You do not use `pkill` directly to stop the dev servers, as that may kill other processes if multiple instances are running. Always use `stop_dev` to cleanly stop the dev servers and remove PID files.
 
 ## Purpose
 
@@ -62,11 +58,13 @@ All tools are managed by mise. Run `mise install` to install them.
 Rust backend + React SPA frontend の monorepo。
 
 参考にする既存DB:
+
 - **NCBI Datasets v2** — API デザイン(accession-first, TaxID-driven, 階層モデル)を踏襲
 - **MarpolBase / TAIR / Phytozome** — 植物コミュニティDBの先例
 - **ATTED-II** — 共発現解析の参照モデル(MR / HRR / LS)
 
 最終的に統合したいデータ:
+
 - Genome (FASTA + GFF アノテーション)
 - Transcriptome / Expression
 - Co-expression network (MR / HRR / LS)
@@ -80,6 +78,7 @@ Rust backend + React SPA frontend の monorepo。
 MVP 段階では annotation = assembly に固定 (annotation の別バージョン管理は v2 以降)。
 
 ### MVP に入れる
+
 - 種 / アセンブリ一覧・詳細
 - 遺伝子検索 (symbol / locus_tag)
 - 遺伝子詳細 (座標 + 配列 + annotation)
@@ -88,6 +87,7 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
 - JBrowse 2 によるゲノムブラウザ表示
 
 ### MVP に入れない (v2 以降)
+
 - 発現 / 共発現 / variant / epigenome
 - pangenome / liftover
 - annotation の別バージョン管理
@@ -97,17 +97,17 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
 
 ### Stack 概要
 
-| 層 | 採用 |
-|---|---|
-| Backend lang | Rust (axum + sqlx + tokio) |
-| Bio I/O | [noodles](https://github.com/zaeleus/noodles) (FASTA/GFF/VCF/BAM) + bigtools (BigWig) |
-| Metadata DB | PostgreSQL |
-| 発現マトリクス (将来) | Parquet on disk + DuckDB クエリ (hybrid) |
-| 共発現 (将来) | PostgreSQL (top-N pre-computed edges) |
-| Sequence / signal files | ファイルストア (FS / S3 / MinIO) + index (`.fai` / `.tbi` / `.csi` / `.bbi`) |
-| Frontend | React + Vite + TypeScript |
-| Genome browser | JBrowse 2 (@jbrowse/react-linear-genome-view) |
-| State/query | TanStack Query + TanStack Router |
+| 層                      | 採用                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| Backend lang            | Rust (axum + sqlx + tokio)                                                            |
+| Bio I/O                 | [noodles](https://github.com/zaeleus/noodles) (FASTA/GFF/VCF/BAM) + bigtools (BigWig) |
+| Metadata DB             | PostgreSQL                                                                            |
+| 発現マトリクス (将来)   | Parquet on disk + DuckDB クエリ (hybrid)                                              |
+| 共発現 (将来)           | PostgreSQL (top-N pre-computed edges)                                                 |
+| Sequence / signal files | ファイルストア (FS / S3 / MinIO) + index (`.fai` / `.tbi` / `.csi` / `.bbi`)          |
+| Frontend                | React + Vite + TypeScript                                                             |
+| Genome browser          | JBrowse 2 (@jbrowse/react-linear-genome-view)                                         |
+| State/query             | TanStack Query + TanStack Router                                                      |
 
 ### データ階層 (3 層)
 
@@ -172,14 +172,15 @@ backend/crates/
 ```
 
 **依存方向**:
+
 ```
-                     genome-core
-              /     /    |    \     \
-        storage  db  expression-store  coexpression
-              \     |     /                /
-                   service ────────────────
-                    /   \
-                  api   ingest
+             genome-core
+      /     /    |    \     \
+storage  db  expression-store  coexpression
+      \     |     /                /
+           service ────────────────
+            /   \
+          api   ingest
 ```
 
 **MVP 時点で実装するのは 6 crate** (`coexpression`, `expression-store` は将来):
