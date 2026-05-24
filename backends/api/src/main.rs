@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
+use clap::Parser;
 use genome_core::{GeneSearch, TaxId};
 use serde::{Deserialize, Serialize};
 use service::{GenomeService, ServiceError};
@@ -25,11 +26,11 @@ struct AppState {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing();
 
-    let config = Config::from_env_args()?;
+    let config = Config::parse();
     let repository = FileGenomeRepository::from_snapshot_path(&config.snapshot)?;
-    let reference = match &config.fasta {
-        Some(path) => Some(FastaReference::from_path(path)?),
-        None => None,
+    let reference = match (&config.fasta, config.no_fasta) {
+        (_, true) | (None, false) => None,
+        (Some(path), false) => Some(FastaReference::from_path(path)?),
     };
     let service = GenomeService::new(repository, reference);
 
@@ -226,61 +227,18 @@ async fn refget_sequence(
         .refget_sequence(&checksum, query.start, query.end)?)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Parser)]
+#[command(name = "api")]
+#[command(about = "Plant Genome Portal HTTP API")]
 struct Config {
+    #[arg(long, default_value = "127.0.0.1:3000")]
     bind: SocketAddr,
+    #[arg(long)]
     snapshot: PathBuf,
+    #[arg(long, conflicts_with = "no_fasta")]
     fasta: Option<PathBuf>,
-}
-
-impl Config {
-    fn from_env_args() -> Result<Self, ConfigError> {
-        let mut bind = SocketAddr::from(([127, 0, 0, 1], 3000));
-        let mut snapshot = None;
-        let mut fasta = None;
-
-        let mut args = std::env::args().skip(1);
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--bind" => {
-                    let value = args.next().ok_or(ConfigError::MissingValue("--bind"))?;
-                    bind = value.parse().map_err(|_| ConfigError::InvalidBind(value))?;
-                }
-                "--snapshot" => {
-                    snapshot = Some(PathBuf::from(
-                        args.next().ok_or(ConfigError::MissingValue("--snapshot"))?,
-                    ));
-                }
-                "--fasta" => {
-                    fasta = Some(PathBuf::from(
-                        args.next().ok_or(ConfigError::MissingValue("--fasta"))?,
-                    ));
-                }
-                "--no-fasta" => {
-                    fasta = None;
-                }
-                other => return Err(ConfigError::UnknownArgument(other.to_owned())),
-            }
-        }
-
-        Ok(Self {
-            bind,
-            snapshot: snapshot.ok_or(ConfigError::MissingArgument("--snapshot"))?,
-            fasta,
-        })
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-enum ConfigError {
-    #[error("missing required argument {0}")]
-    MissingArgument(&'static str),
-    #[error("missing value for {0}")]
-    MissingValue(&'static str),
-    #[error("invalid bind address: {0}")]
-    InvalidBind(String),
-    #[error("unknown argument: {0}")]
-    UnknownArgument(String),
+    #[arg(long)]
+    no_fasta: bool,
 }
 
 #[derive(OpenApi)]

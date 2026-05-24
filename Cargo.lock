@@ -78,11 +78,11 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "clap",
  "genome-core",
  "serde",
  "service",
  "storage",
- "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
