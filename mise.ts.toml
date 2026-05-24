@@ -7,19 +7,19 @@ pnpm = "11.0.1"
 [tasks."fmt:ts"]
 description = "Format with oxfmt"
 
-run = "pnpm exec oxfmt --write src"
+run = "pnpm --dir web exec oxfmt --write src"
 
 
 [tasks."lint:ts"]
 description = "Lint and type-check TypeScript"
 
-run = ["pnpm exec oxlint -c oxlint.config.ts .", "pnpm exec tsc --noEmit"]
+run = ["pnpm --dir web exec oxlint .", "pnpm --dir web exec tsc --noEmit"]
 
 
 [tasks."test:ts"]
 description = "Run tests with vitest"
 
-run = "pnpm exec vitest run"
+run = "pnpm --dir web exec vitest run"
 
 
 [tasks."ci:ts"]
