@@ -7,7 +7,7 @@ dist/
 target/
 mutants.out/
 mutants.out.old/
-data/
+/data/
 mutants.out/
 mutants.out.old/
 .miserc.toml

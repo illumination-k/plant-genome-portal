@@ -1,5 +1,6 @@
 import type { GeneRecord } from "@/api/client/types.gen";
 import type { ReactElement } from "react";
+import GeneGenomeBrowser from "@/components/GeneGenomeBrowser";
 import GeneHeroHeader from "@/components/GeneHeroHeader";
 import GeneMetricGrid from "@/components/GeneMetricGrid";
 import GeneModel from "@/components/GeneModel";
@@ -9,6 +10,7 @@ const GeneHero = (props: { geneRecord: GeneRecord }): ReactElement => (
     <GeneHeroHeader gene={props.geneRecord.gene} />
     <GeneMetricGrid geneRecord={props.geneRecord} />
     <GeneModel gene={props.geneRecord.gene} />
+    <GeneGenomeBrowser gene={props.geneRecord.gene} />
   </div>
 );
 
