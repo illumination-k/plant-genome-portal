@@ -165,3 +165,98 @@ fn append_unique(existing: &mut String, value: &str, separator: &str) {
     existing.push_str(separator);
     existing.push_str(value);
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+
+    #[test]
+    fn empty_value_is_rejected() {
+        assert_eq!(clean_gene_reference(""), None);
+        assert_eq!(clean_gene_reference("   "), None);
+    }
+
+    #[test]
+    fn dash_value_is_rejected() {
+        assert_eq!(clean_gene_reference("-"), None);
+    }
+
+    #[test]
+    fn mapoly_prefix_is_rejected() {
+        assert_eq!(clean_gene_reference("Mapoly0001s0001"), None);
+    }
+
+    #[test]
+    fn non_mp_prefix_is_rejected() {
+        assert_eq!(clean_gene_reference("AT1G01010"), None);
+    }
+
+    #[test]
+    fn colon_prefixed_reference_is_rejected() {
+        assert_eq!(clean_gene_reference("Mp:foo"), None);
+    }
+
+    #[test]
+    fn mp_reference_is_accepted_and_transcript_suffix_stripped() {
+        assert_eq!(
+            clean_gene_reference("Mp1g00010.1"),
+            Some("Mp1g00010".to_owned())
+        );
+    }
+
+    #[test]
+    fn mp_reference_keeps_non_numeric_suffix() {
+        assert_eq!(
+            clean_gene_reference("Mp1g00010.alt"),
+            Some("Mp1g00010.alt".to_owned())
+        );
+    }
+
+    #[test]
+    fn validate_nomenclature_header_accepts_canonical_columns() {
+        let header = "gene_symbol\tfull_name\tsynonym\tproduct\tdescription\tGeneID/Location\treference\tPMID\tDOI\tstatus";
+        validate_nomenclature_header(header).unwrap();
+    }
+
+    #[test]
+    fn validate_nomenclature_header_rejects_unexpected_columns() {
+        let header = "gene_symbol\tfull_name";
+        assert!(validate_nomenclature_header(header).is_err());
+    }
+
+    #[test]
+    fn append_unique_appends_new_value() {
+        let mut existing = "alpha".to_owned();
+        append_unique(&mut existing, "beta", " | ");
+        assert_eq!(existing, "alpha | beta");
+    }
+
+    #[test]
+    fn append_unique_skips_duplicate_value() {
+        let mut existing = "alpha | beta".to_owned();
+        append_unique(&mut existing, "beta", " | ");
+        assert_eq!(existing, "alpha | beta");
+    }
+
+    #[test]
+    fn parse_nomenclature_reports_correct_line_number() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nomenclature.tsv");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "gene_symbol\tfull_name\tsynonym\tproduct\tdescription\tGeneID/Location\treference\tPMID\tDOI\tstatus"
+        )
+        .unwrap();
+        writeln!(file, "MpFOO\tfull\tsyn\tprod\tdesc\tMp1g00010").unwrap();
+
+        let error = parse_nomenclature(&path).expect_err("should fail");
+        match error {
+            StorageError::InvalidTsvValue { line, .. } => assert_eq!(line, 2),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+}

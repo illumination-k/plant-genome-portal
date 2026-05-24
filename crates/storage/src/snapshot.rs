@@ -99,3 +99,57 @@ fn enrich_parsed_gff(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use genome_core::{Assembly, AssemblyAccession, AssemblySource, GenomeDataset, TaxId, Taxon};
+
+    use super::*;
+
+    fn sample_snapshot() -> GenomeSnapshot {
+        GenomeSnapshot {
+            manifest: SnapshotManifest {
+                source_base_url: "https://example.test".to_owned(),
+                fasta_file: "test.fa".to_owned(),
+                gff_file: "test.gff".to_owned(),
+                functional_annotation_file: None,
+                nomenclature_file: None,
+            },
+            dataset: GenomeDataset {
+                taxon: Taxon {
+                    tax_id: TaxId::new(3197),
+                    scientific_name: "Marchantia polymorpha".to_owned(),
+                    common_name: None,
+                    rank: "species".to_owned(),
+                },
+                assembly: Assembly {
+                    accession: AssemblyAccession::new("GCA_test").unwrap(),
+                    tax_id: TaxId::new(3197),
+                    name: "test".to_owned(),
+                    source: AssemblySource::Local,
+                    refget_checksum: None,
+                },
+                sequences: Vec::new(),
+                genes: Vec::new(),
+                transcripts: Vec::new(),
+                exons: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn write_snapshot_then_read_snapshot_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("snapshot.json");
+        let snapshot = sample_snapshot();
+
+        write_snapshot(&path, &snapshot).unwrap();
+        assert!(path.exists());
+        let bytes = std::fs::metadata(&path).unwrap().len();
+        assert!(bytes > 0, "write_snapshot must write a non-empty file");
+
+        let loaded = read_snapshot(&path).unwrap();
+        assert_eq!(loaded, snapshot);
+    }
+}

@@ -117,10 +117,107 @@ pub(crate) fn assembly_checksum(sequences: &[Sequence]) -> String {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use genome_core::{AssemblyAccession, SequenceName};
+
     use super::*;
 
     #[test]
     fn refget_checksum_is_case_and_line_invariant() {
         assert_eq!(refget_checksum(b"acgtn\n"), refget_checksum(b"ACGTN"));
+    }
+
+    #[test]
+    fn refget_checksum_value_depends_on_input() {
+        let checksum = refget_checksum(b"ACGT");
+        assert_eq!(checksum.len(), 32);
+        assert_ne!(checksum, refget_checksum(b"TGCA"));
+        assert!(!checksum.is_empty());
+    }
+
+    fn make_reference() -> FastaReference {
+        let mut by_checksum = HashMap::new();
+        by_checksum.insert(refget_checksum(b"ACGTACGT"), "ACGTACGT".to_owned());
+        FastaReference { by_checksum }
+    }
+
+    #[test]
+    fn get_returns_full_sequence_when_bounds_are_unset() {
+        let reference = make_reference();
+        let checksum = refget_checksum(b"ACGTACGT");
+        assert_eq!(
+            reference.get(&checksum, None, None).as_deref(),
+            Some("ACGTACGT")
+        );
+    }
+
+    #[test]
+    fn get_returns_requested_substring() {
+        let reference = make_reference();
+        let checksum = refget_checksum(b"ACGTACGT");
+        assert_eq!(
+            reference.get(&checksum, Some(2), Some(6)).as_deref(),
+            Some("GTAC")
+        );
+    }
+
+    #[test]
+    fn get_returns_none_for_unknown_checksum() {
+        let reference = make_reference();
+        assert_eq!(reference.get("missing", None, None), None);
+    }
+
+    #[test]
+    fn get_returns_empty_string_when_start_equals_end() {
+        let reference = make_reference();
+        let checksum = refget_checksum(b"ACGTACGT");
+        assert_eq!(
+            reference.get(&checksum, Some(3), Some(3)).as_deref(),
+            Some("")
+        );
+    }
+
+    #[test]
+    fn get_returns_none_when_start_after_end() {
+        let reference = make_reference();
+        let checksum = refget_checksum(b"ACGTACGT");
+        assert_eq!(reference.get(&checksum, Some(5), Some(3)), None);
+    }
+
+    #[test]
+    fn get_clamps_end_beyond_length() {
+        let reference = make_reference();
+        let checksum = refget_checksum(b"ACGTACGT");
+        assert_eq!(
+            reference.get(&checksum, Some(4), Some(100)).as_deref(),
+            Some("ACGT")
+        );
+    }
+
+    fn make_sequence(name: &str, checksum: &str) -> genome_core::Sequence {
+        genome_core::Sequence {
+            name: SequenceName::new(name).unwrap(),
+            assembly_accession: AssemblyAccession::new("GCA_test").unwrap(),
+            length: 8,
+            refget_checksum: checksum.to_owned(),
+        }
+    }
+
+    #[test]
+    fn assembly_checksum_is_deterministic_and_order_independent() {
+        let a = make_sequence("chr1", "aaaa");
+        let b = make_sequence("chr2", "bbbb");
+        let forward = assembly_checksum(&[a.clone(), b.clone()]);
+        let reverse = assembly_checksum(&[b, a]);
+        assert_eq!(forward, reverse);
+        assert_eq!(forward.len(), 32);
+    }
+
+    #[test]
+    fn assembly_checksum_differs_with_membership() {
+        let a = make_sequence("chr1", "aaaa");
+        let b = make_sequence("chr2", "bbbb");
+        let with_both = assembly_checksum(&[a.clone(), b]);
+        let with_one = assembly_checksum(&[a]);
+        assert_ne!(with_both, with_one);
     }
 }

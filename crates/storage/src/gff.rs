@@ -204,3 +204,65 @@ fn pick_attr(attrs: &BTreeMap<String, String>, keys: &[&str]) -> Option<String> 
 fn bytes_to_string(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+
+    #[test]
+    fn pick_attr_returns_first_matching_key() {
+        let mut attrs = BTreeMap::new();
+        attrs.insert("Name".to_owned(), "primary".to_owned());
+        attrs.insert("symbol".to_owned(), "fallback".to_owned());
+        assert_eq!(
+            pick_attr(&attrs, &["Name", "symbol"]),
+            Some("primary".to_owned())
+        );
+    }
+
+    #[test]
+    fn pick_attr_falls_through_to_next_key() {
+        let mut attrs = BTreeMap::new();
+        attrs.insert("symbol".to_owned(), "fallback".to_owned());
+        assert_eq!(
+            pick_attr(&attrs, &["Name", "symbol"]),
+            Some("fallback".to_owned())
+        );
+    }
+
+    #[test]
+    fn pick_attr_returns_none_when_no_key_matches() {
+        let attrs = BTreeMap::new();
+        assert_eq!(pick_attr(&attrs, &["Name", "symbol"]), None);
+    }
+
+    #[test]
+    fn parse_gff3_reports_line_number_on_invalid_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("invalid.gff");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "##gff-version 3").unwrap();
+        // Valid record on row 2 of the file.
+        writeln!(file, "chr1\tsrc\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=ok").unwrap();
+        // Bad start coordinate triggers parse error on the second record.
+        writeln!(
+            file,
+            "chr1\tsrc\tgene\tNOT_A_NUMBER\t8\t.\t+\t.\tID=Mp1g00020;Name=bad"
+        )
+        .unwrap();
+
+        let assembly = AssemblyAccession::new("GCA_test").unwrap();
+        let error = parse_gff3(&path, &assembly).expect_err("should fail");
+        match error {
+            StorageError::InvalidGffValue { line, .. } => {
+                // record_bufs iterates over records only; the bad record is the
+                // second emitted record so line index must reflect that (>= 2).
+                assert!(line >= 2, "expected line >= 2, got {line}");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+}

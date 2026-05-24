@@ -191,3 +191,252 @@ fn search_query(gene: &Gene, query: Option<&str>) -> bool {
             .values()
             .any(|value| value.to_ascii_lowercase().contains(&query))
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use genome_core::{
+        Assembly, AssemblySource, Exon, GenomeDataset, HalfOpenRegion, Position0, SequenceName,
+        Strand, Taxon, Transcript,
+    };
+
+    use super::*;
+
+    const TAX_ID: u32 = 3197;
+
+    fn region(start: u64, end: u64) -> HalfOpenRegion {
+        HalfOpenRegion::new(
+            SequenceName::new("chr1").unwrap(),
+            Position0::new(start),
+            Position0::new(end),
+        )
+        .unwrap()
+    }
+
+    fn make_repository() -> FileGenomeRepository {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let sequence = Sequence {
+            name: SequenceName::new("chr1").unwrap(),
+            assembly_accession: accession.clone(),
+            length: 1000,
+            refget_checksum: "chk-chr1".to_owned(),
+        };
+        let gene_a = Gene {
+            id: GeneId::new("Mp1g00010").unwrap(),
+            assembly_accession: accession.clone(),
+            symbol: Some("MpFOO".to_owned()),
+            locus_tag: Some("LOCUS1".to_owned()),
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: region(0, 100),
+            strand: Strand::Forward,
+            feature_type: "gene".to_owned(),
+            annotations: Vec::new(),
+            attributes: {
+                let mut attrs = BTreeMap::new();
+                attrs.insert("note".to_owned(), "interesting-bar".to_owned());
+                attrs
+            },
+        };
+        let gene_b = Gene {
+            id: GeneId::new("Mp1g00020").unwrap(),
+            assembly_accession: accession.clone(),
+            symbol: Some("MpBAZ".to_owned()),
+            locus_tag: Some("LOCUS2".to_owned()),
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: region(500, 600),
+            strand: Strand::Reverse,
+            feature_type: "gene".to_owned(),
+            annotations: Vec::new(),
+            attributes: BTreeMap::new(),
+        };
+        let transcript = Transcript {
+            id: TranscriptId::new("Mp1g00010.1").unwrap(),
+            gene_id: GeneId::new("Mp1g00010").unwrap(),
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: region(0, 100),
+            strand: Strand::Forward,
+            feature_type: "mRNA".to_owned(),
+            annotations: Vec::new(),
+            attributes: BTreeMap::new(),
+        };
+        let exon = Exon {
+            transcript_id: TranscriptId::new("Mp1g00010.1").unwrap(),
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: region(0, 50),
+            strand: Strand::Forward,
+        };
+
+        FileGenomeRepository::new(GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(TAX_ID),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: accession.clone(),
+                tax_id: TaxId::new(TAX_ID),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: vec![sequence],
+            genes: vec![gene_a, gene_b],
+            transcripts: vec![transcript],
+            exons: vec![exon],
+        })
+    }
+
+    #[test]
+    fn taxon_returns_match_and_none_for_other_id() {
+        let repo = make_repository();
+        assert_eq!(repo.taxon(TaxId::new(TAX_ID)).unwrap().tax_id.get(), TAX_ID);
+        assert!(repo.taxon(TaxId::new(9999)).is_none());
+    }
+
+    #[test]
+    fn assembly_returns_match_and_none_for_other_accession() {
+        let repo = make_repository();
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let other = AssemblyAccession::new("GCA_other").unwrap();
+        assert_eq!(repo.assembly(&accession).unwrap().accession, accession);
+        assert!(repo.assembly(&other).is_none());
+    }
+
+    #[test]
+    fn assemblies_for_taxon_filters_by_tax_id() {
+        let repo = make_repository();
+        assert_eq!(repo.assemblies_for_taxon(TaxId::new(TAX_ID)).len(), 1);
+        assert!(repo.assemblies_for_taxon(TaxId::new(9999)).is_empty());
+    }
+
+    #[test]
+    fn sequences_for_assembly_filters_by_accession() {
+        let repo = make_repository();
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let other = AssemblyAccession::new("GCA_other").unwrap();
+        assert_eq!(repo.sequences_for_assembly(&accession).len(), 1);
+        assert!(repo.sequences_for_assembly(&other).is_empty());
+    }
+
+    #[test]
+    fn sequence_by_checksum_returns_match_and_none() {
+        let repo = make_repository();
+        assert_eq!(
+            repo.sequence_by_checksum("chk-chr1").unwrap().name.as_str(),
+            "chr1"
+        );
+        assert!(repo.sequence_by_checksum("missing").is_none());
+    }
+
+    #[test]
+    fn gene_returns_record_with_transcripts_and_exons() {
+        let repo = make_repository();
+        let record = repo.gene(&GeneId::new("Mp1g00010").unwrap()).unwrap();
+        assert_eq!(record.gene.id.as_str(), "Mp1g00010");
+        assert_eq!(record.transcripts.len(), 1);
+        assert_eq!(record.exons.len(), 1);
+
+        assert!(repo.gene(&GeneId::new("Mp9g99999").unwrap()).is_none());
+    }
+
+    #[test]
+    fn search_genes_returns_all_when_no_filters() {
+        let repo = make_repository();
+        let result = repo.search_genes(&GeneSearch::default());
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn search_genes_filters_by_symbol() {
+        let repo = make_repository();
+        let result = repo.search_genes(&GeneSearch {
+            symbol: Some("MpFOO".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id.as_str(), "Mp1g00010");
+    }
+
+    #[test]
+    fn search_genes_filters_by_locus_tag() {
+        let repo = make_repository();
+        let result = repo.search_genes(&GeneSearch {
+            locus_tag: Some("LOCUS2".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id.as_str(), "Mp1g00020");
+    }
+
+    #[test]
+    fn search_genes_query_matches_id_symbol_locus_and_attribute() {
+        let repo = make_repository();
+        let by_id = repo.search_genes(&GeneSearch {
+            query: Some("Mp1g00020".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(by_id.len(), 1);
+
+        let by_symbol = repo.search_genes(&GeneSearch {
+            query: Some("MpBAZ".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(by_symbol.len(), 1);
+
+        let by_locus = repo.search_genes(&GeneSearch {
+            query: Some("LOCUS1".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(by_locus.len(), 1);
+
+        let by_attr = repo.search_genes(&GeneSearch {
+            query: Some("interesting-bar".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(by_attr.len(), 1);
+
+        let no_match = repo.search_genes(&GeneSearch {
+            query: Some("does-not-exist".to_owned()),
+            ..Default::default()
+        });
+        assert!(no_match.is_empty());
+    }
+
+    #[test]
+    fn search_genes_filters_by_tax_id() {
+        let repo = make_repository();
+        let matching = repo.search_genes(&GeneSearch {
+            tax_id: Some(TaxId::new(TAX_ID)),
+            ..Default::default()
+        });
+        assert_eq!(matching.len(), 2);
+
+        let other = repo.search_genes(&GeneSearch {
+            tax_id: Some(TaxId::new(9999)),
+            ..Default::default()
+        });
+        assert!(other.is_empty());
+    }
+
+    #[test]
+    fn features_in_region_returns_overlapping_genes_only() {
+        let repo = make_repository();
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let overlapping = repo.features_in_region(&accession, &region(50, 60));
+        assert_eq!(overlapping.len(), 1);
+        assert_eq!(overlapping[0].id.as_str(), "Mp1g00010");
+
+        let disjoint = repo.features_in_region(&accession, &region(700, 800));
+        assert!(disjoint.is_empty());
+    }
+
+    #[test]
+    fn features_in_region_returns_empty_for_other_assembly() {
+        let repo = make_repository();
+        let other = AssemblyAccession::new("GCA_other").unwrap();
+        assert!(repo.features_in_region(&other, &region(0, 1000)).is_empty());
+    }
+}

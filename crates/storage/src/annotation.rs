@@ -185,3 +185,47 @@ fn unique_annotations(
     }
     annotations
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+
+    #[test]
+    fn split_kegg_includes_ko_prefix_in_entry_id() {
+        let (id, name) = split_kegg_id_and_name("ko:K00001:example annotation");
+        assert_eq!(id, "ko:K00001");
+        assert_eq!(name, "example annotation");
+    }
+
+    #[test]
+    fn split_kegg_includes_path_prefix_in_entry_id() {
+        let (id, name) = split_kegg_id_and_name("path:map00010:Glycolysis");
+        assert_eq!(id, "path:map00010");
+        assert_eq!(name, "Glycolysis");
+    }
+
+    #[test]
+    fn split_kegg_without_known_prefix_falls_back_to_plain_split() {
+        let (id, name) = split_kegg_id_and_name("K00001:example annotation");
+        assert_eq!(id, "K00001");
+        assert_eq!(name, "example annotation");
+    }
+
+    #[test]
+    fn parse_functional_annotations_reports_correct_line_number() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("func.tsv");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "Mp1g00010.1\tKEGG:K00001:ok").unwrap();
+        writeln!(file, "missing-tab-column-on-line-two").unwrap();
+
+        let error = parse_functional_annotations(&path).expect_err("should fail");
+        match error {
+            StorageError::InvalidTsvValue { line, .. } => assert_eq!(line, 2),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+}
