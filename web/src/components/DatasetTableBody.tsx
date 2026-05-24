@@ -3,7 +3,7 @@ import datasetExport from "@/data/datasets";
 import DatasetRow from "@/components/DatasetRow";
 
 const DatasetTableBody = (): ReactElement => (
-  <tbody className="divide-y divide-zinc-200">
+  <tbody className="divide-y divide-border-subtle">
     {datasetExport.datasets.map((dataset) => (
       <DatasetRow dataset={dataset} key={dataset.assembly} />
     ))}

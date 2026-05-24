@@ -8,7 +8,7 @@ const TranscriptTableBody = (props: {
   exonCounts: Map<string, number>;
   transcripts: Transcript[];
 }): ReactElement => (
-  <tbody className="divide-y divide-zinc-200">
+  <tbody className="divide-y divide-border-subtle">
     {props.transcripts.map((transcript) => (
       <TranscriptRow
         exonCount={props.exonCounts.get(transcript.id) ?? emptyCount}

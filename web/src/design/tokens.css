@@ -1,0 +1,148 @@
+/*
+ * Design tokens — see web/design.md §2 (Visual identity).
+ *
+ * All semantic colors are declared as raw CSS variables on :root /
+ * [data-theme="dark"], then re-exposed to Tailwind v4 via @theme inline
+ * in styles.css so that utilities (`bg-canvas`, `text-text`, ...) stay
+ * theme-aware at runtime.
+ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Foundation surfaces */
+  --canvas: #faf9f6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #f4f2ee;
+  --overlay: rgba(15, 26, 20, 0.32);
+
+  /* Text */
+  --text: #0f1a14;
+  --text-muted: #4a5650;
+  --text-subtle: #7a857e;
+  --text-disabled: #b7bdb8;
+  --text-inverse: #ffffff;
+  --text-link: #1e5631;
+
+  /* Border */
+  --border-subtle: #eceae4;
+  --border: #d9d6ce;
+  --border-strong: #9ba298;
+
+  /* Brand — Chlorophyll Green */
+  --primary-50: #eef5ef;
+  --primary-100: #d7e7da;
+  --primary-200: #b0cfb5;
+  --primary-300: #87b68f;
+  --primary-400: #5e9d6a;
+  --primary-500: #3e8350;
+  --primary-600: #2d6a3f;
+  --primary-700: #1e5631;
+  --primary-800: #154225;
+  --primary-900: #0d2f1a;
+  --primary-950: #061a0d;
+
+  /* Accent — Sunlit Amber */
+  --accent-50: #fdf6ec;
+  --accent-100: #fae7c8;
+  --accent-200: #f4ce91;
+  --accent-300: #ecb35a;
+  --accent-400: #e09a2e;
+  --accent-500: #c77800;
+  --accent-600: #a76300;
+  --accent-700: #834e02;
+  --accent-800: #5e3804;
+  --accent-900: #3a2203;
+  --accent-950: #1f1201;
+
+  /* Semantic state */
+  --success: #1e5631;
+  --warning: #b45309;
+  --danger: #b42318;
+  --info: #175cd3;
+
+  /* Biology semantic */
+  --strand-forward: #175cd3;
+  --strand-reverse: #b42318;
+  --feature-cds: var(--primary-700);
+  --feature-utr: var(--primary-200);
+  --feature-intron: var(--border-strong);
+  --feature-noncoding: #7c6bab;
+  --track-highlight: rgba(199, 120, 0, 0.18);
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(15, 26, 20, 0.06), 0 1px 1px rgba(15, 26, 20, 0.04);
+  --shadow-2: 0 4px 12px rgba(15, 26, 20, 0.08), 0 2px 4px rgba(15, 26, 20, 0.04);
+  --shadow-3: 0 16px 32px rgba(15, 26, 20, 0.12), 0 4px 8px rgba(15, 26, 20, 0.06);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0e1410;
+  --surface: #141a16;
+  --surface-raised: #1a211c;
+  --surface-muted: #1a211c;
+  --overlay: rgba(0, 0, 0, 0.56);
+
+  --text: #e8ede9;
+  --text-muted: #9ca8a1;
+  --text-subtle: #6b7670;
+  --text-disabled: #4a5650;
+  --text-inverse: #0f1a14;
+  --text-link: #76b889;
+
+  --border-subtle: #222a24;
+  --border: #2c352e;
+  --border-strong: #4a5650;
+
+  /* Brand stays — same hex map, brand identity is theme-agnostic. */
+
+  --strand-forward: #7ba9f0;
+  --strand-reverse: #f08a7c;
+  --feature-cds: var(--primary-400);
+  --feature-utr: var(--primary-800);
+  --feature-noncoding: #b0a4d8;
+  --track-highlight: rgba(199, 120, 0, 0.28);
+
+  /* Soften shadows in dark mode; rely on borders for separation. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 16px 32px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --canvas: #0e1410;
+    --surface: #141a16;
+    --surface-raised: #1a211c;
+    --surface-muted: #1a211c;
+    --overlay: rgba(0, 0, 0, 0.56);
+
+    --text: #e8ede9;
+    --text-muted: #9ca8a1;
+    --text-subtle: #6b7670;
+    --text-disabled: #4a5650;
+    --text-inverse: #0f1a14;
+    --text-link: #76b889;
+
+    --border-subtle: #222a24;
+    --border: #2c352e;
+    --border-strong: #4a5650;
+
+    --strand-forward: #7ba9f0;
+    --strand-reverse: #f08a7c;
+    --feature-cds: var(--primary-400);
+    --feature-utr: var(--primary-800);
+    --feature-noncoding: #b0a4d8;
+    --track-highlight: rgba(199, 120, 0, 0.28);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --shadow-3: 0 16px 32px rgba(0, 0, 0, 0.5);
+  }
+}

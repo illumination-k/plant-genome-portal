@@ -18,7 +18,7 @@ const GeneStructureTrack = (props: {
       <text
         x={tokens.label.posX}
         y={tokens.label.posY}
-        className="fill-zinc-700 text-[11px] font-medium"
+        className="fill-text text-[11px] font-medium"
       >
         {tokens.label.id}
         <title>{tokens.label.title}</title>
@@ -28,7 +28,7 @@ const GeneStructureTrack = (props: {
         x2={tokens.intronLine.x2}
         y1={tokens.intronLine.posY}
         y2={tokens.intronLine.posY}
-        className="stroke-zinc-300"
+        className="stroke-border"
         strokeWidth={geneStructure.STROKE_INTRON}
       />
       {tokens.chevrons.map((chevron) => (

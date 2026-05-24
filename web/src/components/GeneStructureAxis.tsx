@@ -22,7 +22,7 @@ const GeneStructureAxis = (props: {
         x2={tokens.lineX2}
         y1={tokens.posY}
         y2={tokens.posY}
-        className="stroke-zinc-300"
+        className="stroke-border"
         strokeWidth={geneStructure.STROKE_TICK}
       />
       {tokens.ticks.map((tick) => (
@@ -32,14 +32,14 @@ const GeneStructureAxis = (props: {
             x2={tick.posX}
             y1={tokens.posY}
             y2={tokens.posY + geneStructure.TICK_HEIGHT}
-            className="stroke-zinc-400"
+            className="stroke-border-strong"
             strokeWidth={geneStructure.STROKE_TICK}
           />
           <text
             x={tick.posX}
             y={tokens.posY + geneStructure.TICK_HEIGHT + geneStructure.TICK_LABEL_OFFSET}
             textAnchor={tick.anchor}
-            className="fill-zinc-500 text-[10px] tabular-nums"
+            className="fill-text-muted text-[10px] tabular-nums"
           >
             {tick.label}
           </text>

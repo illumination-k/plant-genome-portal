@@ -100,7 +100,7 @@ const GenomeBrowser = (props: GenomeBrowserProps): ReactElement => {
   if (configQuery.isLoading) {
     return (
       <div
-        className="flex items-center justify-center rounded-md bg-zinc-50 text-sm text-zinc-500"
+        className="flex items-center justify-center rounded-md bg-surface-muted text-sm text-text-muted"
         style={minHeightStyle}
       >
         Loading genome browser…
@@ -120,7 +120,7 @@ const GenomeBrowser = (props: GenomeBrowserProps): ReactElement => {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-zinc-200">
+    <div className="overflow-hidden rounded-md border border-border-subtle">
       <JBrowseLinearGenomeView viewState={viewState} />
     </div>
   );

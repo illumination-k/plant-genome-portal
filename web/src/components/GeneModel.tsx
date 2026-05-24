@@ -5,7 +5,7 @@ import GeneStructureViz from "@/components/GeneStructureViz";
 import type { ReactElement } from "react";
 
 const GeneModel = (props: { geneRecord: GeneRecord }): ReactElement => (
-  <div className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+  <div className="mt-6 rounded-lg border border-border-subtle bg-surface-muted p-4">
     <GeneModelBounds gene={props.geneRecord.gene} />
     <GeneStructureViz geneRecord={props.geneRecord} />
     <GeneModelCaption gene={props.geneRecord.gene} />
