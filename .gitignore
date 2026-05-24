@@ -4,3 +4,6 @@ dist/
 .env.*
 !.env.example
 *.tsbuildinfo
+target/
+data/
+.miserc.toml

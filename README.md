@@ -2,7 +2,8 @@
 
 ## Genome MVP
 
-Download and parse MarpolBase MpTak1_v7.1 into a local snapshot:
+Download and parse MarpolBase MpTak1_v7.1 into a local snapshot. This imports FASTA, GFF3,
+functional annotation, and the MarpolBase nomenclature table:
 
 ```bash
 cargo run -p portal-cli -- import marpolbase-mptak1-v7-1 --out data/marpolbase/MpTak1_v7.1
@@ -17,8 +18,26 @@ cargo run -p api -- \
   --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz
 ```
 
+Run the API and web development servers with file watching:
+
+```bash
+mise r dev
+```
+
+This starts the API on `127.0.0.1:3000` and the Vite web server with proxying to the API.
+
+Stop both dev servers from another shell:
+
+```bash
+mise r stop_dev
+```
+
 Useful endpoints:
 
+- `GET /jbrowse/config?baseUrl=http://127.0.0.1:3000`
+- `GET /jbrowse/config/GCA_037833805.1?baseUrl=http://127.0.0.1:3000`
+- `GET /jbrowse/assemblies/GCA_037833805.1/chrom.sizes`
+- `GET /jbrowse/assemblies/GCA_037833805.1/features?refName=chr1&start=0&end=100000`
 - `GET /v2/genome/accession/GCA_037833805.1`
 - `GET /v2/genome/taxon/3197`
 - `GET /v2/gene/search?q=Mp1g00070`
@@ -26,6 +45,14 @@ Useful endpoints:
 - `GET /v2/genome/accession/GCA_037833805.1/region/chr1:1-100000/features`
 - `GET /sequence/service-info`
 - `GET /openapi.json`
+
+Generate the OpenAPI schema and TypeScript client:
+
+```bash
+pnpm --dir web run openapi:generate
+```
+
+The script writes the API schema to `target/openapi/api.json` via `cargo run -p api -- openapi`, then generates the Hey API client into `web/src/api/client`.
 
 Run OpenAPI-driven property-based tests against the backend:
 
