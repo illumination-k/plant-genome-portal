@@ -1,3 +1,6 @@
+packages:
+  - web
+
 minimumReleaseAge: 4320
 trustPolicy: no-downgrade
 blockExoticSubdeps: true

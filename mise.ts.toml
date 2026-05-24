@@ -1,26 +1,60 @@
 [tools]
-
 node = "25.9.0"
 pnpm = "11.0.1"
-
 
 [tasks."fmt:ts"]
 description = "Format with oxfmt"
 
-run = "pnpm exec oxfmt --write src"
-
+run = "pnpm --dir web exec oxfmt --write src"
 
 [tasks."lint:ts"]
 description = "Lint and type-check TypeScript"
 
-run = ["pnpm exec oxlint -c oxlint.config.ts .", "pnpm exec tsc --noEmit"]
-
+run = ["pnpm --dir web exec oxlint .", "pnpm --dir web exec tsc --noEmit"]
 
 [tasks."test:ts"]
 description = "Run tests with vitest"
 
-run = "pnpm exec vitest run"
+run = "pnpm --dir web exec vitest run"
 
+[tasks."dev:web"]
+description = "Run the Vite development server"
+
+run = '''
+set -eu
+
+pid_dir="target/dev/pids"
+pid_file="$pid_dir/web.pid"
+mkdir -p "$pid_dir"
+
+cleanup() {
+  if [ -n "${child_pid:-}" ]; then
+    kill "$child_pid" 2>/dev/null || true
+  fi
+  saved_pid="$(cat "$pid_file" 2>/dev/null || true)"
+  if [ "$saved_pid" = "${child_pid:-}" ]; then
+    rm -f "$pid_file"
+  fi
+}
+trap cleanup INT TERM EXIT
+
+pnpm --dir web exec vite --host 127.0.0.1 &
+child_pid="$!"
+printf '%s\n' "$child_pid" > "$pid_file"
+set +e
+wait "$child_pid"
+status="$?"
+set -e
+
+case "$status" in
+  0|130|143)
+    exit 0
+    ;;
+  *)
+    exit "$status"
+    ;;
+esac
+'''
 
 [tasks."ci:ts"]
 description = "Run TypeScript lint, type-check, and test tasks"

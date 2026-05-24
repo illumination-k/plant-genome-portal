@@ -1,0 +1,13 @@
+[package]
+name = "service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+genome-core = { path = "../genome-core", version = "0.1.0" }
+storage = { path = "../storage", version = "0.1.0" }
+thiserror.workspace = true
+
+[lints]
+workspace = true

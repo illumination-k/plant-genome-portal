@@ -1,0 +1,29 @@
+max-failures = 1
+wait-for-schema = 10.0
+request-timeout = 10.0
+suppress-health-check = ["too_slow", "filter_too_much"]
+
+[generation]
+max-examples = 50
+deterministic = true
+
+[parameters]
+accession = "GCA_PBT000001.1"
+tax_id = 3197
+gene_id = "MpPBT00010"
+region = "chr1:1-20"
+checksum = "71mfZw47FLWJKQ_wvBCMgGungdTJFoft"
+ref_name = "chr1"
+q = "PBT"
+symbol = "PBT1"
+locus_tag = "MpPBT00010"
+limit = 10
+start = 0
+end = 20
+
+[reports]
+directory = "target/schemathesis"
+
+[reports.junit]
+enabled = true
+path = "target/schemathesis/junit.xml"

@@ -8,6 +8,7 @@ actionlint = "1.7.12"
 shellcheck = "0.11.0"
 "aqua:suzuki-shunsuke/ghalint" = "1.5.5"
 "aqua:suzuki-shunsuke/pinact" = "3.9.0"
+"github:illumination-k/agent-lens" = { version = "rolling", prerelease = true }
 
 [hooks]
 postinstall = "if [ -z \"${CI:-}\" ]; then prek install -f; fi"
