@@ -58,10 +58,12 @@ trap cleanup INT TERM EXIT
 
 cargo watch \
   -w backends/api \
+  -w backends/worker \
   -w crates \
   -w Cargo.toml \
   -w Cargo.lock \
-  -x 'run -p api -- --bind 127.0.0.1:3000 --snapshot data/marpolbase/MpTak1_v7.1/snapshot.json --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz' &
+  -x 'build -p worker' \
+  -x 'run -p api -- --bind 127.0.0.1:3000 --snapshot data/marpolbase/MpTak1_v7.1/snapshot.json --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz --blast-db-prefix target/blast/MpTak1_v7.1 --blast-worker-bin target/debug/worker' &
 child_pid="$!"
 printf '%s\n' "$child_pid" > "$pid_file"
 set +e
