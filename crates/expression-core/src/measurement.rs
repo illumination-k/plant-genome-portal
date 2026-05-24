@@ -3,24 +3,24 @@ use utoipa::ToSchema;
 
 use genome_core::GeneId;
 
-use crate::ids::SampleId;
+use crate::ids::SraRunAccession;
 use crate::unit::ExpressionUnit;
 use crate::value::ExpressionValue;
 
-/// A single expression measurement: the level of one gene in one sample.
+/// A single expression measurement: the level of one gene in one SRA Run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct ExpressionMeasurement {
     pub gene_id: GeneId,
-    pub sample_id: SampleId,
+    pub run: SraRunAccession,
     pub value: f64,
     pub unit: ExpressionUnit,
 }
 
 impl ExpressionMeasurement {
-    pub fn new(gene_id: GeneId, sample_id: SampleId, value: ExpressionValue) -> Self {
+    pub fn new(gene_id: GeneId, run: SraRunAccession, value: ExpressionValue) -> Self {
         Self {
             gene_id,
-            sample_id,
+            run,
             value: value.value,
             unit: value.unit,
         }

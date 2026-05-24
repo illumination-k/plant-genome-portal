@@ -4,40 +4,63 @@ use utoipa::ToSchema;
 
 use genome_core::AssemblyAccession;
 
-use crate::ids::{ExperimentId, SampleId};
+use crate::ids::{
+    BioProjectAccession, BioSampleAccession, SraExperimentAccession, SraRunAccession,
+    SraStudyAccession,
+};
 
-/// Metadata for a single RNA-seq (or similar) sample.
+/// One quantification unit in an RNA-seq dataset, keyed by SRA Run accession.
+///
+/// We follow the convention used by ARCHS4 / refine.bio / Expression Atlas:
+/// the sample primary key is the SRA Run (`SRR/ERR/DRR`), because one Run
+/// corresponds to one FASTQ pair and therefore one expression quantification.
+/// Parent accessions in the SRA hierarchy are carried alongside so callers can
+/// group technical replicates by BioSample, or all samples in a study /
+/// project.
 ///
 /// Free-form fields (`tissue`, `developmental_stage`, ...) are intentionally
-/// `Option<String>` rather than typed enums — plant ontologies are diverse
-/// (PO, PECO, EFO, ENVO) and locking in a vocabulary at this layer would
-/// preclude downstream use cases.
+/// `Option<String>` — plant ontologies are diverse (PO, PECO, EFO, ENVO) and
+/// locking in a controlled vocabulary at this layer would preclude downstream
+/// reuse.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Sample {
-    pub id: SampleId,
+    /// SRA Run accession — the primary key for this sample.
+    pub run: SraRunAccession,
+    /// SRA Experiment (library construction event) the run belongs to.
+    pub experiment: Option<SraExperimentAccession>,
+    /// SRA Study the run belongs to.
+    pub study: Option<SraStudyAccession>,
+    /// BioSample — the biological material that was sequenced.
+    pub biosample: Option<BioSampleAccession>,
+    /// BioProject — the top-level umbrella the sample falls under.
+    pub bioproject: Option<BioProjectAccession>,
+    /// Assembly the quantification was performed against.
     pub assembly_accession: AssemblyAccession,
-    pub experiment_id: Option<ExperimentId>,
     pub title: Option<String>,
     pub tissue: Option<String>,
     pub developmental_stage: Option<String>,
     pub treatment: Option<String>,
     pub condition: Option<String>,
     pub replicate: Option<u32>,
+    /// SRA `library_strategy` (e.g. `"RNA-Seq"`, `"miRNA-Seq"`).
+    pub library_strategy: Option<String>,
+    /// SRA `library_layout` (`"SINGLE"` or `"PAIRED"`).
+    pub library_layout: Option<String>,
+    /// SRA `platform` (e.g. `"ILLUMINA"`, `"OXFORD_NANOPORE"`).
+    pub platform: Option<String>,
+    /// SRA `instrument_model` (e.g. `"Illumina NovaSeq 6000"`).
+    pub instrument_model: Option<String>,
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attributes: BTreeMap<String, String>,
 }
 
-/// Metadata for an experiment grouping one or more samples.
-///
-/// `external_accession` typically holds the SRA / ENA BioProject, GEO Series,
-/// or ArrayExpress identifier the experiment was sourced from.
+/// Top-level grouping aggregate corresponding to an INSDC BioProject.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-pub struct Experiment {
-    pub id: ExperimentId,
+pub struct BioProject {
+    pub accession: BioProjectAccession,
     pub title: String,
     pub description: Option<String>,
-    pub external_accession: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attributes: BTreeMap<String, String>,
 }

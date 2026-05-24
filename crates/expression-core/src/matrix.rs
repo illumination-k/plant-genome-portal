@@ -4,13 +4,13 @@ use utoipa::ToSchema;
 use genome_core::{AssemblyAccession, GeneId};
 
 use crate::error::ExpressionError;
-use crate::ids::SampleId;
+use crate::ids::SraRunAccession;
 use crate::unit::ExpressionUnit;
 
-/// A dense gene × sample expression matrix.
+/// A dense gene × run expression matrix.
 ///
-/// Values are stored row-major: the value for `(gene_idx, sample_idx)` lives at
-/// `values[gene_idx * sample_count + sample_idx]`. All entries share the same
+/// Values are stored row-major: the value for `(gene_idx, run_idx)` lives at
+/// `values[gene_idx * run_count + run_idx]`. All entries share the same
 /// `unit` — heterogeneous units belong in separate matrices.
 ///
 /// `NaN` is allowed in `values` to represent missing measurements; callers
@@ -23,7 +23,7 @@ pub struct ExpressionMatrix {
     pub assembly_accession: AssemblyAccession,
     pub unit: ExpressionUnit,
     pub gene_ids: Vec<GeneId>,
-    pub sample_ids: Vec<SampleId>,
+    pub runs: Vec<SraRunAccession>,
     pub values: Vec<f64>,
 }
 
@@ -32,10 +32,10 @@ impl ExpressionMatrix {
         assembly_accession: AssemblyAccession,
         unit: ExpressionUnit,
         gene_ids: Vec<GeneId>,
-        sample_ids: Vec<SampleId>,
+        runs: Vec<SraRunAccession>,
         values: Vec<f64>,
     ) -> Result<Self, ExpressionError> {
-        let expected = gene_ids.len().saturating_mul(sample_ids.len());
+        let expected = gene_ids.len().saturating_mul(runs.len());
         if values.len() != expected {
             return Err(ExpressionError::DimensionMismatch {
                 expected,
@@ -46,7 +46,7 @@ impl ExpressionMatrix {
             assembly_accession,
             unit,
             gene_ids,
-            sample_ids,
+            runs,
             values,
         })
     }
@@ -55,29 +55,29 @@ impl ExpressionMatrix {
         self.gene_ids.len()
     }
 
-    pub fn sample_count(&self) -> usize {
-        self.sample_ids.len()
+    pub fn run_count(&self) -> usize {
+        self.runs.len()
     }
 
-    /// Returns the value at `(gene_idx, sample_idx)`, or `None` if either
-    /// index is out of bounds.
-    pub fn value(&self, gene_idx: usize, sample_idx: usize) -> Option<f64> {
-        if gene_idx >= self.gene_count() || sample_idx >= self.sample_count() {
+    /// Returns the value at `(gene_idx, run_idx)`, or `None` if either index
+    /// is out of bounds.
+    pub fn value(&self, gene_idx: usize, run_idx: usize) -> Option<f64> {
+        if gene_idx >= self.gene_count() || run_idx >= self.run_count() {
             return None;
         }
         let offset = gene_idx
-            .checked_mul(self.sample_count())?
-            .checked_add(sample_idx)?;
+            .checked_mul(self.run_count())?
+            .checked_add(run_idx)?;
         self.values.get(offset).copied()
     }
 
-    /// Returns the row (all samples) for the given gene index, or `None` if
-    /// the gene index is out of bounds.
+    /// Returns the row (all runs) for the given gene index, or `None` if the
+    /// gene index is out of bounds.
     pub fn gene_row(&self, gene_idx: usize) -> Option<&[f64]> {
         if gene_idx >= self.gene_count() {
             return None;
         }
-        let n = self.sample_count();
+        let n = self.run_count();
         let start = gene_idx.checked_mul(n)?;
         let end = start.checked_add(n)?;
         self.values.get(start..end)
@@ -97,8 +97,8 @@ mod tests {
         GeneId::new(id).unwrap()
     }
 
-    fn sample(id: &str) -> SampleId {
-        SampleId::new(id).unwrap()
+    fn run(id: &str) -> SraRunAccession {
+        SraRunAccession::new(id).unwrap()
     }
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
             assembly(),
             ExpressionUnit::Tpm,
             vec![gene("g1"), gene("g2")],
-            vec![sample("s1"), sample("s2"), sample("s3")],
+            vec![run("SRR000001"), run("SRR000002"), run("SRR000003")],
             vec![0.0; 5],
         )
         .unwrap_err();
@@ -125,7 +125,7 @@ mod tests {
         let m =
             ExpressionMatrix::new(assembly(), ExpressionUnit::Tpm, vec![], vec![], vec![]).unwrap();
         assert_eq!(m.gene_count(), 0);
-        assert_eq!(m.sample_count(), 0);
+        assert_eq!(m.run_count(), 0);
         assert!(m.value(0, 0).is_none());
         assert!(m.gene_row(0).is_none());
     }
@@ -136,7 +136,7 @@ mod tests {
             assembly(),
             ExpressionUnit::Tpm,
             vec![gene("g1"), gene("g2")],
-            vec![sample("s1"), sample("s2"), sample("s3")],
+            vec![run("SRR000001"), run("SRR000002"), run("SRR000003")],
             vec![
                 10.0, 20.0, 30.0, // g1
                 40.0, 50.0, 60.0, // g2
