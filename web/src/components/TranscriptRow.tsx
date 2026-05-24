@@ -4,12 +4,12 @@ import geneFormat from "@/lib/geneFormat";
 
 const TranscriptRow = (props: { exonCount: number; transcript: Transcript }): ReactElement => (
   <tr>
-    <td className="px-4 py-3 font-medium text-zinc-900">{props.transcript.id}</td>
-    <td className="px-4 py-3 text-zinc-600">
+    <td className="px-4 py-3 font-medium text-text">{props.transcript.id}</td>
+    <td className="px-4 py-3 text-text-muted">
       {geneFormat.formatLocation(props.transcript.sequence_name, props.transcript.region)}
     </td>
-    <td className="px-4 py-3 text-zinc-600">{props.exonCount}</td>
-    <td className="px-4 py-3 text-zinc-600">{props.transcript.feature_type}</td>
+    <td className="px-4 py-3 text-text-muted">{props.exonCount}</td>
+    <td className="px-4 py-3 text-text-muted">{props.transcript.feature_type}</td>
   </tr>
 );
 

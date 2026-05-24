@@ -1,46 +1,46 @@
 import type { GeneRecord } from "@/api/client/types.gen";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import geneRecordUtils from "@/lib/geneRecordUtils";
-import GeneAttributesPanel from "@/components/GeneAttributesPanel";
 import GeneBackLink from "@/components/GeneBackLink";
-import GeneExonsPanel from "@/components/GeneExonsPanel";
-import GeneHero from "@/components/GeneHero";
-import GeneStatusGrid from "@/components/GeneStatusGrid";
-import GeneTranscriptPanel from "@/components/GeneTranscriptPanel";
+import GeneDetailLoading from "@/components/GeneDetailLoading";
+import GeneDetailTabs from "@/components/GeneDetailTabs";
+import GeneHeader from "@/bio/GeneHeader";
+import EmptyState from "@/ui/EmptyState";
+import ErrorState from "@/ui/ErrorState";
+import geneRecordUtils from "@/lib/geneRecordUtils";
 
 const GeneDetailState = (props: {
   geneId: string;
   geneQuery: UseQueryResult<GeneRecord, unknown>;
 }): ReactElement => {
   if (props.geneId === "") {
-    return <GeneStatusGrid detail="Open a gene from the genes page." title="Missing gene ID" />;
+    return (
+      <EmptyState description="Open a gene from the genes page." title="Missing gene ID" />
+    );
   }
 
   if (props.geneQuery.isLoading) {
-    return <GeneStatusGrid detail={props.geneId} title="Loading gene" />;
+    return <GeneDetailLoading geneId={props.geneId} />;
   }
 
   if (props.geneQuery.error) {
     return (
-      <GeneStatusGrid
+      <ErrorState
         detail={geneRecordUtils.errorMessage(props.geneQuery.error)}
-        title="Gene not found"
+        title={`Gene ${props.geneId} could not be loaded`}
       />
     );
   }
 
   if (!props.geneQuery.data) {
-    return <GeneStatusGrid detail={props.geneId} title="Gene not found" />;
+    return <EmptyState description={props.geneId} title="Gene not found" />;
   }
 
   return (
-    <section className="grid grid-cols-12 gap-6">
+    <section className="flex flex-col gap-6">
       <GeneBackLink />
-      <GeneHero geneRecord={props.geneQuery.data} />
-      <GeneTranscriptPanel geneRecord={props.geneQuery.data} />
-      <GeneAttributesPanel gene={props.geneQuery.data.gene} />
-      <GeneExonsPanel exons={props.geneQuery.data.exons} />
+      <GeneHeader gene={props.geneQuery.data.gene} />
+      <GeneDetailTabs geneRecord={props.geneQuery.data} />
     </section>
   );
 };

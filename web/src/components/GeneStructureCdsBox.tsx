@@ -14,7 +14,7 @@ const GeneStructureCdsBox = (props: {
     width={props.width}
     height={props.height}
     rx={geneStructure.RECT_RADIUS}
-    className="fill-emerald-700"
+    className="fill-primary-700"
   >
     <title>{props.title}</title>
   </rect>

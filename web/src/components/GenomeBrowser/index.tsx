@@ -11,7 +11,7 @@ import type { ReactElement } from "react";
 
 type GenomeBrowserProps = {
   accession?: string;
-  location?: string;
+  location: string;
 };
 
 type ViewState = ReturnType<typeof createViewState>;
@@ -24,14 +24,11 @@ const emptyAccession = "";
 
 const buildTrackId = (accession: string): string => `${accession}-pgp-genes`;
 
-const buildViewState = (
-  config: JBrowseRootConfig,
-  location: string | undefined,
-): ViewState => {
+const buildViewState = (config: JBrowseRootConfig, location: string): ViewState => {
   const { plantGenomePortal: portal, assemblies, defaultSession: session } = config;
   const [assembly] = assemblies;
   const trackId = buildTrackId(portal.assemblyAccession);
-  const initialLoc = location ?? session.view.init.loc;
+  const initialLoc = location || session.view.init.loc;
 
   return createViewState({
     assembly,
@@ -100,7 +97,7 @@ const GenomeBrowser = (props: GenomeBrowserProps): ReactElement => {
   if (configQuery.isLoading) {
     return (
       <div
-        className="flex items-center justify-center rounded-md bg-zinc-50 text-sm text-zinc-500"
+        className="flex items-center justify-center rounded-md bg-surface-muted text-sm text-text-muted"
         style={minHeightStyle}
       >
         Loading genome browser…
@@ -111,7 +108,7 @@ const GenomeBrowser = (props: GenomeBrowserProps): ReactElement => {
   if (configQuery.error || !viewState) {
     return (
       <div
-        className="flex items-center justify-center rounded-md bg-rose-50 text-sm text-rose-700"
+        className="flex items-center justify-center rounded-md border border-dashed border-danger/40 bg-surface text-sm text-danger"
         style={minHeightStyle}
       >
         Genome browser unavailable.
@@ -120,7 +117,7 @@ const GenomeBrowser = (props: GenomeBrowserProps): ReactElement => {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-zinc-200">
+    <div className="overflow-hidden rounded-md border border-border-subtle">
       <JBrowseLinearGenomeView viewState={viewState} />
     </div>
   );

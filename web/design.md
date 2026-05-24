@@ -2,7 +2,7 @@
 
 植物ゲノムポータルの UI/UX 設計指針。`web/` 配下の React + Tailwind v4 + @base-ui/react 実装の指針となる。
 
-> Status: **proposal**。現在の `web/src/` の実装はこの設計書より前のもので、当面は混在する。新規コンポーネントとリファクタはこの設計書に従う。
+> Status: **adopted**。P0〜P6 のスケルトンが入り、`web/src/design/` のトークン・`web/src/ui/` の primitive・`web/src/bio/` の biology primitive・サイドレールシェル・search-first landing・gene detail のタブ・⌘K command palette・`/browser` ルートが稼働中。残りは P7 (motion・i18n・a11y audit・印刷スタイル) と、後述する未実装項目 (BLAST / 領域検索 / `/downloads` / `/api` 等)。
 
 ---
 
@@ -10,15 +10,15 @@
 
 研究者のための database portal。「植物科学誌の組版」と「優れた開発者ツール」の交差点に置く。
 
-| 原則 | 含意 |
-| --- | --- |
-| **Scientific seriousness** | 装飾ではなくデータが主役。illustration やストック写真を入れない。 |
-| **Density over whitespace** | 研究者は時間で勝負する。Linear / GitHub のようにスキャンしやすい密度を取る。 |
-| **Biology-aware** | 配列・座標・strand・遺伝子構造はテキスト以上の情報を持つ。専用 visualization で表す。 |
-| **Keyboard-first** | `⌘K` で accession ジャンプ、テーブル `j/k` ナビゲーション、`/` でフォーカス。 |
-| **Accession-first** | URL も UI も accession (`GCA_037833805.1`, `Mp1g00010`) で語る。表示名は副。 |
-| **Dual-mode** | Light / Dark を first-class。プリファレンス保存、システム追従。 |
-| **No surprise** | アニメーション控えめ、ページ遷移は瞬時、フォーカス常に可視。 |
+| 原則                        | 含意                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| **Scientific seriousness**  | 装飾ではなくデータが主役。illustration やストック写真を入れない。                     |
+| **Density over whitespace** | 研究者は時間で勝負する。Linear / GitHub のようにスキャンしやすい密度を取る。          |
+| **Biology-aware**           | 配列・座標・strand・遺伝子構造はテキスト以上の情報を持つ。専用 visualization で表す。 |
+| **Keyboard-first**          | `⌘K` で accession ジャンプ、テーブル `j/k` ナビゲーション、`/` でフォーカス。         |
+| **Accession-first**         | URL も UI も accession (`GCA_037833805.1`, `Mp1g00010`) で語る。表示名は副。          |
+| **Dual-mode**               | Light / Dark を first-class。プリファレンス保存、システム追従。                       |
+| **No surprise**             | アニメーション控えめ、ページ遷移は瞬時、フォーカス常に可視。                          |
 
 非目標: マーケティングサイト的な見た目、植物の写真、グラデーション多用、英雄的なコピー。
 
@@ -36,31 +36,31 @@ CSS variables で定義し、Tailwind v4 の `@theme` でユーティリティ�
 
 #### Foundation (semantic, theme-aware)
 
-| Token | Light | Dark | 用途 |
-| --- | --- | --- | --- |
-| `--color-canvas` | `#FAF9F6` (warm off-white) | `#0E1410` | アプリ全体の背景 |
-| `--color-surface` | `#FFFFFF` | `#141A16` | カード / パネル |
-| `--color-surface-raised` | `#FFFFFF` (with shadow) | `#1A211C` | ポップオーバー / モーダル |
-| `--color-surface-muted` | `#F4F2EE` | `#1A211C` | テーブル行交互 / disabled |
-| `--color-overlay` | `rgba(15, 26, 20, 0.32)` | `rgba(0, 0, 0, 0.56)` | モーダル背景 |
+| Token                    | Light                      | Dark                  | 用途                      |
+| ------------------------ | -------------------------- | --------------------- | ------------------------- |
+| `--color-canvas`         | `#FAF9F6` (warm off-white) | `#0E1410`             | アプリ全体の背景          |
+| `--color-surface`        | `#FFFFFF`                  | `#141A16`             | カード / パネル           |
+| `--color-surface-raised` | `#FFFFFF` (with shadow)    | `#1A211C`             | ポップオーバー / モーダル |
+| `--color-surface-muted`  | `#F4F2EE`                  | `#1A211C`             | テーブル行交互 / disabled |
+| `--color-overlay`        | `rgba(15, 26, 20, 0.32)`   | `rgba(0, 0, 0, 0.56)` | モーダル背景              |
 
 #### Text
 
-| Token | Light | Dark |
-| --- | --- | --- |
-| `--color-text` | `#0F1A14` | `#E8EDE9` |
-| `--color-text-muted` | `#4A5650` | `#9CA8A1` |
-| `--color-text-subtle` | `#7A857E` | `#6B7670` |
+| Token                   | Light     | Dark      |
+| ----------------------- | --------- | --------- |
+| `--color-text`          | `#0F1A14` | `#E8EDE9` |
+| `--color-text-muted`    | `#4A5650` | `#9CA8A1` |
+| `--color-text-subtle`   | `#7A857E` | `#6B7670` |
 | `--color-text-disabled` | `#B7BDB8` | `#4A5650` |
-| `--color-text-inverse` | `#FFFFFF` | `#0F1A14` |
-| `--color-text-link` | `#1E5631` | `#76B889` |
+| `--color-text-inverse`  | `#FFFFFF` | `#0F1A14` |
+| `--color-text-link`     | `#1E5631` | `#76B889` |
 
 #### Border
 
-| Token | Light | Dark | 用途 |
-| --- | --- | --- | --- |
-| `--color-border-subtle` | `#ECEAE4` | `#222A24` | テーブル罫線、divider |
-| `--color-border` | `#D9D6CE` | `#2C352E` | カード / 入力 |
+| Token                   | Light     | Dark      | 用途                          |
+| ----------------------- | --------- | --------- | ----------------------------- |
+| `--color-border-subtle` | `#ECEAE4` | `#222A24` | テーブル罫線、divider         |
+| `--color-border`        | `#D9D6CE` | `#2C352E` | カード / 入力                 |
 | `--color-border-strong` | `#9BA298` | `#4A5650` | active input, focus container |
 
 #### Brand — Chlorophyll Green
@@ -91,26 +91,26 @@ CSS variables で定義し、Tailwind v4 の `@theme` でユーティリティ�
 
 #### Semantic state
 
-| Token | 用途 |
-| --- | --- |
+| Token             | 用途                          |
+| ----------------- | ----------------------------- |
 | `--color-success` | `#1E5631` (brand と同じで OK) |
-| `--color-warning` | `#B45309` |
-| `--color-danger` | `#B42318` |
-| `--color-info` | `#175CD3` |
+| `--color-warning` | `#B45309`                     |
+| `--color-danger`  | `#B42318`                     |
+| `--color-info`    | `#175CD3`                     |
 
 #### Biology semantic
 
 UI のあちこちで使う。色覚特性 (8% の男性が赤緑色覚異常) を考慮し、形状や記号 (`+` / `−`) と必ず併用する。色だけに意味を載せない。
 
-| Token | Light | Dark | 意味 |
-| --- | --- | --- | --- |
-| `--color-strand-forward` | `#175CD3` | `#7BA9F0` | `+` strand |
-| `--color-strand-reverse` | `#B42318` | `#F08A7C` | `−` strand |
-| `--color-feature-cds` | `--color-primary-700` | `--color-primary-400` | CDS exon |
-| `--color-feature-utr` | `--color-primary-200` | `--color-primary-800` | UTR exon |
-| `--color-feature-intron` | `--color-border-strong` | `--color-border-strong` | intron線 |
-| `--color-feature-noncoding` | `#7C6BAB` | `#B0A4D8` | ncRNA / pseudogene |
-| `--color-track-highlight` | `rgba(199, 120, 0, 0.18)` | `rgba(199, 120, 0, 0.28)` | 選択中の領域 |
+| Token                       | Light                     | Dark                      | 意味               |
+| --------------------------- | ------------------------- | ------------------------- | ------------------ |
+| `--color-strand-forward`    | `#175CD3`                 | `#7BA9F0`                 | `+` strand         |
+| `--color-strand-reverse`    | `#B42318`                 | `#F08A7C`                 | `−` strand         |
+| `--color-feature-cds`       | `--color-primary-700`     | `--color-primary-400`     | CDS exon           |
+| `--color-feature-utr`       | `--color-primary-200`     | `--color-primary-800`     | UTR exon           |
+| `--color-feature-intron`    | `--color-border-strong`   | `--color-border-strong`   | intron線           |
+| `--color-feature-noncoding` | `#7C6BAB`                 | `#B0A4D8`                 | ncRNA / pseudogene |
+| `--color-track-highlight`   | `rgba(199, 120, 0, 0.18)` | `rgba(199, 120, 0, 0.28)` | 選択中の領域       |
 
 ### 2.3 Elevation
 
@@ -124,13 +124,13 @@ shadow は最大 3 段階。dark mode では border を強める方向に倒し�
 
 ### 2.4 Radius
 
-| Token | px |
-| --- | --- |
-| `--radius-xs` | 4 |
-| `--radius-sm` | 6 |
-| `--radius-md` | 8 — default for card / input |
-| `--radius-lg` | 12 — modal, sheet |
-| `--radius-full` | 9999 — chips, pills |
+| Token           | px                           |
+| --------------- | ---------------------------- |
+| `--radius-xs`   | 4                            |
+| `--radius-sm`   | 6                            |
+| `--radius-md`   | 8 — default for card / input |
+| `--radius-lg`   | 12 — modal, sheet            |
+| `--radius-full` | 9999 — chips, pills          |
 
 `rounded-2xl` 以上の大きすぎる radius は使わない (科学ツールには軟らかすぎる)。
 
@@ -140,11 +140,11 @@ shadow は最大 3 段階。dark mode では border を強める方向に倒し�
 
 ### 3.1 Font families
 
-| Role | Family |
-| --- | --- |
-| UI / sans | **Inter Variable** (latin) + system-ui fallback. Japanese は `"Hiragino Sans", "Noto Sans JP"`. |
-| Mono | **JetBrains Mono Variable**. 配列、accession、coordinates、code。 |
-| Scientific name | Inter Italic。`<Sci>` コンポーネントで強制。 |
+| Role            | Family                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| UI / sans       | **Inter Variable** (latin) + system-ui fallback. Japanese は `"Hiragino Sans", "Noto Sans JP"`. |
+| Mono            | **JetBrains Mono Variable**. 配列、accession、coordinates、code。                               |
+| Scientific name | Inter Italic。`<Sci>` コンポーネントで強制。                                                    |
 
 Serif は採用しない (組版感は spacing と階層で出す)。
 
@@ -152,18 +152,18 @@ Serif は採用しない (組版感は spacing と階層で出す)。
 
 15px base。データテーブルは 14px、caption は 13px。
 
-| Token | size / line | weight | 用途 |
-| --- | --- | --- | --- |
-| `text-display-xl` | 32 / 40 | 700 | ランディング hero |
-| `text-display-lg` | 24 / 32 | 700 | ページタイトル |
-| `text-heading` | 18 / 26 | 600 | セクション見出し |
-| `text-subheading` | 15 / 22 | 600 | カード内見出し |
-| `text-body` | 15 / 22 | 400 | 本文 default |
-| `text-body-sm` | 14 / 20 | 400 | テーブル / dense UI |
-| `text-caption` | 13 / 18 | 500 | ラベル / メタ |
-| `text-overline` | 11 / 14 | 600, tracking 0.08em, uppercase | カードラベル |
-| `text-mono` | 14 / 20 | 400 | 配列 / accession |
-| `text-mono-sm` | 12 / 18 | 400 | 座標 inline |
+| Token             | size / line | weight                          | 用途                |
+| ----------------- | ----------- | ------------------------------- | ------------------- |
+| `text-display-xl` | 32 / 40     | 700                             | ランディング hero   |
+| `text-display-lg` | 24 / 32     | 700                             | ページタイトル      |
+| `text-heading`    | 18 / 26     | 600                             | セクション見出し    |
+| `text-subheading` | 15 / 22     | 600                             | カード内見出し      |
+| `text-body`       | 15 / 22     | 400                             | 本文 default        |
+| `text-body-sm`    | 14 / 20     | 400                             | テーブル / dense UI |
+| `text-caption`    | 13 / 18     | 500                             | ラベル / メタ       |
+| `text-overline`   | 11 / 14     | 600, tracking 0.08em, uppercase | カードラベル        |
+| `text-mono`       | 14 / 20     | 400                             | 配列 / accession    |
+| `text-mono-sm`    | 12 / 18     | 400                             | 座標 inline         |
 
 ### 3.3 ルール
 
@@ -184,12 +184,12 @@ Serif は採用しない (組版感は spacing と階層で出す)。
 
 ### 4.2 Breakpoints
 
-| Token | min-width | 想定 |
-| --- | --- | --- |
-| `sm` | 640px | tablet portrait (補助) |
-| `md` | 960px | tablet landscape / 小ラップトップ |
-| `lg` | 1280px | 標準ラボ環境 |
-| `xl` | 1600px | 大型ディスプレイ |
+| Token | min-width | 想定                              |
+| ----- | --------- | --------------------------------- |
+| `sm`  | 640px     | tablet portrait (補助)            |
+| `md`  | 960px     | tablet landscape / 小ラップトップ |
+| `lg`  | 1280px    | 標準ラボ環境                      |
+| `xl`  | 1600px    | 大型ディスプレイ                  |
 
 スマホ最適化は副。ラップトップ以上 (`lg` 以上) を主戦場とする。`md` 未満では sidebar が drawer に畳まれ、3-pane が 1-pane に潰れる。
 
@@ -199,33 +199,33 @@ Serif は採用しない (組版感は spacing と階層で出す)。
 
 #### 仕様
 
-| 項目 | 値 |
-| --- | --- |
-| Columns | **12** (固定) |
-| Gutter | `gap-6` = 24px (`md` 以上) / `gap-4` = 16px (`md` 未満) |
-| Container max-width | 1440px (`max-w-[1440px]`) |
-| Outer padding | `px-6` (24px, `md` 以下) / `px-8` (32px, `md` 以上) |
+| 項目                | 値                                                      |
+| ------------------- | ------------------------------------------------------- |
+| Columns             | **12** (固定)                                           |
+| Gutter              | `gap-6` = 24px (`md` 以上) / `gap-4` = 16px (`md` 未満) |
+| Container max-width | 1440px (`max-w-[1440px]`)                               |
+| Outer padding       | `px-6` (24px, `md` 以下) / `px-8` (32px, `md` 以上)     |
 
 #### Breakpoint ごとの挙動
 
-| Breakpoint | Columns | Gutter | 備考 |
-| --- | --- | --- | --- |
-| `< md` (< 960px) | 4 (mobile sub-grid) | 16px | 12-col 維持は破綻するため 4-col に縮退、`col-span-12` → `col-span-4`、`col-span-6` → `col-span-4`、`col-span-4` → `col-span-2` のマッピング |
-| `md` (≥ 960px) | 12 | 24px | 標準 |
-| `lg` (≥ 1280px) | 12 | 24px | 標準 |
-| `xl` (≥ 1600px) | 12 | 32px (`gap-8`) | 視覚的に締まる |
+| Breakpoint       | Columns             | Gutter         | 備考                                                                                                                                        |
+| ---------------- | ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `< md` (< 960px) | 4 (mobile sub-grid) | 16px           | 12-col 維持は破綻するため 4-col に縮退、`col-span-12` → `col-span-4`、`col-span-6` → `col-span-4`、`col-span-4` → `col-span-2` のマッピング |
+| `md` (≥ 960px)   | 12                  | 24px           | 標準                                                                                                                                        |
+| `lg` (≥ 1280px)  | 12                  | 24px           | 標準                                                                                                                                        |
+| `xl` (≥ 1600px)  | 12                  | 32px (`gap-8`) | 視覚的に締まる                                                                                                                              |
 
 #### 代表的な span パターン
 
-| 用途 | span |
-| --- | --- |
-| Full-bleed (hero / table) | `col-span-12` |
-| Main + Sidebar | `col-span-8` + `col-span-4` |
-| Half / Half | `col-span-6` + `col-span-6` |
-| Triptych (metric grid) | `col-span-4` × 3 |
-| Quartet | `col-span-3` × 4 |
-| Main + Aside (狭) | `col-span-9` + `col-span-3` |
-| Centered form | `col-start-3 col-span-8` (centered, 余白 2/2) |
+| 用途                      | span                                          |
+| ------------------------- | --------------------------------------------- |
+| Full-bleed (hero / table) | `col-span-12`                                 |
+| Main + Sidebar            | `col-span-8` + `col-span-4`                   |
+| Half / Half               | `col-span-6` + `col-span-6`                   |
+| Triptych (metric grid)    | `col-span-4` × 3                              |
+| Quartet                   | `col-span-3` × 4                              |
+| Main + Aside (狭)         | `col-span-9` + `col-span-3`                   |
+| Centered form             | `col-start-3 col-span-8` (centered, 余白 2/2) |
 
 `col-span-5`, `col-span-7`, `col-span-11` のような割り切れない span は原則禁止 (やむを得ない場合のみ、コメントで理由を残す)。
 
@@ -316,6 +316,7 @@ DATA
 ```
 
 具体的には:
+
 - Hero + 検索入力: `col-start-3 col-span-8` で中央 8 列に集約。
 - Suggestion: `col-start-3 col-span-4` (recent) + `col-span-4` (popular)。
 - metrics は表示しない (ノイズ)。
@@ -326,8 +327,8 @@ DATA
 
 テーブルカラム:
 
-| Gene | Symbol | Location | Strand | Length | Biotype | GO terms |
-|---|---|---|---|---|---|---|
+| Gene                     | Symbol | Location                    | Strand          | Length     | Biotype        | GO terms       |
+| ------------------------ | ------ | --------------------------- | --------------- | ---------- | -------------- | -------------- |
 | `Mp1g00010` (mono, link) | MpARF1 | `Chr1:12,345–14,567` (mono) | `+` (blue chip) | `2,223 bp` | protein_coding | 3 chips + `+5` |
 
 - 行 hover で右の Inspector に preview (gene model + 1-paragraph functional annotation)。
@@ -369,21 +370,25 @@ DATA
 - 下段 `col-span-12`: Functional annotation のサマリ (GO / Pfam / InterPro / KEGG の chip cluster、grouped、各 chip クリックで対象 DB の該当 term/family にリンク)。
 
 #### Annotation タブ
+
 - GO terms をテーブルで (`GO:0008150` mono · namespace · term name · evidence · source)。
 - Pfam / InterPro / KEGG / NCBIfam / KOG を同様に。
 - Nomenclature (symbol synonyms) を別カードに。
 
 #### Sequence タブ
+
 - **SequenceBlock** コンポーネント: 60-char block、行頭に 1-based 座標、scroll で長い配列も滑らかに。
 - 上部に表示モード切替: `genomic / mRNA / CDS / protein` (将来)。
 - 右上に Copy + Download FASTA + refget checksum (truncated, copy 可能)。
 - 下に「外部リンク」セクション: NCBI sequence viewer、refget URI 表示。
 
 #### Transcripts タブ
+
 - Transcripts → Exons の ネストしたテーブル。各行はアコーディオン展開で exon list を出す。
 - 各 exon に座標 + 長さ + frame。
 
 #### Browser タブ
+
 - JBrowse 2 embed (full width, height 480-640px、`/jbrowse/config/{accession}` を読む)。
 - 現在の遺伝子に locate された状態で開く。
 
@@ -458,13 +463,13 @@ web/src/
 
 variants × sizes、Tailwind v4 の `@variant` で組む。
 
-| variant | 用途 |
-| --- | --- |
-| `primary` | 主アクション (search submit, save) — bg primary-700, text-inverse |
-| `secondary` | 補助 — surface, border |
-| `ghost` | tertiary、tableの行内アクション |
-| `danger` | 破壊的 (将来) |
-| `link` | テキストリンク的 |
+| variant     | 用途                                                              |
+| ----------- | ----------------------------------------------------------------- |
+| `primary`   | 主アクション (search submit, save) — bg primary-700, text-inverse |
+| `secondary` | 補助 — surface, border                                            |
+| `ghost`     | tertiary、tableの行内アクション                                   |
+| `danger`    | 破壊的 (将来)                                                     |
+| `link`      | テキストリンク的                                                  |
 
 sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (square)。Loading 時は spinner と disabled。Focus ring は `outline: 2px solid var(--color-primary-500); outline-offset: 2px`。
 
@@ -488,23 +493,28 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 ### 6.5 Biology-aware primitives — 仕様
 
 #### `<Accession value="GCA_037833805.1" />`
+
 - Mono、copy ボタン inline (hover で出現)。
 - 任意で外部 (NCBI / MarpolBase) リンク icon を `external` prop で。
 
 #### `<StrandBadge strand="+" />`
+
 - 26×18 の pill。`+` は forward 色 + 記号、`−` は reverse 色 + 記号。文字とアイコン両方で識別可能に。
 
 #### `<CoordinateRange chr="Chr1" start={1} end={100000} />`
+
 - 1-based closed (API 境界と一致)。`Chr1:1–100,000` (en dash、`tabular-nums`、桁区切り)。
 - Click で copy、Shift+Click で `/browser?loc=...` 遷移。
 
 #### `<GeneStructure transcripts={...} />`
+
 - SVG。strand に応じて矢印方向。
 - CDS は塗り、UTR は半透明、intron は線 (山型 ↗↘)。
 - Hover で exon ごとに座標と長さを tooltip。
 - viewBox はゲノム座標 (1:1)、超長 intron は collapse する optional mode (`mode="introns-collapsed"`)。
 
 #### `<SequenceBlock sequence={…} start={1} />`
+
 - 60 chars per line、10 chars ごとに微かな gap。
 - 行頭に座標 (right-aligned mono)。
 - 上下に `Copy FASTA` `Download .fa` ボタン。
@@ -512,6 +522,7 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 - Optional: アミノ酸翻訳 (3-frame) を下に重ねる (将来)。
 
 #### `<FunctionalAnnotationGroup annotation={...} />`
+
 - GO, Pfam, InterPro, KEGG, NCBIfam, KOG をグループ化したカード。
 - 各 term は chip。max 6 表示 + `+N more` で展開。
 
@@ -521,18 +532,18 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 
 ### 7.1 Keyboard shortcuts
 
-| Keys | Action |
-| --- | --- |
+| Keys            | Action                           |
+| --------------- | -------------------------------- |
 | `⌘K` / `Ctrl+K` | Command palette (検索 + jump-to) |
-| `/` | フォーカス検索 |
-| `g s` | Go to search |
-| `g g` | Go to genes |
-| `g b` | Go to browser |
-| `j` / `k` | next / prev row (table) |
-| `Enter` | open selected row |
-| `Space` | toggle Inspector preview |
-| `Esc` | close Inspector / Dialog / Sheet |
-| `?` | show shortcut help |
+| `/`             | フォーカス検索                   |
+| `g s`           | Go to search                     |
+| `g g`           | Go to genes                      |
+| `g b`           | Go to browser                    |
+| `j` / `k`       | next / prev row (table)          |
+| `Enter`         | open selected row                |
+| `Space`         | toggle Inspector preview         |
+| `Esc`           | close Inspector / Dialog / Sheet |
+| `?`             | show shortcut help               |
 
 `?` の help dialog にすべての shortcut を載せる。
 
@@ -577,6 +588,19 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 - inline (フィールドエラー) と global (ネットワーク等) を分ける。
 - 必ず `retry` ボタンを出す。`expand` で技術詳細 (stack / request id) を見られるようにする。
 - 404 (`GeneNotFound` 等) は「該当遺伝子が見つかりません」+ 検索に戻る CTA。
+
+### 8.4 External boundary validation
+
+外界から入ってくる値 (URL 検索パラメータ・URL パスパラメータ・`localStorage`・API
+レスポンス・ユーザー入力) は **必ず valibot で正しい型に変換** してから内側のコードに
+渡す。`string | null | undefined` のような曖昧な型をページ／コンポーネント内で扱わない。
+
+- URL search-param は `useValidatedSearchParam(key, schema, fallback)` (`web/src/lib/useValidatedSearchParam.ts`) を経由する。
+- URL path-param は `useValidatedParam(key, schema, fallback)` (`web/src/lib/useValidatedParam.ts`) を経由する。
+- `localStorage` から読む値はその場で `v.safeParse` を通す (例: `web/src/lib/theme.ts`)。
+- API レスポンスは `web/src/api/client/valibot.gen.ts` 由来のスキーマで既に validate されている (hey-api 経由)。
+
+これにより JSX 内で `undefined` リテラルを書かなくて済み、`unicorn/no-null` / `no-undefined` といった lint ルールとも自然に整合する。
 
 ---
 
@@ -631,16 +655,16 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 
 ## 13. Implementation roadmap
 
-| Phase | Scope | Definition of done |
-| --- | --- | --- |
-| **P0 Tokens** | `design/tokens.css`, `typography.css`, theme switcher | light/dark で既存ページが破綻せず動く |
-| **P1 Primitives** | `ui/` 一式 (Button, Input, Card, Table, Tabs, Dialog, Tooltip, Chip, Code, Skeleton, EmptyState) | 単体テスト + Storybook 的な playground page (`/_dev/ui`) |
-| **P2 Shell** | TopBar, SideRail, Inspector slot を持つ RootLayout | `lg` 以上で 3-pane、`md` 以下で 1-pane に潰れる |
-| **P3 Bio primitives** | `bio/` 一式 (Accession, StrandBadge, CoordinateRange, ScientificName, GeneStructure, SequenceBlock, FunctionalAnnotationGroup) | gene detail で使用、unit + visual test |
-| **P4 Search-first home + ⌘K** | `/` を search-first に置き換え、Command palette 稼働 | キーボードのみで gene 詳細まで到達できる |
-| **P5 Gene detail v2** | タブ構成、新 GeneStructure、SequenceBlock 採用 | API は既存のまま、表示のみ刷新 |
-| **P6 Browser route** | `/browser` に JBrowse 2 embed、deep-link 対応 | URL `?loc=...` で領域指定が可能 |
-| **P7 Polish** | Motion, a11y audit, i18n 切替、印刷スタイル | axe / lighthouse a11y 95+ |
+| Phase                         | Scope                                                                                                                                              | Status    | 現状                                                                                                                                                                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0 Tokens**                 | `design/tokens.css`, `typography.css`, theme switcher                                                                                              | ✅ done   | `web/src/design/{tokens,typography}.css` + `@theme inline` で Tailwind に公開、`web/src/lib/theme.ts` + `web/src/ui/ThemeToggle.tsx` で light / dark / system 切替。`pgp:theme` を valibot で validate。                          |
+| **P1 Primitives**             | `ui/` 一式 (Tabs, Dialog wrapper, Skeleton, EmptyState, ErrorState, CopyButton, KbdKey, CommandPalette\* …)                                        | ◐ partial | 現在の gene detail / palette / 状態表示に必要な分だけ実装。Button / Input / Tooltip / Toast / Sheet / Code / Chip 等の汎用 primitive と `/_dev/ui` playground は未着手。                                                          |
+| **P2 Shell**                  | TopBar, SideRail, Inspector slot を持つ RootLayout                                                                                                 | ◐ partial | TopBar (48px sticky / brand / assembly chip / ⌘K trigger / theme toggle) と SideRail (240px, 目的別 4 グループ) は稼働。`md` 未満では sidebar が drawer に畳まれる挙動、Inspector overlay (gene detail の preview 用) は未実装。  |
+| **P3 Bio primitives**         | `bio/` 一式 (Accession, StrandBadge, CoordinateRange, Sci, GeneIdLink, RefgetChecksum, FunctionalAnnotationGroup/Chip, GeneHeader, GeneSymbolLine) | ◐ partial | gene detail / table で使用中。`SequenceBlock`、`KaryotypeBar`、`RegionMiniMap` は未実装 (refget proxy 入りで対応予定)。                                                                                                           |
+| **P4 Search-first home + ⌘K** | `/` を search-first に置き換え、Command palette 稼働                                                                                               | ✅ done   | `DashboardPage` を `LandingHero` + `LandingSearchForm` + Recent/Popular に置き換え。⌘K / Ctrl+K / `/` で `CommandPalette` (base-ui Dialog + Pages/Genes section) が開く。グローバルショートカットは `GlobalShortcuts` が listen。 |
+| **P5 Gene detail v2**         | タブ構成 (Overview / Annotation / Sequence / Transcripts / Browser)、新 GeneStructure                                                              | ✅ done   | `GeneDetailTabs` (`useValidatedSearchParam` + valibot で `?tab=` を validate)。各タブは `GeneOverviewTab` / `GeneAnnotationTab` / `GeneSequenceTab` / `GeneTranscriptsTab` / `GeneBrowserTab`。SequenceBlock の本体は未着手。     |
+| **P6 Browser route**          | `/browser` に JBrowse 2 embed、deep-link 対応                                                                                                      | ✅ done   | `BrowserPage` が `?loc=Chr1:1-100000` を valibot で validate、`GenomeBrowser` を full-bleed で表示。                                                                                                                              |
+| **P7 Polish**                 | Motion, a11y audit, i18n 切替、印刷スタイル                                                                                                        | ⬜ todo   | `prefers-reduced-motion` ガードと focus-visible ring は入っているが、Motion 全体 / axe / lighthouse / 印刷 / `@lingui/react` 等は未着手。                                                                                         |
 
 各 phase ごとに既存 `components/` から該当機能を `ui/` + `bio/` へ徐々に移送する。big-bang ではなく漸進。
 

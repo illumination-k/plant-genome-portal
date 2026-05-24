@@ -1,14 +1,14 @@
 import type { Exon } from "@/api/client/types.gen";
 import type { ReactElement } from "react";
 import ExonTable from "@/components/ExonTable";
-import StatusMessage from "@/components/StatusMessage";
+import EmptyState from "@/ui/EmptyState";
 
 const emptyCount = 0;
 
 const ExonContent = (props: { exons: Exon[] }): ReactElement => {
   if (props.exons.length === emptyCount) {
     return (
-      <StatusMessage detail="This record does not include exon annotations." title="No exons" />
+      <EmptyState description="This record does not include exon annotations." title="No exons" />
     );
   }
 

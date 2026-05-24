@@ -14,7 +14,7 @@ const GeneStructureExonBox = (props: {
     width={props.width}
     height={props.height}
     rx={geneStructure.RECT_RADIUS}
-    className="fill-emerald-200 stroke-emerald-700"
+    className="fill-primary-200 stroke-primary-700"
     strokeWidth={geneStructure.STROKE_EXON}
   >
     <title>{props.title}</title>
