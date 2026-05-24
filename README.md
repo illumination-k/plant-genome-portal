@@ -9,6 +9,12 @@ functional annotation, and the MarpolBase nomenclature table:
 cargo run -p portal-cli -- import marpolbase-mptak1-v7-1 --out data/marpolbase/MpTak1_v7.1
 ```
 
+Rebuild only the snapshot from existing input files after changing the snapshot schema:
+
+```bash
+cargo run -p portal-cli -- import marpolbase-mptak1-v7-1 --rebuild-snapshot
+```
+
 Run the API without any external database or network dependency:
 
 ```bash

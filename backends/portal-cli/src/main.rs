@@ -68,6 +68,8 @@ struct MarpolbaseMptak1V7_1Import {
     #[arg(long, default_value = "data/marpolbase/MpTak1_v7.1")]
     out: PathBuf,
     #[arg(long)]
+    rebuild_snapshot: bool,
+    #[arg(long)]
     force: bool,
 }
 
@@ -76,7 +78,11 @@ impl MarpolbaseMptak1V7_1Import {
         std::fs::create_dir_all(&self.out)?;
 
         let config = self.config()?;
-        if config.snapshot_path.exists() && config.input_files_exist() && !self.force {
+        if config.snapshot_path.exists()
+            && config.input_files_exist()
+            && !self.force
+            && !self.rebuild_snapshot
+        {
             let mut stdout = std::io::stdout().lock();
             writeln!(
                 stdout,
