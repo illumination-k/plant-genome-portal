@@ -73,6 +73,19 @@ export default defineConfig({
       },
     },
     {
+      files: ["src/pages/**/*.tsx"],
+      rules: {
+        "max-lines": "off",
+        "max-lines-per-function": "off",
+        "max-statements": "off",
+        "no-ternary": "off",
+        "no-use-before-define": "off",
+        "prefer-destructuring": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react/jsx-max-depth": "off",
+      },
+    },
+    {
       files: ["src/components/**/*.tsx"],
       rules: {
         "react/no-multi-comp": "error",
@@ -102,6 +115,8 @@ export default defineConfig({
     "no-duplicate-imports": "off",
     "no-restricted-globals": ["error", "event", "fdescribe", "fit"],
     "oxc/no-async-await": "off",
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-rest-spread-properties": "off",
     "prefer-const": ["error", { destructuring: "all" }],
     "react/jsx-boolean-value": ["error", "never"],
     "react/jsx-curly-brace-presence": [

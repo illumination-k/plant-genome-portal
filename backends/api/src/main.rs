@@ -3,28 +3,34 @@ use axum::{
     extract::{Path, Query, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use clap::{Parser, Subcommand};
-use genome_core::{Gene, GeneSearch, Sequence, Strand, TaxId};
-use serde::{Deserialize, Serialize};
-use service::{GenomeService, ServiceError};
+use genome_core::{AssemblyAccession, Gene, GeneSearch, Sequence, Strand, TaxId};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use service::{
+    AnnotatedHomologySearchResult, GenomeService, InMemoryJobManager, JobExecutor, JobManager,
+    JobManagerError, JobRecord, JobStatus, ServiceError, WorkerJob,
+};
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
+use std::process::{Command as ProcessCommand, Stdio};
 use storage::{FastaReference, FileGenomeRepository};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
 type AppService = GenomeService<FileGenomeRepository>;
+type BlastJobManager = InMemoryJobManager<BlastnJobInput, AnnotatedHomologySearchResult>;
 
 #[derive(Clone)]
 struct AppState {
     service: AppService,
     default_assembly_accession: String,
+    blast_jobs: Option<BlastJobManager>,
 }
 
 #[tokio::main]
@@ -52,6 +58,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Some(path), false) => Some(FastaReference::from_path(path)?),
     };
     let service = GenomeService::new(repository, reference);
+    let blast_jobs = config.blast_db_prefix.clone().map(|blast_db_prefix| {
+        InMemoryJobManager::new(BlastWorkerCommand {
+            worker_bin: config.blast_worker_bin.clone(),
+            blast_db_prefix,
+            work_dir: config.blast_work_dir.clone(),
+            blastn: config.blastn.clone(),
+            snapshot: Some(snapshot.clone()),
+        })
+    });
 
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(
@@ -59,7 +74,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         snapshot = %snapshot.display(),
         "starting api"
     );
-    axum::serve(listener, router(service, default_assembly_accession)).await?;
+    axum::serve(
+        listener,
+        router(service, default_assembly_accession, blast_jobs),
+    )
+    .await?;
 
     Ok(())
 }
@@ -88,7 +107,11 @@ fn write_openapi_schema(output: Option<&FsPath>) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn router(service: AppService, default_assembly_accession: String) -> Router {
+fn router(
+    service: AppService,
+    default_assembly_accession: String,
+    blast_jobs: Option<BlastJobManager>,
+) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/openapi.json", get(openapi_json))
@@ -110,6 +133,8 @@ fn router(service: AppService, default_assembly_accession: String) -> Router {
         .route("/v2/genome/taxon/{tax_id}", get(taxon))
         .route("/v2/gene/id/{gene_id}", get(gene))
         .route("/v2/gene/search", get(gene_search))
+        .route("/v2/tools/blastn/jobs", post(create_blastn_job))
+        .route("/v2/tools/blastn/jobs/{job_id}", get(blastn_job))
         .route(
             "/v2/genome/accession/{accession}/region/{region}/features",
             get(region_features),
@@ -120,6 +145,7 @@ fn router(service: AppService, default_assembly_accession: String) -> Router {
         .with_state(AppState {
             service,
             default_assembly_accession,
+            blast_jobs,
         })
 }
 
@@ -320,6 +346,49 @@ async fn gene_search(
 }
 
 #[utoipa::path(
+    post,
+    path = "/v2/tools/blastn/jobs",
+    request_body = BlastnJobRequest,
+    responses(
+        (status = 202, description = "BLASTN job accepted", body = BlastnJobResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 503, description = "BLASTN worker is not configured", body = ErrorResponse),
+    )
+)]
+async fn create_blastn_job(
+    State(state): State<AppState>,
+    Json(request): Json<BlastnJobRequest>,
+) -> Result<(StatusCode, Json<BlastnJobResponse>), ApiError> {
+    let manager = state
+        .blast_jobs
+        .as_ref()
+        .ok_or_else(|| ApiError::BlastUnavailable("BLASTN worker is not configured".to_owned()))?;
+    let record = manager.submit("homology.blastn".to_owned(), request.into_job_input()?)?;
+    Ok((StatusCode::ACCEPTED, Json(record.into())))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/tools/blastn/jobs/{job_id}",
+    params(("job_id" = String, Path, description = "BLASTN job identifier")),
+    responses(
+        (status = 200, description = "BLASTN job status", body = BlastnJobResponse),
+        (status = 404, description = "Job not found", body = ErrorResponse),
+        (status = 503, description = "BLASTN worker is not configured", body = ErrorResponse),
+    )
+)]
+async fn blastn_job(
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<BlastnJobResponse>, ApiError> {
+    let manager = state
+        .blast_jobs
+        .as_ref()
+        .ok_or_else(|| ApiError::BlastUnavailable("BLASTN worker is not configured".to_owned()))?;
+    Ok(Json(manager.get(&job_id)?.into()))
+}
+
+#[utoipa::path(
     get,
     path = "/v2/genome/accession/{accession}/region/{region}/features",
     params(
@@ -390,6 +459,14 @@ struct Config {
     fasta: Option<PathBuf>,
     #[arg(long)]
     no_fasta: bool,
+    #[arg(long)]
+    blast_db_prefix: Option<PathBuf>,
+    #[arg(long, default_value = "target/debug/worker")]
+    blast_worker_bin: PathBuf,
+    #[arg(long, default_value = "target/api/blast")]
+    blast_work_dir: PathBuf,
+    #[arg(long, default_value = "blastn")]
+    blastn: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]
@@ -415,12 +492,18 @@ enum Command {
         taxon,
         gene,
         gene_search,
+        create_blastn_job,
+        blastn_job,
         region_features,
         refget_service_info,
         refget_sequence,
     ),
     components(schemas(
         ErrorResponse,
+        AnnotatedHomologyHitResponse,
+        AnnotatedHomologySearchResultResponse,
+        BlastnJobRequest,
+        BlastnJobResponse,
         GeneSearchQuery,
         HealthResponse,
         JBrowseAssembly,
@@ -437,6 +520,7 @@ enum Command {
         JBrowseSequenceTrack,
         JBrowseTrack,
         JBrowseUriLocation,
+        JobStatusResponse,
         RefgetQuery,
         RefgetServiceInfo,
         TaxonResponse,
@@ -456,6 +540,8 @@ enum Command {
         genome_core::GoTermAnnotation,
         genome_core::GoTermId,
         genome_core::HalfOpenRegion,
+        genome_core::HomologyHit,
+        genome_core::HomologySearchMethod,
         genome_core::InterProAnnotation,
         genome_core::InterProId,
         genome_core::KeggAnnotation,
@@ -490,6 +576,239 @@ struct HealthResponse {
 struct TaxonResponse {
     taxon: genome_core::Taxon,
     assemblies: Vec<genome_core::Assembly>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct BlastnJobRequest {
+    assembly_accession: String,
+    query: String,
+    task: Option<String>,
+    evalue: Option<f64>,
+    max_target_seqs: Option<usize>,
+}
+
+impl BlastnJobRequest {
+    fn into_job_input(self) -> Result<BlastnJobInput, ApiError> {
+        let assembly_accession = AssemblyAccession::new(&self.assembly_accession)
+            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+        let task = self.task.unwrap_or_else(|| "blastn".to_owned());
+        validate_blastn_task(&task)?;
+        let evalue = self.evalue.unwrap_or(10.0);
+        if evalue <= 0.0 {
+            return Err(ServiceError::InvalidRequest(
+                "evalue must be greater than zero".to_owned(),
+            )
+            .into());
+        }
+        let max_target_seqs = self.max_target_seqs.unwrap_or(50);
+        if max_target_seqs == 0 {
+            return Err(ServiceError::InvalidRequest(
+                "maxTargetSeqs must be greater than zero".to_owned(),
+            )
+            .into());
+        }
+        if self.query.trim().is_empty() {
+            return Err(ServiceError::InvalidRequest("query must not be empty".to_owned()).into());
+        }
+
+        Ok(BlastnJobInput {
+            assembly_accession,
+            query: self.query,
+            task,
+            evalue,
+            max_target_seqs,
+        })
+    }
+}
+
+fn validate_blastn_task(task: &str) -> Result<(), ApiError> {
+    if matches!(
+        task,
+        "blastn" | "blastn-short" | "megablast" | "dc-megablast"
+    ) {
+        Ok(())
+    } else {
+        Err(ServiceError::InvalidRequest(format!("unsupported BLASTN task: {task}")).into())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BlastnJobInput {
+    assembly_accession: AssemblyAccession,
+    query: String,
+    task: String,
+    evalue: f64,
+    max_target_seqs: usize,
+}
+
+#[derive(Debug, Clone)]
+struct BlastWorkerCommand {
+    worker_bin: PathBuf,
+    blast_db_prefix: PathBuf,
+    work_dir: PathBuf,
+    blastn: PathBuf,
+    snapshot: Option<PathBuf>,
+}
+
+impl JobExecutor<BlastnJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
+    fn execute(
+        &self,
+        job: WorkerJob<BlastnJobInput>,
+    ) -> Result<AnnotatedHomologySearchResult, String> {
+        fs::create_dir_all(&self.work_dir).map_err(|error| error.to_string())?;
+        let input_path = self.work_dir.join(format!("{}.input.msgpack", job.id));
+        let output_path = self.work_dir.join(format!("{}.output.msgpack", job.id));
+        let worker_job = WorkerJob {
+            id: job.id.clone(),
+            kind: job.kind,
+            payload: BlastWorkerInput {
+                assembly_accession: job.payload.assembly_accession,
+                query: job.payload.query,
+                task: job.payload.task,
+                evalue: job.payload.evalue,
+                max_target_seqs: job.payload.max_target_seqs,
+                snapshot: self.snapshot.clone(),
+            },
+        };
+
+        fs::write(&input_path, encode_message_pack(&worker_job)?)
+            .map_err(|error| error.to_string())?;
+
+        let output = ProcessCommand::new(&self.worker_bin)
+            .arg("blastn-job")
+            .arg("--blast-db-prefix")
+            .arg(&self.blast_db_prefix)
+            .arg("--work-dir")
+            .arg(&self.work_dir)
+            .arg("--blastn")
+            .arg(&self.blastn)
+            .arg("--input")
+            .arg(&input_path)
+            .arg("--output")
+            .arg(&output_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|error| format!("failed to start worker: {error}"))?;
+
+        let _ = fs::remove_file(&input_path);
+
+        if !output.status.success() {
+            let _ = fs::remove_file(&output_path);
+            return Err(format!(
+                "worker exited with status {:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        let result_bytes = fs::read(&output_path).map_err(|error| error.to_string())?;
+        let _ = fs::remove_file(&output_path);
+        decode_message_pack(&result_bytes)
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BlastWorkerInput {
+    assembly_accession: AssemblyAccession,
+    query: String,
+    task: String,
+    evalue: f64,
+    max_target_seqs: usize,
+    snapshot: Option<PathBuf>,
+}
+
+fn encode_message_pack<T>(value: &T) -> Result<Vec<u8>, String>
+where
+    T: Serialize,
+{
+    rmp_serde::to_vec_named(value).map_err(|error| error.to_string())
+}
+
+fn decode_message_pack<T>(bytes: &[u8]) -> Result<T, String>
+where
+    T: DeserializeOwned,
+{
+    rmp_serde::from_slice(bytes).map_err(|error| error.to_string())
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct BlastnJobResponse {
+    id: String,
+    kind: String,
+    status: JobStatusResponse,
+    result: Option<AnnotatedHomologySearchResultResponse>,
+    error: Option<String>,
+}
+
+impl From<JobRecord<AnnotatedHomologySearchResult>> for BlastnJobResponse {
+    fn from(record: JobRecord<AnnotatedHomologySearchResult>) -> Self {
+        Self {
+            id: record.id,
+            kind: record.kind,
+            status: record.status.into(),
+            result: record.output.map(Into::into),
+            error: record.error,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum JobStatusResponse {
+    Queued,
+    Running,
+    Succeeded,
+    Failed,
+}
+
+impl From<JobStatus> for JobStatusResponse {
+    fn from(status: JobStatus) -> Self {
+        match status {
+            JobStatus::Queued => Self::Queued,
+            JobStatus::Running => Self::Running,
+            JobStatus::Succeeded => Self::Succeeded,
+            JobStatus::Failed => Self::Failed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct AnnotatedHomologySearchResultResponse {
+    method: genome_core::HomologySearchMethod,
+    task: String,
+    hits: Vec<AnnotatedHomologyHitResponse>,
+}
+
+impl From<AnnotatedHomologySearchResult> for AnnotatedHomologySearchResultResponse {
+    fn from(result: AnnotatedHomologySearchResult) -> Self {
+        Self {
+            method: result.method,
+            task: result.task,
+            hits: result.hits.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct AnnotatedHomologyHitResponse {
+    hit: genome_core::HomologyHit,
+    overlapping_gene_ids: Vec<genome_core::GeneId>,
+}
+
+impl From<service::AnnotatedHomologyHit> for AnnotatedHomologyHitResponse {
+    fn from(hit: service::AnnotatedHomologyHit) -> Self {
+        Self {
+            hit: hit.hit,
+            overlapping_gene_ids: hit.overlapping_gene_ids,
+        }
+    }
 }
 
 fn jbrowse_config_for_accession(
@@ -772,31 +1091,45 @@ impl From<Gene> for JBrowseFeature {
 }
 
 #[derive(Debug)]
-struct ApiError(ServiceError);
+enum ApiError {
+    Service(ServiceError),
+    Job(JobManagerError),
+    BlastUnavailable(String),
+}
 
 impl From<ServiceError> for ApiError {
     fn from(error: ServiceError) -> Self {
-        Self(error)
+        Self::Service(error)
+    }
+}
+
+impl From<JobManagerError> for ApiError {
+    fn from(error: JobManagerError) -> Self {
+        Self::Job(error)
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = match &self.0 {
-            ServiceError::TaxonNotFound(_)
-            | ServiceError::AssemblyNotFound(_)
-            | ServiceError::GeneNotFound(_)
-            | ServiceError::SequenceNotFound(_) => StatusCode::NOT_FOUND,
-            ServiceError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+        let status = match &self {
+            Self::Service(
+                ServiceError::TaxonNotFound(_)
+                | ServiceError::AssemblyNotFound(_)
+                | ServiceError::GeneNotFound(_)
+                | ServiceError::SequenceNotFound(_),
+            )
+            | Self::Job(JobManagerError::JobNotFound(_)) => StatusCode::NOT_FOUND,
+            Self::Service(ServiceError::InvalidRequest(_)) => StatusCode::BAD_REQUEST,
+            Self::Job(JobManagerError::SubmissionFailed(_)) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::BlastUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+        };
+        let error = match self {
+            Self::Service(error) => error.to_string(),
+            Self::Job(error) => error.to_string(),
+            Self::BlastUnavailable(error) => error,
         };
 
-        (
-            status,
-            Json(ErrorResponse {
-                error: self.0.to_string(),
-            }),
-        )
-            .into_response()
+        (status, Json(ErrorResponse { error })).into_response()
     }
 }
 

@@ -13,7 +13,7 @@ const genomeItems = [
 ];
 
 const toolItems = [
-  { disabled: true, label: "BLAST", to: "/tools/blast" },
+  { label: "BLAST", to: "/tools/blast" },
   { disabled: true, label: "Region lookup", to: "/tools/region" },
 ];
 

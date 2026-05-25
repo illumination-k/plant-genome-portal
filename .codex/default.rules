@@ -1,0 +1,3 @@
+# deny
+prefix_rule(pattern = ["pnpm", "run", "dev"], decision = "deny", justification = "Use `mise run dev` instead of `pnpm run dev` to ensure that the development environment is set up correctly.")
+prefix_rule(pattern = ["pnpm", "--dir", "web", "run", "dev"], decision = "deny", justification = "Use `mise run dev` instead of `pnpm --dir web run dev` to ensure that the development environment is set up correctly.")
