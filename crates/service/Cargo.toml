@@ -5,10 +5,14 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+expression-core = { path = "../expression-core", version = "0.1.0" }
 genome-core = { path = "../genome-core", version = "0.1.0" }
 serde.workspace = true
 storage = { path = "../storage", version = "0.1.0" }
 thiserror.workspace = true
+
+[dev-dependencies]
+expression-store = { path = "../expression-store", version = "0.1.0" }
 
 [lints]
 workspace = true

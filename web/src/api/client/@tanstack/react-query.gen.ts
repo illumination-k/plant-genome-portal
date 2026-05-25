@@ -3,8 +3,8 @@
 import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { assembly, assemblySequences, blastnJob, createBlastnJob, gene, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, type Options, refgetSequence, refgetServiceInfo, regionFeatures, taxon } from '../sdk.gen';
-import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, GeneData, GeneError, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, TaxonData, TaxonError, TaxonResponse2 } from '../types.gen';
+import { assembly, assemblySequences, blastnJob, createBlastnJob, expressionAssemblySamples, expressionBioproject, expressionBioprojectSamples, expressionBiosampleSamples, expressionGene, expressionMatrix, expressionSample, gene, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, type Options, refgetSequence, refgetServiceInfo, regionFeatures, taxon } from '../sdk.gen';
+import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, ExpressionAssemblySamplesData, ExpressionAssemblySamplesError, ExpressionAssemblySamplesResponse, ExpressionBioprojectData, ExpressionBioprojectError, ExpressionBioprojectResponse, ExpressionBioprojectSamplesData, ExpressionBioprojectSamplesError, ExpressionBioprojectSamplesResponse, ExpressionBiosampleSamplesData, ExpressionBiosampleSamplesError, ExpressionBiosampleSamplesResponse, ExpressionGeneData, ExpressionGeneError, ExpressionGeneResponse, ExpressionMatrixData, ExpressionMatrixError, ExpressionMatrixResponse2, ExpressionSampleData, ExpressionSampleError, ExpressionSampleResponse, GeneData, GeneError, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, TaxonData, TaxonError, TaxonResponse2 } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -219,6 +219,110 @@ export const refgetSequenceInfiniteOptions = (options: Options<RefgetSequenceDat
         return data;
     },
     queryKey: refgetSequenceInfiniteQueryKey(options)
+});
+
+export const expressionMatrixMutation = (options?: Partial<Options<ExpressionMatrixData>>): UseMutationOptions<ExpressionMatrixResponse2, ExpressionMatrixError, Options<ExpressionMatrixData>> => {
+    const mutationOptions: UseMutationOptions<ExpressionMatrixResponse2, ExpressionMatrixError, Options<ExpressionMatrixData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await expressionMatrix({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+export const expressionAssemblySamplesQueryKey = (options: Options<ExpressionAssemblySamplesData>) => createQueryKey('expressionAssemblySamples', options);
+
+export const expressionAssemblySamplesOptions = (options: Options<ExpressionAssemblySamplesData>) => queryOptions<ExpressionAssemblySamplesResponse, ExpressionAssemblySamplesError, ExpressionAssemblySamplesResponse, ReturnType<typeof expressionAssemblySamplesQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await expressionAssemblySamples({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: expressionAssemblySamplesQueryKey(options)
+});
+
+export const expressionBioprojectQueryKey = (options: Options<ExpressionBioprojectData>) => createQueryKey('expressionBioproject', options);
+
+export const expressionBioprojectOptions = (options: Options<ExpressionBioprojectData>) => queryOptions<ExpressionBioprojectResponse, ExpressionBioprojectError, ExpressionBioprojectResponse, ReturnType<typeof expressionBioprojectQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await expressionBioproject({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: expressionBioprojectQueryKey(options)
+});
+
+export const expressionBioprojectSamplesQueryKey = (options: Options<ExpressionBioprojectSamplesData>) => createQueryKey('expressionBioprojectSamples', options);
+
+export const expressionBioprojectSamplesOptions = (options: Options<ExpressionBioprojectSamplesData>) => queryOptions<ExpressionBioprojectSamplesResponse, ExpressionBioprojectSamplesError, ExpressionBioprojectSamplesResponse, ReturnType<typeof expressionBioprojectSamplesQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await expressionBioprojectSamples({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: expressionBioprojectSamplesQueryKey(options)
+});
+
+export const expressionBiosampleSamplesQueryKey = (options: Options<ExpressionBiosampleSamplesData>) => createQueryKey('expressionBiosampleSamples', options);
+
+export const expressionBiosampleSamplesOptions = (options: Options<ExpressionBiosampleSamplesData>) => queryOptions<ExpressionBiosampleSamplesResponse, ExpressionBiosampleSamplesError, ExpressionBiosampleSamplesResponse, ReturnType<typeof expressionBiosampleSamplesQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await expressionBiosampleSamples({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: expressionBiosampleSamplesQueryKey(options)
+});
+
+export const expressionGeneQueryKey = (options: Options<ExpressionGeneData>) => createQueryKey('expressionGene', options);
+
+export const expressionGeneOptions = (options: Options<ExpressionGeneData>) => queryOptions<ExpressionGeneResponse, ExpressionGeneError, ExpressionGeneResponse, ReturnType<typeof expressionGeneQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await expressionGene({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: expressionGeneQueryKey(options)
+});
+
+export const expressionSampleQueryKey = (options: Options<ExpressionSampleData>) => createQueryKey('expressionSample', options);
+
+export const expressionSampleOptions = (options: Options<ExpressionSampleData>) => queryOptions<ExpressionSampleResponse, ExpressionSampleError, ExpressionSampleResponse, ReturnType<typeof expressionSampleQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await expressionSample({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: expressionSampleQueryKey(options)
 });
 
 export const geneQueryKey = (options: Options<GeneData>) => createQueryKey('gene', options);

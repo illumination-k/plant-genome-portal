@@ -39,6 +39,15 @@ export type AssemblyAccession = string;
 
 export type AssemblySource = 'ncbi' | 'marpol_base' | 'tair' | 'phytozome' | 'community' | 'local';
 
+export type BioProjectResponse = {
+    accession: string;
+    attributes?: {
+        [key: string]: string;
+    };
+    description?: string | null;
+    title: string;
+};
+
 export type BlastnJobRequest = {
     assemblyAccession: string;
     evalue?: number | null;
@@ -83,6 +92,35 @@ export type Exon = {
     strand: Strand;
     transcript_id: TranscriptId;
 };
+
+export type ExpressionMatrixRequestBody = {
+    gene_ids: Array<string>;
+    runs: Array<string>;
+    unit: ExpressionUnit;
+};
+
+export type ExpressionMatrixResponse = {
+    assemblyAccession: string;
+    geneIds: Array<string>;
+    runs: Array<string>;
+    unit: ExpressionUnit;
+    values: Array<number>;
+};
+
+export type ExpressionMeasurementResponse = {
+    geneId: string;
+    run: string;
+    unit: ExpressionUnit;
+    value: number;
+};
+
+/**
+ * Unit in which an expression value is reported.
+ *
+ * The variants cover the common normalized and count-based units used by
+ * downstream pipelines (Salmon, Kallisto, featureCounts, DESeq2, edgeR, ...).
+ */
+export type ExpressionUnit = 'tpm' | 'fpkm' | 'rpkm' | 'cpm' | 'raw_count' | 'normalized_count';
 
 export type FunctionalAnnotation = (InterProAnnotation & {
     kind: 'inter_pro';
@@ -321,6 +359,29 @@ export type RefgetServiceInfo = {
     id: string;
     name: string;
     subsequence_limit?: number | null;
+};
+
+export type SampleResponse = {
+    assemblyAccession: string;
+    attributes?: {
+        [key: string]: string;
+    };
+    bioproject?: string | null;
+    biosample?: string | null;
+    condition?: string | null;
+    description?: string | null;
+    developmentalStage?: string | null;
+    experiment?: string | null;
+    instrumentModel?: string | null;
+    libraryLayout?: string | null;
+    libraryStrategy?: string | null;
+    platform?: string | null;
+    replicate?: number | null;
+    run: string;
+    study?: string | null;
+    tissue?: string | null;
+    title?: string | null;
+    treatment?: string | null;
 };
 
 export type Sequence = {
@@ -570,6 +631,261 @@ export type RefgetSequenceResponses = {
 };
 
 export type RefgetSequenceResponse = RefgetSequenceResponses[keyof RefgetSequenceResponses];
+
+export type ExpressionMatrixData = {
+    body: ExpressionMatrixRequestBody;
+    path: {
+        /**
+         * Assembly accession
+         */
+        accession: string;
+    };
+    query?: never;
+    url: '/v2/expression/accession/{accession}/matrix';
+};
+
+export type ExpressionMatrixErrors = {
+    /**
+     * Invalid request, unknown gene/run, or unsupported unit
+     */
+    400: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionMatrixError = ExpressionMatrixErrors[keyof ExpressionMatrixErrors];
+
+export type ExpressionMatrixResponses = {
+    /**
+     * Dense expression matrix for the requested genes × runs
+     */
+    200: ExpressionMatrixResponse;
+};
+
+export type ExpressionMatrixResponse2 = ExpressionMatrixResponses[keyof ExpressionMatrixResponses];
+
+export type ExpressionAssemblySamplesData = {
+    body?: never;
+    path: {
+        /**
+         * Assembly accession
+         */
+        accession: string;
+    };
+    query?: never;
+    url: '/v2/expression/accession/{accession}/samples';
+};
+
+export type ExpressionAssemblySamplesErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionAssemblySamplesError = ExpressionAssemblySamplesErrors[keyof ExpressionAssemblySamplesErrors];
+
+export type ExpressionAssemblySamplesResponses = {
+    /**
+     * Samples quantified against the assembly
+     */
+    200: Array<SampleResponse>;
+};
+
+export type ExpressionAssemblySamplesResponse = ExpressionAssemblySamplesResponses[keyof ExpressionAssemblySamplesResponses];
+
+export type ExpressionBioprojectData = {
+    body?: never;
+    path: {
+        /**
+         * BioProject accession
+         */
+        accession: string;
+    };
+    query?: never;
+    url: '/v2/expression/bioproject/{accession}';
+};
+
+export type ExpressionBioprojectErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * BioProject not found
+     */
+    404: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionBioprojectError = ExpressionBioprojectErrors[keyof ExpressionBioprojectErrors];
+
+export type ExpressionBioprojectResponses = {
+    /**
+     * BioProject metadata
+     */
+    200: BioProjectResponse;
+};
+
+export type ExpressionBioprojectResponse = ExpressionBioprojectResponses[keyof ExpressionBioprojectResponses];
+
+export type ExpressionBioprojectSamplesData = {
+    body?: never;
+    path: {
+        /**
+         * BioProject accession
+         */
+        accession: string;
+    };
+    query?: never;
+    url: '/v2/expression/bioproject/{accession}/samples';
+};
+
+export type ExpressionBioprojectSamplesErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionBioprojectSamplesError = ExpressionBioprojectSamplesErrors[keyof ExpressionBioprojectSamplesErrors];
+
+export type ExpressionBioprojectSamplesResponses = {
+    /**
+     * Samples in the BioProject
+     */
+    200: Array<SampleResponse>;
+};
+
+export type ExpressionBioprojectSamplesResponse = ExpressionBioprojectSamplesResponses[keyof ExpressionBioprojectSamplesResponses];
+
+export type ExpressionBiosampleSamplesData = {
+    body?: never;
+    path: {
+        /**
+         * BioSample accession
+         */
+        accession: string;
+    };
+    query?: never;
+    url: '/v2/expression/biosample/{accession}/samples';
+};
+
+export type ExpressionBiosampleSamplesErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionBiosampleSamplesError = ExpressionBiosampleSamplesErrors[keyof ExpressionBiosampleSamplesErrors];
+
+export type ExpressionBiosampleSamplesResponses = {
+    /**
+     * Samples sequenced from the BioSample
+     */
+    200: Array<SampleResponse>;
+};
+
+export type ExpressionBiosampleSamplesResponse = ExpressionBiosampleSamplesResponses[keyof ExpressionBiosampleSamplesResponses];
+
+export type ExpressionGeneData = {
+    body?: never;
+    path: {
+        /**
+         * Gene identifier
+         */
+        gene_id: string;
+    };
+    query?: {
+        unit?: null | ExpressionUnit;
+        study?: string | null;
+        bioproject?: string | null;
+        /**
+         * Comma-separated SRA Run accessions; restricts the result to those runs.
+         */
+        runs?: string | null;
+        limit?: number | null;
+    };
+    url: '/v2/expression/gene/{gene_id}';
+};
+
+export type ExpressionGeneErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionGeneError = ExpressionGeneErrors[keyof ExpressionGeneErrors];
+
+export type ExpressionGeneResponses = {
+    /**
+     * Expression measurements for the gene
+     */
+    200: Array<ExpressionMeasurementResponse>;
+};
+
+export type ExpressionGeneResponse = ExpressionGeneResponses[keyof ExpressionGeneResponses];
+
+export type ExpressionSampleData = {
+    body?: never;
+    path: {
+        /**
+         * SRA Run accession
+         */
+        run: string;
+    };
+    query?: never;
+    url: '/v2/expression/sample/{run}';
+};
+
+export type ExpressionSampleErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Sample not found
+     */
+    404: ErrorResponse;
+    /**
+     * Expression data is not configured
+     */
+    503: ErrorResponse;
+};
+
+export type ExpressionSampleError = ExpressionSampleErrors[keyof ExpressionSampleErrors];
+
+export type ExpressionSampleResponses = {
+    /**
+     * Sample metadata
+     */
+    200: SampleResponse;
+};
+
+export type ExpressionSampleResponse = ExpressionSampleResponses[keyof ExpressionSampleResponses];
 
 export type GeneData = {
     body?: never;

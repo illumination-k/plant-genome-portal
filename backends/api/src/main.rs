@@ -6,10 +6,15 @@ use axum::{
     routing::{get, post},
 };
 use clap::{Parser, Subcommand};
+use expression_core::{
+    BioProject, ExpressionMatrix, ExpressionMeasurement, ExpressionUnit, Sample,
+};
+use expression_store::FileExpressionRepository;
 use genome_core::{AssemblyAccession, Gene, GeneSearch, Sequence, Strand, TaxId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use service::{
-    AnnotatedHomologySearchResult, GenomeService, InMemoryJobManager, JobExecutor, JobManager,
+    AnnotatedHomologySearchResult, ExpressionMatrixRequest, ExpressionService,
+    GeneExpressionRequest, GenomeService, InMemoryJobManager, JobExecutor, JobManager,
     JobManagerError, JobRecord, JobStatus, ServiceError, WorkerJob,
 };
 use std::collections::BTreeMap;
@@ -24,11 +29,13 @@ use tracing_subscriber::EnvFilter;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
 type AppService = GenomeService<FileGenomeRepository>;
+type AppExpressionService = ExpressionService<FileExpressionRepository>;
 type BlastJobManager = InMemoryJobManager<BlastnJobInput, AnnotatedHomologySearchResult>;
 
 #[derive(Clone)]
 struct AppState {
     service: AppService,
+    expression: Option<AppExpressionService>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
 }
@@ -58,6 +65,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Some(path), false) => Some(FastaReference::from_path(path)?),
     };
     let service = GenomeService::new(repository, reference);
+    let expression = match config.expression_snapshot.as_ref() {
+        Some(path) => Some(ExpressionService::new(
+            FileExpressionRepository::from_snapshot_path(path)?,
+        )),
+        None => None,
+    };
     let blast_jobs = config.blast_db_prefix.clone().map(|blast_db_prefix| {
         InMemoryJobManager::new(BlastWorkerCommand {
             worker_bin: config.blast_worker_bin.clone(),
@@ -72,11 +85,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(
         bind = %config.bind,
         snapshot = %snapshot.display(),
+        expression_snapshot = ?config.expression_snapshot,
         "starting api"
     );
     axum::serve(
         listener,
-        router(service, default_assembly_accession, blast_jobs),
+        router(service, expression, default_assembly_accession, blast_jobs),
     )
     .await?;
 
@@ -109,6 +123,7 @@ fn write_openapi_schema(output: Option<&FsPath>) -> Result<(), Box<dyn std::erro
 
 fn router(
     service: AppService,
+    expression: Option<AppExpressionService>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
 ) -> Router {
@@ -139,11 +154,34 @@ fn router(
             "/v2/genome/accession/{accession}/region/{region}/features",
             get(region_features),
         )
+        .route("/v2/expression/gene/{gene_id}", get(expression_gene))
+        .route("/v2/expression/sample/{run}", get(expression_sample))
+        .route(
+            "/v2/expression/bioproject/{accession}",
+            get(expression_bioproject),
+        )
+        .route(
+            "/v2/expression/bioproject/{accession}/samples",
+            get(expression_bioproject_samples),
+        )
+        .route(
+            "/v2/expression/biosample/{accession}/samples",
+            get(expression_biosample_samples),
+        )
+        .route(
+            "/v2/expression/accession/{accession}/samples",
+            get(expression_assembly_samples),
+        )
+        .route(
+            "/v2/expression/accession/{accession}/matrix",
+            post(expression_matrix),
+        )
         .route("/sequence/service-info", get(refget_service_info))
         .route("/sequence/{checksum}", get(refget_sequence))
         .layer(CorsLayer::permissive())
         .with_state(AppState {
             service,
+            expression,
             default_assembly_accession,
             blast_jobs,
         })
@@ -408,6 +446,166 @@ async fn region_features(
     Ok(Json(state.service.features_in_region(&accession, &region)?))
 }
 
+fn expression_service(state: &AppState) -> Result<&AppExpressionService, ApiError> {
+    state.expression.as_ref().ok_or_else(|| {
+        ApiError::ExpressionUnavailable("expression data is not configured".to_owned())
+    })
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/expression/gene/{gene_id}",
+    params(
+        ("gene_id" = String, Path, description = "Gene identifier"),
+        GeneExpressionQuery,
+    ),
+    responses(
+        (status = 200, description = "Expression measurements for the gene", body = Vec<ExpressionMeasurementResponse>),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_gene(
+    State(state): State<AppState>,
+    Path(gene_id): Path<String>,
+    Query(query): Query<GeneExpressionQuery>,
+) -> Result<Json<Vec<ExpressionMeasurementResponse>>, ApiError> {
+    let service = expression_service(&state)?;
+    let measurements = service.gene_expression(&gene_id, query.into_request())?;
+    Ok(Json(measurements.into_iter().map(Into::into).collect()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/expression/sample/{run}",
+    params(("run" = String, Path, description = "SRA Run accession")),
+    responses(
+        (status = 200, description = "Sample metadata", body = SampleResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 404, description = "Sample not found", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_sample(
+    State(state): State<AppState>,
+    Path(run): Path<String>,
+) -> Result<Json<SampleResponse>, ApiError> {
+    let service = expression_service(&state)?;
+    Ok(Json(service.sample(&run)?.into()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/expression/bioproject/{accession}",
+    params(("accession" = String, Path, description = "BioProject accession")),
+    responses(
+        (status = 200, description = "BioProject metadata", body = BioProjectResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 404, description = "BioProject not found", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_bioproject(
+    State(state): State<AppState>,
+    Path(accession): Path<String>,
+) -> Result<Json<BioProjectResponse>, ApiError> {
+    let service = expression_service(&state)?;
+    Ok(Json(service.bioproject(&accession)?.into()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/expression/bioproject/{accession}/samples",
+    params(("accession" = String, Path, description = "BioProject accession")),
+    responses(
+        (status = 200, description = "Samples in the BioProject", body = Vec<SampleResponse>),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_bioproject_samples(
+    State(state): State<AppState>,
+    Path(accession): Path<String>,
+) -> Result<Json<Vec<SampleResponse>>, ApiError> {
+    let service = expression_service(&state)?;
+    Ok(Json(
+        service
+            .samples_for_bioproject(&accession)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/expression/biosample/{accession}/samples",
+    params(("accession" = String, Path, description = "BioSample accession")),
+    responses(
+        (status = 200, description = "Samples sequenced from the BioSample", body = Vec<SampleResponse>),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_biosample_samples(
+    State(state): State<AppState>,
+    Path(accession): Path<String>,
+) -> Result<Json<Vec<SampleResponse>>, ApiError> {
+    let service = expression_service(&state)?;
+    Ok(Json(
+        service
+            .samples_for_biosample(&accession)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/expression/accession/{accession}/samples",
+    params(("accession" = String, Path, description = "Assembly accession")),
+    responses(
+        (status = 200, description = "Samples quantified against the assembly", body = Vec<SampleResponse>),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_assembly_samples(
+    State(state): State<AppState>,
+    Path(accession): Path<String>,
+) -> Result<Json<Vec<SampleResponse>>, ApiError> {
+    let service = expression_service(&state)?;
+    Ok(Json(
+        service
+            .samples_for_assembly(&accession)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/v2/expression/accession/{accession}/matrix",
+    params(("accession" = String, Path, description = "Assembly accession")),
+    request_body = ExpressionMatrixRequestBody,
+    responses(
+        (status = 200, description = "Dense expression matrix for the requested genes \u{00d7} runs", body = ExpressionMatrixResponse),
+        (status = 400, description = "Invalid request, unknown gene/run, or unsupported unit", body = ErrorResponse),
+        (status = 503, description = "Expression data is not configured", body = ErrorResponse),
+    )
+)]
+async fn expression_matrix(
+    State(state): State<AppState>,
+    Path(accession): Path<String>,
+    Json(request): Json<ExpressionMatrixRequestBody>,
+) -> Result<Json<ExpressionMatrixResponse>, ApiError> {
+    let service = expression_service(&state)?;
+    let matrix = service.expression_matrix(&accession, request.into_request())?;
+    Ok(Json(matrix.into()))
+}
+
 #[utoipa::path(
     get,
     path = "/sequence/service-info",
@@ -455,6 +653,10 @@ struct Config {
     bind: SocketAddr,
     #[arg(long)]
     snapshot: Option<PathBuf>,
+    /// Path to an expression snapshot JSON. When omitted, the
+    /// `/v2/expression/*` endpoints return 503.
+    #[arg(long)]
+    expression_snapshot: Option<PathBuf>,
     #[arg(long, conflicts_with = "no_fasta")]
     fasta: Option<PathBuf>,
     #[arg(long)]
@@ -495,6 +697,13 @@ enum Command {
         create_blastn_job,
         blastn_job,
         region_features,
+        expression_gene,
+        expression_sample,
+        expression_bioproject,
+        expression_bioproject_samples,
+        expression_biosample_samples,
+        expression_assembly_samples,
+        expression_matrix,
         refget_service_info,
         refget_sequence,
     ),
@@ -502,8 +711,13 @@ enum Command {
         ErrorResponse,
         AnnotatedHomologyHitResponse,
         AnnotatedHomologySearchResultResponse,
+        BioProjectResponse,
         BlastnJobRequest,
         BlastnJobResponse,
+        ExpressionMatrixRequestBody,
+        ExpressionMatrixResponse,
+        ExpressionMeasurementResponse,
+        SampleResponse,
         GeneSearchQuery,
         HealthResponse,
         JBrowseAssembly,
@@ -524,6 +738,7 @@ enum Command {
         RefgetQuery,
         RefgetServiceInfo,
         TaxonResponse,
+        expression_core::ExpressionUnit,
         genome_core::AnnotationEvidence,
         genome_core::AnnotationSource,
         genome_core::Assembly,
@@ -1095,6 +1310,7 @@ enum ApiError {
     Service(ServiceError),
     Job(JobManagerError),
     BlastUnavailable(String),
+    ExpressionUnavailable(String),
 }
 
 impl From<ServiceError> for ApiError {
@@ -1116,20 +1332,190 @@ impl IntoResponse for ApiError {
                 ServiceError::TaxonNotFound(_)
                 | ServiceError::AssemblyNotFound(_)
                 | ServiceError::GeneNotFound(_)
-                | ServiceError::SequenceNotFound(_),
+                | ServiceError::SequenceNotFound(_)
+                | ServiceError::SampleNotFound(_)
+                | ServiceError::BioProjectNotFound(_),
             )
             | Self::Job(JobManagerError::JobNotFound(_)) => StatusCode::NOT_FOUND,
             Self::Service(ServiceError::InvalidRequest(_)) => StatusCode::BAD_REQUEST,
             Self::Job(JobManagerError::SubmissionFailed(_)) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::BlastUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::BlastUnavailable(_) | Self::ExpressionUnavailable(_) => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
         };
         let error = match self {
             Self::Service(error) => error.to_string(),
             Self::Job(error) => error.to_string(),
-            Self::BlastUnavailable(error) => error,
+            Self::BlastUnavailable(error) | Self::ExpressionUnavailable(error) => error,
         };
 
         (status, Json(ErrorResponse { error })).into_response()
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+struct GeneExpressionQuery {
+    unit: Option<ExpressionUnit>,
+    study: Option<String>,
+    bioproject: Option<String>,
+    /// Comma-separated SRA Run accessions; restricts the result to those runs.
+    runs: Option<String>,
+    limit: Option<usize>,
+}
+
+impl GeneExpressionQuery {
+    fn into_request(self) -> GeneExpressionRequest {
+        GeneExpressionRequest {
+            runs: self.runs.map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            }),
+            study: self.study,
+            bioproject: self.bioproject,
+            unit: self.unit,
+            limit: self.limit,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct ExpressionMatrixRequestBody {
+    gene_ids: Vec<String>,
+    runs: Vec<String>,
+    unit: ExpressionUnit,
+}
+
+impl ExpressionMatrixRequestBody {
+    fn into_request(self) -> ExpressionMatrixRequest {
+        ExpressionMatrixRequest {
+            gene_ids: self.gene_ids,
+            runs: self.runs,
+            unit: self.unit,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExpressionMeasurementResponse {
+    gene_id: String,
+    run: String,
+    value: f64,
+    unit: ExpressionUnit,
+}
+
+impl From<ExpressionMeasurement> for ExpressionMeasurementResponse {
+    fn from(measurement: ExpressionMeasurement) -> Self {
+        Self {
+            gene_id: measurement.gene_id.into_string(),
+            run: measurement.run.into_string(),
+            value: measurement.value,
+            unit: measurement.unit,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct SampleResponse {
+    run: String,
+    experiment: Option<String>,
+    study: Option<String>,
+    biosample: Option<String>,
+    bioproject: Option<String>,
+    assembly_accession: String,
+    title: Option<String>,
+    tissue: Option<String>,
+    developmental_stage: Option<String>,
+    treatment: Option<String>,
+    condition: Option<String>,
+    replicate: Option<u32>,
+    library_strategy: Option<String>,
+    library_layout: Option<String>,
+    platform: Option<String>,
+    instrument_model: Option<String>,
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    attributes: BTreeMap<String, String>,
+}
+
+impl From<Sample> for SampleResponse {
+    fn from(sample: Sample) -> Self {
+        Self {
+            run: sample.run.into_string(),
+            experiment: sample.experiment.map(|value| value.into_string()),
+            study: sample.study.map(|value| value.into_string()),
+            biosample: sample.biosample.map(|value| value.into_string()),
+            bioproject: sample.bioproject.map(|value| value.into_string()),
+            assembly_accession: sample.assembly_accession.into_string(),
+            title: sample.title,
+            tissue: sample.tissue,
+            developmental_stage: sample.developmental_stage,
+            treatment: sample.treatment,
+            condition: sample.condition,
+            replicate: sample.replicate,
+            library_strategy: sample.library_strategy,
+            library_layout: sample.library_layout,
+            platform: sample.platform,
+            instrument_model: sample.instrument_model,
+            description: sample.description,
+            attributes: sample.attributes,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct BioProjectResponse {
+    accession: String,
+    title: String,
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    attributes: BTreeMap<String, String>,
+}
+
+impl From<BioProject> for BioProjectResponse {
+    fn from(project: BioProject) -> Self {
+        Self {
+            accession: project.accession.into_string(),
+            title: project.title,
+            description: project.description,
+            attributes: project.attributes,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExpressionMatrixResponse {
+    assembly_accession: String,
+    unit: ExpressionUnit,
+    gene_ids: Vec<String>,
+    runs: Vec<String>,
+    values: Vec<f64>,
+}
+
+impl From<ExpressionMatrix> for ExpressionMatrixResponse {
+    fn from(matrix: ExpressionMatrix) -> Self {
+        Self {
+            assembly_accession: matrix.assembly_accession.into_string(),
+            unit: matrix.unit,
+            gene_ids: matrix
+                .gene_ids
+                .into_iter()
+                .map(|gene_id| gene_id.into_string())
+                .collect(),
+            runs: matrix
+                .runs
+                .into_iter()
+                .map(|run| run.into_string())
+                .collect(),
+            values: matrix.values,
+        }
     }
 }
 

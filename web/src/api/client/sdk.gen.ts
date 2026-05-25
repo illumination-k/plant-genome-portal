@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AssemblyData, AssemblyErrors, AssemblyResponses, AssemblySequencesData, AssemblySequencesErrors, AssemblySequencesResponses, BlastnJobData, BlastnJobErrors, BlastnJobResponses, CreateBlastnJobData, CreateBlastnJobErrors, CreateBlastnJobResponses, GeneData, GeneErrors, GeneResponses, GeneSearchData, GeneSearchResponses, HealthData, HealthResponses, JbrowseChromSizesData, JbrowseChromSizesErrors, JbrowseChromSizesResponses, JbrowseConfigData, JbrowseConfigErrors, JbrowseConfigResponses, JbrowseDefaultConfigData, JbrowseDefaultConfigErrors, JbrowseDefaultConfigResponses, JbrowseFeaturesData, JbrowseFeaturesErrors, JbrowseFeaturesResponses, RefgetSequenceData, RefgetSequenceErrors, RefgetSequenceResponses, RefgetServiceInfoData, RefgetServiceInfoResponses, RegionFeaturesData, RegionFeaturesErrors, RegionFeaturesResponses, TaxonData, TaxonErrors, TaxonResponses } from './types.gen';
+import type { AssemblyData, AssemblyErrors, AssemblyResponses, AssemblySequencesData, AssemblySequencesErrors, AssemblySequencesResponses, BlastnJobData, BlastnJobErrors, BlastnJobResponses, CreateBlastnJobData, CreateBlastnJobErrors, CreateBlastnJobResponses, ExpressionAssemblySamplesData, ExpressionAssemblySamplesErrors, ExpressionAssemblySamplesResponses, ExpressionBioprojectData, ExpressionBioprojectErrors, ExpressionBioprojectResponses, ExpressionBioprojectSamplesData, ExpressionBioprojectSamplesErrors, ExpressionBioprojectSamplesResponses, ExpressionBiosampleSamplesData, ExpressionBiosampleSamplesErrors, ExpressionBiosampleSamplesResponses, ExpressionGeneData, ExpressionGeneErrors, ExpressionGeneResponses, ExpressionMatrixData, ExpressionMatrixErrors, ExpressionMatrixResponses, ExpressionSampleData, ExpressionSampleErrors, ExpressionSampleResponses, GeneData, GeneErrors, GeneResponses, GeneSearchData, GeneSearchResponses, HealthData, HealthResponses, JbrowseChromSizesData, JbrowseChromSizesErrors, JbrowseChromSizesResponses, JbrowseConfigData, JbrowseConfigErrors, JbrowseConfigResponses, JbrowseDefaultConfigData, JbrowseDefaultConfigErrors, JbrowseDefaultConfigResponses, JbrowseFeaturesData, JbrowseFeaturesErrors, JbrowseFeaturesResponses, RefgetSequenceData, RefgetSequenceErrors, RefgetSequenceResponses, RefgetServiceInfoData, RefgetServiceInfoResponses, RegionFeaturesData, RegionFeaturesErrors, RegionFeaturesResponses, TaxonData, TaxonErrors, TaxonResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -31,6 +31,27 @@ export const jbrowseConfig = <ThrowOnError extends boolean = true>(options: Opti
 export const refgetServiceInfo = <ThrowOnError extends boolean = true>(options?: Options<RefgetServiceInfoData, ThrowOnError>) => (options?.client ?? client).get<RefgetServiceInfoResponses, unknown, ThrowOnError>({ url: '/sequence/service-info', ...options });
 
 export const refgetSequence = <ThrowOnError extends boolean = true>(options: Options<RefgetSequenceData, ThrowOnError>) => (options.client ?? client).get<RefgetSequenceResponses, RefgetSequenceErrors, ThrowOnError>({ url: '/sequence/{checksum}', ...options });
+
+export const expressionMatrix = <ThrowOnError extends boolean = true>(options: Options<ExpressionMatrixData, ThrowOnError>) => (options.client ?? client).post<ExpressionMatrixResponses, ExpressionMatrixErrors, ThrowOnError>({
+    url: '/v2/expression/accession/{accession}/matrix',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const expressionAssemblySamples = <ThrowOnError extends boolean = true>(options: Options<ExpressionAssemblySamplesData, ThrowOnError>) => (options.client ?? client).get<ExpressionAssemblySamplesResponses, ExpressionAssemblySamplesErrors, ThrowOnError>({ url: '/v2/expression/accession/{accession}/samples', ...options });
+
+export const expressionBioproject = <ThrowOnError extends boolean = true>(options: Options<ExpressionBioprojectData, ThrowOnError>) => (options.client ?? client).get<ExpressionBioprojectResponses, ExpressionBioprojectErrors, ThrowOnError>({ url: '/v2/expression/bioproject/{accession}', ...options });
+
+export const expressionBioprojectSamples = <ThrowOnError extends boolean = true>(options: Options<ExpressionBioprojectSamplesData, ThrowOnError>) => (options.client ?? client).get<ExpressionBioprojectSamplesResponses, ExpressionBioprojectSamplesErrors, ThrowOnError>({ url: '/v2/expression/bioproject/{accession}/samples', ...options });
+
+export const expressionBiosampleSamples = <ThrowOnError extends boolean = true>(options: Options<ExpressionBiosampleSamplesData, ThrowOnError>) => (options.client ?? client).get<ExpressionBiosampleSamplesResponses, ExpressionBiosampleSamplesErrors, ThrowOnError>({ url: '/v2/expression/biosample/{accession}/samples', ...options });
+
+export const expressionGene = <ThrowOnError extends boolean = true>(options: Options<ExpressionGeneData, ThrowOnError>) => (options.client ?? client).get<ExpressionGeneResponses, ExpressionGeneErrors, ThrowOnError>({ url: '/v2/expression/gene/{gene_id}', ...options });
+
+export const expressionSample = <ThrowOnError extends boolean = true>(options: Options<ExpressionSampleData, ThrowOnError>) => (options.client ?? client).get<ExpressionSampleResponses, ExpressionSampleErrors, ThrowOnError>({ url: '/v2/expression/sample/{run}', ...options });
 
 export const gene = <ThrowOnError extends boolean = true>(options: Options<GeneData, ThrowOnError>) => (options.client ?? client).get<GeneResponses, GeneErrors, ThrowOnError>({ url: '/v2/gene/id/{gene_id}', ...options });
 

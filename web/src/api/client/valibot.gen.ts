@@ -29,6 +29,13 @@ export const vAssemblySource = v.picklist([
     'local'
 ]);
 
+export const vBioProjectResponse = v.object({
+    accession: v.string(),
+    attributes: v.optional(v.record(v.string(), v.string())),
+    description: v.nullish(v.string()),
+    title: v.string()
+});
+
 export const vBlastnJobRequest = v.object({
     assemblyAccession: v.string(),
     evalue: v.nullish(v.number()),
@@ -39,6 +46,42 @@ export const vBlastnJobRequest = v.object({
 
 export const vErrorResponse = v.object({
     error: v.string()
+});
+
+/**
+ * Unit in which an expression value is reported.
+ *
+ * The variants cover the common normalized and count-based units used by
+ * downstream pipelines (Salmon, Kallisto, featureCounts, DESeq2, edgeR, ...).
+ */
+export const vExpressionUnit = v.picklist([
+    'tpm',
+    'fpkm',
+    'rpkm',
+    'cpm',
+    'raw_count',
+    'normalized_count'
+]);
+
+export const vExpressionMatrixRequestBody = v.object({
+    gene_ids: v.array(v.string()),
+    runs: v.array(v.string()),
+    unit: vExpressionUnit
+});
+
+export const vExpressionMatrixResponse = v.object({
+    assemblyAccession: v.string(),
+    geneIds: v.array(v.string()),
+    runs: v.array(v.string()),
+    unit: vExpressionUnit,
+    values: v.array(v.number())
+});
+
+export const vExpressionMeasurementResponse = v.object({
+    geneId: v.string(),
+    run: v.string(),
+    unit: vExpressionUnit,
+    value: v.number()
 });
 
 export const vGeneId = v.string();
@@ -288,6 +331,27 @@ export const vRefgetServiceInfo = v.object({
     ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')))
 });
 
+export const vSampleResponse = v.object({
+    assemblyAccession: v.string(),
+    attributes: v.optional(v.record(v.string(), v.string())),
+    bioproject: v.nullish(v.string()),
+    biosample: v.nullish(v.string()),
+    condition: v.nullish(v.string()),
+    description: v.nullish(v.string()),
+    developmentalStage: v.nullish(v.string()),
+    experiment: v.nullish(v.string()),
+    instrumentModel: v.nullish(v.string()),
+    libraryLayout: v.nullish(v.string()),
+    libraryStrategy: v.nullish(v.string()),
+    platform: v.nullish(v.string()),
+    replicate: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647'))),
+    run: v.string(),
+    study: v.nullish(v.string()),
+    tissue: v.nullish(v.string()),
+    title: v.nullish(v.string()),
+    treatment: v.nullish(v.string())
+});
+
 export const vSequenceName = v.string();
 
 export const vClosedRegion = v.object({
@@ -525,6 +589,79 @@ export const vRefgetSequenceQuery = v.object({
  * Reference sequence
  */
 export const vRefgetSequenceResponse = v.string();
+
+export const vExpressionMatrixBody = vExpressionMatrixRequestBody;
+
+export const vExpressionMatrixPath = v.object({
+    accession: v.string()
+});
+
+/**
+ * Dense expression matrix for the requested genes × runs
+ */
+export const vExpressionMatrixResponse2 = vExpressionMatrixResponse;
+
+export const vExpressionAssemblySamplesPath = v.object({
+    accession: v.string()
+});
+
+/**
+ * Samples quantified against the assembly
+ */
+export const vExpressionAssemblySamplesResponse = v.array(vSampleResponse);
+
+export const vExpressionBioprojectPath = v.object({
+    accession: v.string()
+});
+
+/**
+ * BioProject metadata
+ */
+export const vExpressionBioprojectResponse = vBioProjectResponse;
+
+export const vExpressionBioprojectSamplesPath = v.object({
+    accession: v.string()
+});
+
+/**
+ * Samples in the BioProject
+ */
+export const vExpressionBioprojectSamplesResponse = v.array(vSampleResponse);
+
+export const vExpressionBiosampleSamplesPath = v.object({
+    accession: v.string()
+});
+
+/**
+ * Samples sequenced from the BioSample
+ */
+export const vExpressionBiosampleSamplesResponse = v.array(vSampleResponse);
+
+export const vExpressionGenePath = v.object({
+    gene_id: v.string()
+});
+
+export const vExpressionGeneQuery = v.object({
+    unit: v.nullish(vExpressionUnit),
+    study: v.nullish(v.string()),
+    bioproject: v.nullish(v.string()),
+    runs: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
+/**
+ * Expression measurements for the gene
+ */
+export const vExpressionGeneResponse = v.array(vExpressionMeasurementResponse);
+
+export const vExpressionSamplePath = v.object({
+    run: v.string()
+});
+
+/**
+ * Sample metadata
+ */
+export const vExpressionSampleResponse = vSampleResponse;
 
 export const vGenePath = v.object({
     gene_id: v.string()

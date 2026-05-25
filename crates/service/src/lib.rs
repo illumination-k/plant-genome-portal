@@ -1,3 +1,4 @@
+mod expression;
 mod homology;
 mod job;
 
@@ -9,6 +10,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use storage::FastaReference;
 
+pub use expression::{ExpressionMatrixRequest, ExpressionService, GeneExpressionRequest};
 pub use homology::{
     AnnotatedHomologyHit, AnnotatedHomologySearchResult, HomologyAnnotationRepository,
     HomologyService,
@@ -28,6 +30,10 @@ pub enum ServiceError {
     GeneNotFound(String),
     #[error("sequence not found: {0}")]
     SequenceNotFound(String),
+    #[error("sample not found: {0}")]
+    SampleNotFound(String),
+    #[error("bioproject not found: {0}")]
+    BioProjectNotFound(String),
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 }
