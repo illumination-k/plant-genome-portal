@@ -1,3 +1,6 @@
+mod refget;
+mod sequence;
+
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -136,11 +139,15 @@ fn router(
         .route("/v2/tools/blastn/jobs", post(create_blastn_job))
         .route("/v2/tools/blastn/jobs/{job_id}", get(blastn_job))
         .route(
+            "/v2/genome/accession/{accession}/sequence/{sequence_name}",
+            get(sequence::segments),
+        )
+        .route(
             "/v2/genome/accession/{accession}/region/{region}/features",
             get(region_features),
         )
-        .route("/sequence/service-info", get(refget_service_info))
-        .route("/sequence/{checksum}", get(refget_sequence))
+        .route("/sequence/service-info", get(refget::service_info))
+        .route("/sequence/{checksum}", get(refget::sequence))
         .layer(CorsLayer::permissive())
         .with_state(AppState {
             service,
@@ -408,43 +415,6 @@ async fn region_features(
     Ok(Json(state.service.features_in_region(&accession, &region)?))
 }
 
-#[utoipa::path(
-    get,
-    path = "/sequence/service-info",
-    responses((status = 200, description = "refget service info", body = RefgetServiceInfo))
-)]
-async fn refget_service_info() -> Json<RefgetServiceInfo> {
-    Json(RefgetServiceInfo {
-        id: "plant-genome-portal-refget".to_owned(),
-        name: "Plant Genome Portal refget".to_owned(),
-        circular_supported: false,
-        subsequence_limit: None,
-    })
-}
-
-#[utoipa::path(
-    get,
-    path = "/sequence/{checksum}",
-    params(
-        ("checksum" = String, Path, description = "refget checksum"),
-        RefgetQuery,
-    ),
-    responses(
-        (status = 200, description = "Reference sequence", body = String),
-        (status = 404, description = "Sequence not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn refget_sequence(
-    State(state): State<AppState>,
-    Path(checksum): Path<String>,
-    Query(query): Query<RefgetQuery>,
-) -> Result<String, ApiError> {
-    Ok(state
-        .service
-        .refget_sequence(&checksum, query.start, query.end)?)
-}
-
 #[derive(Debug, Parser)]
 #[command(name = "api")]
 #[command(about = "Plant Genome Portal HTTP API")]
@@ -494,9 +464,10 @@ enum Command {
         gene_search,
         create_blastn_job,
         blastn_job,
+        sequence::segments,
         region_features,
-        refget_service_info,
-        refget_sequence,
+        refget::service_info,
+        refget::sequence,
     ),
     components(schemas(
         ErrorResponse,
@@ -521,8 +492,10 @@ enum Command {
         JBrowseTrack,
         JBrowseUriLocation,
         JobStatusResponse,
-        RefgetQuery,
-        RefgetServiceInfo,
+        refget::RefgetQuery,
+        refget::RefgetServiceInfo,
+        sequence::SequenceOutputFormat,
+        sequence::SequenceSegmentsQuery,
         TaxonResponse,
         genome_core::AnnotationEvidence,
         genome_core::AnnotationSource,
@@ -936,20 +909,6 @@ impl GeneSearchQuery {
             limit: self.limit,
         }
     }
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-struct RefgetServiceInfo {
-    id: String,
-    name: String,
-    circular_supported: bool,
-    subsequence_limit: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, IntoParams, ToSchema)]
-struct RefgetQuery {
-    start: Option<u64>,
-    end: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]

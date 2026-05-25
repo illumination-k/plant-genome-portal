@@ -2,10 +2,8 @@
  * Typography — see web/design.md §3.
  *
  * Fonts are loaded from Google Fonts (Inter, JetBrains Mono, Noto Sans
- * JP) — preload links live in index.html so the FOUT is minimal.
+ * JP) from index.html so CSS imports remain ordered for Tailwind/Vite.
  */
-
-@import url("https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600;700&display=swap");
 
 :root {
   --font-sans:

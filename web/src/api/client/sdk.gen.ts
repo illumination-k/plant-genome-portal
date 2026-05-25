@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AssemblyData, AssemblyErrors, AssemblyResponses, AssemblySequencesData, AssemblySequencesErrors, AssemblySequencesResponses, BlastnJobData, BlastnJobErrors, BlastnJobResponses, CreateBlastnJobData, CreateBlastnJobErrors, CreateBlastnJobResponses, GeneData, GeneErrors, GeneResponses, GeneSearchData, GeneSearchResponses, HealthData, HealthResponses, JbrowseChromSizesData, JbrowseChromSizesErrors, JbrowseChromSizesResponses, JbrowseConfigData, JbrowseConfigErrors, JbrowseConfigResponses, JbrowseDefaultConfigData, JbrowseDefaultConfigErrors, JbrowseDefaultConfigResponses, JbrowseFeaturesData, JbrowseFeaturesErrors, JbrowseFeaturesResponses, RefgetSequenceData, RefgetSequenceErrors, RefgetSequenceResponses, RefgetServiceInfoData, RefgetServiceInfoResponses, RegionFeaturesData, RegionFeaturesErrors, RegionFeaturesResponses, TaxonData, TaxonErrors, TaxonResponses } from './types.gen';
+import type { AssemblyData, AssemblyErrors, AssemblyResponses, AssemblySequencesData, AssemblySequencesErrors, AssemblySequencesResponses, BlastnJobData, BlastnJobErrors, BlastnJobResponses, CreateBlastnJobData, CreateBlastnJobErrors, CreateBlastnJobResponses, GeneData, GeneErrors, GeneResponses, GeneSearchData, GeneSearchResponses, HealthData, HealthResponses, JbrowseChromSizesData, JbrowseChromSizesErrors, JbrowseChromSizesResponses, JbrowseConfigData, JbrowseConfigErrors, JbrowseConfigResponses, JbrowseDefaultConfigData, JbrowseDefaultConfigErrors, JbrowseDefaultConfigResponses, JbrowseFeaturesData, JbrowseFeaturesErrors, JbrowseFeaturesResponses, RefgetSequenceData, RefgetSequenceErrors, RefgetSequenceResponses, RefgetServiceInfoData, RefgetServiceInfoResponses, RegionFeaturesData, RegionFeaturesErrors, RegionFeaturesResponses, SequenceSegmentsData, SequenceSegmentsErrors, SequenceSegmentsResponses, TaxonData, TaxonErrors, TaxonResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -39,6 +39,8 @@ export const geneSearch = <ThrowOnError extends boolean = true>(options?: Option
 export const assembly = <ThrowOnError extends boolean = true>(options: Options<AssemblyData, ThrowOnError>) => (options.client ?? client).get<AssemblyResponses, AssemblyErrors, ThrowOnError>({ url: '/v2/genome/accession/{accession}', ...options });
 
 export const regionFeatures = <ThrowOnError extends boolean = true>(options: Options<RegionFeaturesData, ThrowOnError>) => (options.client ?? client).get<RegionFeaturesResponses, RegionFeaturesErrors, ThrowOnError>({ url: '/v2/genome/accession/{accession}/region/{region}/features', ...options });
+
+export const sequenceSegments = <ThrowOnError extends boolean = true>(options: Options<SequenceSegmentsData, ThrowOnError>) => (options.client ?? client).get<SequenceSegmentsResponses, SequenceSegmentsErrors, ThrowOnError>({ url: '/v2/genome/accession/{accession}/sequence/{sequence_name}', ...options });
 
 export const assemblySequences = <ThrowOnError extends boolean = true>(options: Options<AssemblySequencesData, ThrowOnError>) => (options.client ?? client).get<AssemblySequencesResponses, AssemblySequencesErrors, ThrowOnError>({ url: '/v2/genome/accession/{accession}/sequences', ...options });
 

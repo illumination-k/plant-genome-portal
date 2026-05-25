@@ -313,6 +313,8 @@ export const vSequence = v.object({
     refget_checksum: v.string()
 });
 
+export const vSequenceOutputFormat = v.picklist(['plain', 'fasta']);
+
 export const vStrand = v.picklist([
     'forward',
     'reverse',
@@ -381,6 +383,21 @@ export const vBlastnJobResponse = v.object({
     kind: v.string(),
     result: v.nullish(vAnnotatedHomologySearchResultResponse),
     status: vJobStatusResponse
+});
+
+export const vSequenceSegmentsQuery = v.object({
+    end: v.array(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    format: v.nullish(vSequenceOutputFormat),
+    start: v.array(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    strand: v.nullish(vStrand)
 });
 
 export const vTaxId = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647'));
@@ -566,6 +583,31 @@ export const vRegionFeaturesPath = v.object({
  * Overlapping genes
  */
 export const vRegionFeaturesResponse = v.array(vGene);
+
+export const vSequenceSegmentsPath = v.object({
+    accession: v.string(),
+    sequence_name: v.string()
+});
+
+export const vSequenceSegmentsQuery2 = v.object({
+    start: v.array(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    end: v.array(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    strand: v.optional(vStrand),
+    format: v.optional(vSequenceOutputFormat)
+});
+
+/**
+ * Concatenated sequence segments
+ */
+export const vSequenceSegmentsResponse = v.string();
 
 export const vAssemblySequencesPath = v.object({
     accession: v.string()
