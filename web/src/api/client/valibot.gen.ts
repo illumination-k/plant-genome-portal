@@ -37,8 +37,39 @@ export const vBlastnJobRequest = v.object({
     task: v.nullish(v.string())
 });
 
+/**
+ * One node in a flat dendrogram.
+ */
+export const vClusterDendrogramNode = v.object({
+    distance: v.number(),
+    id: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    leafIndex: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    left: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    right: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    size: v.pipe(v.number(), v.integer(), v.minValue(0))
+});
+
+/**
+ * A flat dendrogram representation suitable for JSON APIs.
+ */
+export const vClusterDendrogram = v.object({
+    nodes: v.array(vClusterDendrogramNode),
+    root: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
 export const vErrorResponse = v.object({
     error: v.string()
+});
+
+export const vExpressionGeneLabel = v.object({
+    geneId: v.string(),
+    label: v.string()
+});
+
+export const vExpressionSampleLabel = v.object({
+    label: v.string(),
+    primaryGroup: v.nullish(v.string()),
+    run: v.string()
 });
 
 /**
@@ -55,6 +86,27 @@ export const vExpressionUnit = v.picklist([
     'raw_count',
     'normalized_count'
 ]);
+
+export const vExpressionClustergramQuery = v.object({
+    assemblyAccession: v.string(),
+    geneIds: v.string(),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    runs: v.nullish(v.string()),
+    unit: v.nullish(vExpressionUnit)
+});
+
+export const vExpressionClustergramResponse = v.object({
+    assemblyAccession: v.string(),
+    columnDendrogram: vClusterDendrogram,
+    columnOrder: v.array(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    genes: v.array(vExpressionGeneLabel),
+    rowDendrogram: vClusterDendrogram,
+    rowOrder: v.array(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    samples: v.array(vExpressionSampleLabel),
+    unit: vExpressionUnit,
+    values: v.array(v.number()),
+    zScores: v.array(v.number())
+});
 
 export const vGeneExpressionPoint = v.object({
     geneId: v.string(),
@@ -571,6 +623,19 @@ export const vRefgetSequenceQuery = v.object({
  * Reference sequence
  */
 export const vRefgetSequenceResponse = v.string();
+
+export const vExpressionClustergramQuery2 = v.object({
+    assemblyAccession: v.string(),
+    geneIds: v.string(),
+    unit: v.nullish(vExpressionUnit),
+    runs: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
+/**
+ * Expression matrix with Rust-computed cluster ordering
+ */
+export const vExpressionClustergramResponse2 = vExpressionClustergramResponse;
 
 export const vGenePath = v.object({
     gene_id: v.string()

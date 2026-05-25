@@ -9,7 +9,10 @@ use axum::{
     routing::{get, post},
 };
 use clap::{Parser, Subcommand};
-use expression_core::{ExpressionQuery, ExpressionRepository, ExpressionUnit};
+use co_expression::{
+    ClusterDendrogram, cluster_dendrogram_columns, cluster_dendrogram_rows, row_z_scores,
+};
+use expression_core::{ExpressionQuery, ExpressionRepository, ExpressionUnit, SraRunAccession};
 use expression_store::FileExpressionRepository;
 use genome_core::{AssemblyAccession, Gene, GeneSearch, Sequence, Strand, TaxId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -151,6 +154,7 @@ fn router(
         .route("/v2/genome/taxon/{tax_id}", get(taxon))
         .route("/v2/gene/id/{gene_id}", get(gene))
         .route("/v2/gene/id/{gene_id}/expression", get(gene_expression))
+        .route("/v2/expression/clustergram", get(expression_clustergram))
         .route("/v2/gene/search", get(gene_search))
         .route("/v2/tools/blastn/jobs", post(create_blastn_job))
         .route("/v2/tools/blastn/jobs/{job_id}", get(blastn_job))
@@ -409,6 +413,114 @@ async fn gene_expression(
 
 #[utoipa::path(
     get,
+    path = "/v2/expression/clustergram",
+    params(ExpressionClustergramQuery),
+    responses(
+        (status = 200, description = "Expression matrix with Rust-computed cluster ordering", body = ExpressionClustergramResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+    )
+)]
+async fn expression_clustergram(
+    State(state): State<AppState>,
+    Query(query): Query<ExpressionClustergramQuery>,
+) -> Result<Json<ExpressionClustergramResponse>, ApiError> {
+    let Some(expression_repository) = state.expression_repository.as_ref() else {
+        return Ok(Json(ExpressionClustergramResponse::empty(
+            query.assembly_accession,
+            query.unit.unwrap_or(ExpressionUnit::Tpm),
+        )));
+    };
+
+    let accession = AssemblyAccession::new(&query.assembly_accession)
+        .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+    let unit = query.unit.unwrap_or(ExpressionUnit::Tpm);
+    let gene_ids = parse_csv_gene_ids(&query.gene_ids)?;
+    if gene_ids.is_empty() {
+        return Err(ServiceError::InvalidRequest("geneIds must not be empty".to_owned()).into());
+    }
+
+    let genes = gene_ids
+        .iter()
+        .map(|gene_id| state.service.gene(gene_id.as_str()))
+        .collect::<Result<Vec<_>, _>>()?;
+    if genes
+        .iter()
+        .any(|gene_record| gene_record.gene.assembly_accession != accession)
+    {
+        return Err(ServiceError::InvalidRequest(
+            "all genes must belong to assemblyAccession".to_owned(),
+        )
+        .into());
+    }
+
+    let samples = expression_samples_for_query(expression_repository, &accession, &query)?;
+    let runs = samples
+        .iter()
+        .map(|sample| sample.run().clone())
+        .collect::<Vec<_>>();
+    if runs.is_empty() {
+        return Ok(Json(ExpressionClustergramResponse::empty(
+            query.assembly_accession,
+            unit,
+        )));
+    }
+
+    let Some(matrix) = expression_repository.expression_matrix(&accession, &gene_ids, &runs, unit)
+    else {
+        return Err(ServiceError::InvalidRequest(
+            "expression matrix is unavailable for the requested genes, runs, or unit".to_owned(),
+        )
+        .into());
+    };
+
+    let values = matrix
+        .values
+        .iter()
+        .copied()
+        .map(finite_or_zero)
+        .collect::<Vec<_>>();
+    let row_dendrogram = cluster_dendrogram_rows(&values, matrix.gene_count(), matrix.run_count());
+    let column_dendrogram =
+        cluster_dendrogram_columns(&values, matrix.gene_count(), matrix.run_count());
+    let row_order = row_dendrogram.leaf_order();
+    let column_order = column_dendrogram.leaf_order();
+    let z_scores = row_z_scores(&values, matrix.gene_count(), matrix.run_count());
+    let genes = genes
+        .into_iter()
+        .map(|gene_record| ExpressionGeneLabel {
+            gene_id: gene_record.gene.id.to_string(),
+            label: gene_record
+                .gene
+                .symbol
+                .or(gene_record.gene.locus_tag)
+                .unwrap_or_else(|| gene_record.gene.id.to_string()),
+        })
+        .collect();
+    let samples = samples
+        .into_iter()
+        .map(|sample| ExpressionSampleLabel {
+            run: sample.run().to_string(),
+            label: sample.display_label(),
+            primary_group: sample_primary_group(&sample),
+        })
+        .collect();
+
+    Ok(Json(ExpressionClustergramResponse {
+        assembly_accession: matrix.assembly_accession.to_string(),
+        unit: matrix.unit,
+        genes,
+        samples,
+        values,
+        row_order,
+        column_order,
+        row_dendrogram,
+        column_dendrogram,
+        z_scores,
+    }))
+}
+
+#[utoipa::path(
+    get,
     path = "/v2/gene/search",
     params(GeneSearchQuery),
     responses(
@@ -534,6 +646,7 @@ enum Command {
         taxon,
         gene,
         gene_expression,
+        expression_clustergram,
         gene_search,
         create_blastn_job,
         blastn_job,
@@ -550,6 +663,12 @@ enum Command {
         BlastnJobResponse,
         GeneExpressionPoint,
         GeneExpressionQuery,
+        ExpressionClustergramQuery,
+        ExpressionClustergramResponse,
+        ExpressionGeneLabel,
+        ExpressionSampleLabel,
+        co_expression::ClusterDendrogram,
+        co_expression::ClusterDendrogramNode,
         GeneSearchQuery,
         HealthResponse,
         JBrowseAssembly,
@@ -642,6 +761,69 @@ struct GeneExpressionPoint {
     primary_group: Option<String>,
     value: f64,
     unit: ExpressionUnit,
+}
+
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExpressionClustergramQuery {
+    assembly_accession: String,
+    gene_ids: String,
+    unit: Option<ExpressionUnit>,
+    runs: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExpressionClustergramResponse {
+    assembly_accession: String,
+    unit: ExpressionUnit,
+    genes: Vec<ExpressionGeneLabel>,
+    samples: Vec<ExpressionSampleLabel>,
+    values: Vec<f64>,
+    row_order: Vec<usize>,
+    column_order: Vec<usize>,
+    row_dendrogram: ClusterDendrogram,
+    column_dendrogram: ClusterDendrogram,
+    z_scores: Vec<f64>,
+}
+
+impl ExpressionClustergramResponse {
+    fn empty(assembly_accession: String, unit: ExpressionUnit) -> Self {
+        Self {
+            assembly_accession,
+            unit,
+            genes: Vec::new(),
+            samples: Vec::new(),
+            values: Vec::new(),
+            row_order: Vec::new(),
+            column_order: Vec::new(),
+            row_dendrogram: ClusterDendrogram {
+                root: None,
+                nodes: Vec::new(),
+            },
+            column_dendrogram: ClusterDendrogram {
+                root: None,
+                nodes: Vec::new(),
+            },
+            z_scores: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExpressionGeneLabel {
+    gene_id: String,
+    label: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct ExpressionSampleLabel {
+    run: String,
+    label: String,
+    primary_group: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -990,6 +1172,71 @@ fn sample_primary_group(sample: &expression_core::Sample) -> Option<String> {
         .as_deref()
         .and_then(|key| sample.metadata_value(key))
         .map(ToOwned::to_owned)
+}
+
+fn parse_csv_gene_ids(value: &str) -> Result<Vec<genome_core::GeneId>, ApiError> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            genome_core::GeneId::new(value)
+                .map_err(|error| ServiceError::InvalidRequest(error.to_string()).into())
+        })
+        .collect()
+}
+
+fn parse_csv_runs(value: &str) -> Result<Vec<SraRunAccession>, ApiError> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            SraRunAccession::new(value)
+                .map_err(|error| ServiceError::InvalidRequest(error.to_string()).into())
+        })
+        .collect()
+}
+
+fn expression_samples_for_query(
+    repository: &AppExpressionRepository,
+    accession: &AssemblyAccession,
+    query: &ExpressionClustergramQuery,
+) -> Result<Vec<expression_core::Sample>, ApiError> {
+    let mut samples = repository.samples_for_assembly(accession);
+    samples.sort_by_key(sample_sort_key);
+
+    if let Some(runs) = query.runs.as_deref() {
+        let requested_runs = parse_csv_runs(runs)?;
+        let mut selected = Vec::with_capacity(requested_runs.len());
+        for run in requested_runs {
+            let Some(sample) = samples.iter().find(|sample| sample.run() == &run) else {
+                return Err(
+                    ServiceError::InvalidRequest(format!("unknown expression run: {run}")).into(),
+                );
+            };
+            selected.push(sample.clone());
+        }
+        samples = selected;
+    }
+
+    if let Some(limit) = query.limit {
+        samples.truncate(limit);
+    }
+
+    Ok(samples)
+}
+
+fn sample_sort_key(sample: &expression_core::Sample) -> (String, String, String) {
+    (
+        sample.metadata.sort_key.clone().unwrap_or_default(),
+        sample.display_label(),
+        sample.run().to_string(),
+    )
+}
+
+fn finite_or_zero(value: f64) -> f64 {
+    if value.is_finite() { value } else { 0.0 }
 }
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]
