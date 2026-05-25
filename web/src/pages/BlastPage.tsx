@@ -1,4 +1,3 @@
-/* eslint-disable jsx-a11y/control-has-associated-label, max-lines, max-lines-per-function, max-statements, no-magic-numbers, no-ternary, no-use-before-define, oxc/no-optional-chaining, oxc/no-rest-spread-properties, prefer-destructuring, react-perf/jsx-no-new-function-as-prop, react/jsx-max-depth, unicorn/no-null */
 import {
   blastnJobOptions,
   createBlastnJobMutation,
@@ -23,6 +22,10 @@ import ErrorState from "@/ui/ErrorState";
 
 const defaultAssemblyAccession = "GCA_037833805.1";
 const defaultQuery = "ACGTACGTACGTACGTACGTACGTACGTACGT";
+const exponentialScoreThreshold = 0.001;
+const exponentialScoreDigits = 2;
+const pollingIntervalMs = 1500;
+const emptyLength = 0;
 
 const activeStatuses = new Set(["queued", "running"]);
 
@@ -49,15 +52,15 @@ const initialForm: BlastForm = {
 const formatNumber = (value: number): string => new Intl.NumberFormat("en-US").format(value);
 
 const formatScore = (value: number): string => {
-  if (value !== 0 && Math.abs(value) < 0.001) {
-    return value.toExponential(2);
+  if (value !== emptyLength && Math.abs(value) < exponentialScoreThreshold) {
+    return value.toExponential(exponentialScoreDigits);
   }
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value);
 };
 
-const errorMessage = (error: CreateBlastnJobError | Error | unknown): string | null => {
+const errorMessage = (error: CreateBlastnJobError | Error | unknown): string | undefined => {
   if (!error) {
-    return null;
+    return undefined;
   }
   if (typeof error === "object" && "error" in error) {
     const value = error.error;
@@ -138,18 +141,18 @@ const blastHitColumns: Array<ColumnDef<BlastHitRowData>> = [
 
 const BlastPage = (): ReactElement => {
   const [form, setForm] = useState<BlastForm>(initialForm);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | undefined>();
   const createJob = useMutation(createBlastnJobMutation());
   const jobQuery = useQuery({
     ...blastnJobOptions({ path: { job_id: jobId ?? "" } }),
-    enabled: jobId !== null,
+    enabled: jobId !== undefined,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status && activeStatuses.has(status) ? 1500 : false;
+      return status && activeStatuses.has(status) ? pollingIntervalMs : false;
     },
   });
 
-  const job = jobQuery.data ?? createJob.data ?? null;
+  const job = jobQuery.data ?? createJob.data;
   const isSubmitting = createJob.isPending;
   const isRunning = job ? activeStatuses.has(job.status) : false;
   const error = errorMessage(createJob.error ?? jobQuery.error ?? job?.error);
@@ -184,7 +187,7 @@ const BlastPage = (): ReactElement => {
               Marchantia reference homology search
             </p>
           </div>
-          {job ? <JobStatusPill job={job} /> : null}
+          {job && <JobStatusPill job={job} />}
         </div>
 
         <form className="mt-6 grid grid-cols-12 gap-4" onSubmit={onSubmit}>
@@ -193,6 +196,7 @@ const BlastPage = (): ReactElement => {
               Assembly accession
             </span>
             <input
+              aria-label="Assembly accession"
               className="min-h-10 rounded-md border border-border bg-surface px-3 font-mono text-sm text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
               name="assemblyAccession"
               onChange={onChange}
@@ -204,6 +208,7 @@ const BlastPage = (): ReactElement => {
           <label className="col-span-12 flex flex-col gap-1 sm:col-span-4 md:col-span-3">
             <span className="text-xs font-medium uppercase text-text-subtle">Task</span>
             <select
+              aria-label="BLASTN task"
               className="min-h-10 rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
               name="task"
               onChange={onChange}
@@ -219,6 +224,7 @@ const BlastPage = (): ReactElement => {
           <label className="col-span-6 flex flex-col gap-1 sm:col-span-4 md:col-span-2">
             <span className="text-xs font-medium uppercase text-text-subtle">E-value</span>
             <input
+              aria-label="E-value"
               className="min-h-10 rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
               min="0.0000000001"
               name="evalue"
@@ -233,6 +239,7 @@ const BlastPage = (): ReactElement => {
           <label className="col-span-6 flex flex-col gap-1 sm:col-span-4 md:col-span-2">
             <span className="text-xs font-medium uppercase text-text-subtle">Max hits</span>
             <input
+              aria-label="Maximum hits"
               className="min-h-10 rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
               min="1"
               name="maxTargetSeqs"
@@ -247,6 +254,7 @@ const BlastPage = (): ReactElement => {
           <label className="col-span-12 flex flex-col gap-1">
             <span className="text-xs font-medium uppercase text-text-subtle">Query</span>
             <textarea
+              aria-label="Query sequence"
               className="min-h-48 resize-y rounded-md border border-border bg-surface px-3 py-3 font-mono text-sm leading-6 text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
               name="query"
               onChange={onChange}
@@ -264,7 +272,7 @@ const BlastPage = (): ReactElement => {
             >
               {isSubmitting || isRunning ? "Running" : "Run BLASTN"}
             </button>
-            {job ? <span className="font-mono text-xs text-text-muted">{job.id}</span> : null}
+            {job && <span className="font-mono text-xs text-text-muted">{job.id}</span>}
           </div>
         </form>
       </div>
@@ -286,8 +294,8 @@ const JobStatusPill = (props: { job: BlastnJobResponse }): ReactElement => (
 );
 
 const BlastResults = (props: {
-  error: string | null;
-  job: BlastnJobResponse | null;
+  error: string | undefined;
+  job: BlastnJobResponse | undefined;
 }): ReactElement => {
   if (props.error) {
     return (
@@ -302,7 +310,7 @@ const BlastResults = (props: {
   if (activeStatuses.has(props.job.status)) {
     return <p className="px-6 py-8 text-sm text-text-muted">Job is {props.job.status}.</p>;
   }
-  if (!props.job.result || props.job.result.hits.length === 0) {
+  if (!props.job.result || props.job.result.hits.length === emptyLength) {
     return <p className="px-6 py-8 text-sm text-text-muted">No hits found.</p>;
   }
   return <BlastHitTable hits={props.job.result.hits} />;
@@ -347,6 +355,7 @@ const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactEl
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
         <input
+          aria-label="Filter BLAST results"
           className="min-h-9 w-full max-w-sm rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
           onChange={(event) => setGlobalFilter(event.target.value)}
           placeholder="Filter subject, region, or gene"
@@ -365,6 +374,7 @@ const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactEl
                 {headerGroup.headers.map((header) => (
                   <th className="px-4 py-3 font-medium" key={header.id}>
                     <button
+                      aria-label={`Sort by ${header.column.id}`}
                       className="inline-flex items-center text-left uppercase disabled:cursor-default"
                       disabled={!header.column.getCanSort()}
                       onClick={header.column.getToggleSortingHandler()}
@@ -419,7 +429,7 @@ subject ${hit.subjectStart}-${hit.subjectEnd}   ${hit.subjectAlignment}`}
 };
 
 const GeneLinks = (props: { geneIds: string[] }): ReactElement => {
-  if (props.geneIds.length === 0) {
+  if (props.geneIds.length === emptyLength) {
     return <span className="text-xs text-text-subtle">none</span>;
   }
   return (
