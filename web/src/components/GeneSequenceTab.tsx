@@ -12,7 +12,15 @@ const GeneSequenceTab = (props: { geneRecord: GeneRecord }): ReactElement => {
 
   return (
     <section className="grid grid-cols-12 gap-6">
-      <GeneSequenceCard chr={chr} end={end} length={length} start={start} />
+      <GeneSequenceCard
+        assemblyAccession={props.geneRecord.gene.assembly_accession}
+        chr={chr}
+        end={end}
+        geneRecord={props.geneRecord}
+        geneId={props.geneRecord.gene.id}
+        length={length}
+        start={start}
+      />
     </section>
   );
 };

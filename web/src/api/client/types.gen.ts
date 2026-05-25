@@ -332,6 +332,21 @@ export type Sequence = {
 
 export type SequenceName = string;
 
+export type SequenceOutputFormat = 'plain' | 'fasta';
+
+export type SequenceSegmentsQuery = {
+    /**
+     * Segment ends, 0-based exclusive. Repeat once per segment.
+     */
+    end: Array<number>;
+    format?: null | SequenceOutputFormat;
+    /**
+     * Segment starts, 0-based inclusive. Repeat once per segment.
+     */
+    start: Array<number>;
+    strand?: null | Strand;
+};
+
 export type Strand = 'forward' | 'reverse' | 'unknown';
 
 export type TaxId = number;
@@ -698,6 +713,61 @@ export type RegionFeaturesResponses = {
 };
 
 export type RegionFeaturesResponse = RegionFeaturesResponses[keyof RegionFeaturesResponses];
+
+export type SequenceSegmentsData = {
+    body?: never;
+    path: {
+        /**
+         * Assembly accession
+         */
+        accession: string;
+        /**
+         * Sequence name, e.g. chr1
+         */
+        sequence_name: string;
+    };
+    query: {
+        /**
+         * Segment starts, 0-based inclusive. Repeat once per segment.
+         */
+        start: Array<number>;
+        /**
+         * Segment ends, 0-based exclusive. Repeat once per segment.
+         */
+        end: Array<number>;
+        /**
+         * Optional strand transform. `reverse` returns the reverse complement of the concatenated segments.
+         */
+        strand?: Strand;
+        /**
+         * Response format. Use `fasta` for sequence downloads.
+         */
+        format?: SequenceOutputFormat;
+    };
+    url: '/v2/genome/accession/{accession}/sequence/{sequence_name}';
+};
+
+export type SequenceSegmentsErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Assembly or sequence not found
+     */
+    404: ErrorResponse;
+};
+
+export type SequenceSegmentsError = SequenceSegmentsErrors[keyof SequenceSegmentsErrors];
+
+export type SequenceSegmentsResponses = {
+    /**
+     * Concatenated sequence segments
+     */
+    200: string;
+};
+
+export type SequenceSegmentsResponse = SequenceSegmentsResponses[keyof SequenceSegmentsResponses];
 
 export type AssemblySequencesData = {
     body?: never;

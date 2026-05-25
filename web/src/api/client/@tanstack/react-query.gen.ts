@@ -3,8 +3,8 @@
 import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { assembly, assemblySequences, blastnJob, createBlastnJob, gene, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, type Options, refgetSequence, refgetServiceInfo, regionFeatures, taxon } from '../sdk.gen';
-import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, GeneData, GeneError, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, TaxonData, TaxonError, TaxonResponse2 } from '../types.gen';
+import { assembly, assemblySequences, blastnJob, createBlastnJob, gene, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, type Options, refgetSequence, refgetServiceInfo, regionFeatures, sequenceSegments, taxon } from '../sdk.gen';
+import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, GeneData, GeneError, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, SequenceSegmentsData, SequenceSegmentsError, SequenceSegmentsResponse, TaxonData, TaxonError, TaxonResponse2 } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -279,6 +279,45 @@ export const regionFeaturesOptions = (options: Options<RegionFeaturesData>) => q
         return data;
     },
     queryKey: regionFeaturesQueryKey(options)
+});
+
+export const sequenceSegmentsQueryKey = (options: Options<SequenceSegmentsData>) => createQueryKey('sequenceSegments', options);
+
+export const sequenceSegmentsOptions = (options: Options<SequenceSegmentsData>) => queryOptions<SequenceSegmentsResponse, SequenceSegmentsError, SequenceSegmentsResponse, ReturnType<typeof sequenceSegmentsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await sequenceSegments({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: sequenceSegmentsQueryKey(options)
+});
+
+export const sequenceSegmentsInfiniteQueryKey = (options: Options<SequenceSegmentsData>): QueryKey<Options<SequenceSegmentsData>> => createQueryKey('sequenceSegments', options, true);
+
+export const sequenceSegmentsInfiniteOptions = (options: Options<SequenceSegmentsData>) => infiniteQueryOptions<SequenceSegmentsResponse, SequenceSegmentsError, InfiniteData<SequenceSegmentsResponse>, QueryKey<Options<SequenceSegmentsData>>, Array<number> | Pick<QueryKey<Options<SequenceSegmentsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
+// @ts-ignore
+{
+    queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<QueryKey<Options<SequenceSegmentsData>>[0], 'body' | 'headers' | 'path' | 'query'> = typeof pageParam === 'object' ? pageParam : {
+            query: {
+                start: pageParam
+            }
+        };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await sequenceSegments({
+            ...options,
+            ...params,
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: sequenceSegmentsInfiniteQueryKey(options)
 });
 
 export const assemblySequencesQueryKey = (options: Options<AssemblySequencesData>) => createQueryKey('assemblySequences', options);

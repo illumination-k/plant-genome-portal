@@ -2,8 +2,37 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+type RolldownWarning = {
+  code?: string;
+  id?: string;
+  message?: string;
+};
+
+type RolldownWarningHandler = (
+  warning: RolldownWarning,
+  defaultHandler: (warning: RolldownWarning) => void,
+) => void;
+
+const ignoredPureAnnotationPackages = ["/mobx/", "/mobx-react/"];
+const asyncGenomeBrowserChunkWarningLimitKb = 2000;
+
+const isIgnoredPureAnnotationWarning = (warning: RolldownWarning): boolean =>
+  warning.code === "INVALID_ANNOTATION"
+  && ignoredPureAnnotationPackages.some((pkg) => warning.id?.includes(pkg));
+
+const onwarn: RolldownWarningHandler = (warning, defaultHandler) => {
+  if (isIgnoredPureAnnotationWarning(warning)) {
+    return;
+  }
+  defaultHandler(warning);
+};
+
 export default defineConfig({
   build: {
+    chunkSizeWarningLimit: asyncGenomeBrowserChunkWarningLimitKb,
+    rolldownOptions: {
+      onwarn,
+    },
     target: "es2022",
   },
   plugins: [react(), tailwindcss()],
