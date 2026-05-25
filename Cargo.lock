@@ -79,6 +79,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "expression-core",
+ "expression-store",
  "genome-core",
  "rmp-serde",
  "serde",

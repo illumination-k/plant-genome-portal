@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AssemblyData, AssemblyErrors, AssemblyResponses, AssemblySequencesData, AssemblySequencesErrors, AssemblySequencesResponses, BlastnJobData, BlastnJobErrors, BlastnJobResponses, CreateBlastnJobData, CreateBlastnJobErrors, CreateBlastnJobResponses, GeneData, GeneErrors, GeneResponses, GeneSearchData, GeneSearchResponses, HealthData, HealthResponses, JbrowseChromSizesData, JbrowseChromSizesErrors, JbrowseChromSizesResponses, JbrowseConfigData, JbrowseConfigErrors, JbrowseConfigResponses, JbrowseDefaultConfigData, JbrowseDefaultConfigErrors, JbrowseDefaultConfigResponses, JbrowseFeaturesData, JbrowseFeaturesErrors, JbrowseFeaturesResponses, RefgetSequenceData, RefgetSequenceErrors, RefgetSequenceResponses, RefgetServiceInfoData, RefgetServiceInfoResponses, RegionFeaturesData, RegionFeaturesErrors, RegionFeaturesResponses, SequenceSegmentsData, SequenceSegmentsErrors, SequenceSegmentsResponses, TaxonData, TaxonErrors, TaxonResponses } from './types.gen';
+import type { AssemblyData, AssemblyErrors, AssemblyResponses, AssemblySequencesData, AssemblySequencesErrors, AssemblySequencesResponses, BlastnJobData, BlastnJobErrors, BlastnJobResponses, CreateBlastnJobData, CreateBlastnJobErrors, CreateBlastnJobResponses, GeneData, GeneErrors, GeneExpressionData, GeneExpressionErrors, GeneExpressionResponses, GeneResponses, GeneSearchData, GeneSearchResponses, HealthData, HealthResponses, JbrowseChromSizesData, JbrowseChromSizesErrors, JbrowseChromSizesResponses, JbrowseConfigData, JbrowseConfigErrors, JbrowseConfigResponses, JbrowseDefaultConfigData, JbrowseDefaultConfigErrors, JbrowseDefaultConfigResponses, JbrowseFeaturesData, JbrowseFeaturesErrors, JbrowseFeaturesResponses, RefgetSequenceData, RefgetSequenceErrors, RefgetSequenceResponses, RefgetServiceInfoData, RefgetServiceInfoResponses, RegionFeaturesData, RegionFeaturesErrors, RegionFeaturesResponses, SequenceSegmentsData, SequenceSegmentsErrors, SequenceSegmentsResponses, TaxonData, TaxonErrors, TaxonResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -33,6 +33,8 @@ export const refgetServiceInfo = <ThrowOnError extends boolean = true>(options?:
 export const refgetSequence = <ThrowOnError extends boolean = true>(options: Options<RefgetSequenceData, ThrowOnError>) => (options.client ?? client).get<RefgetSequenceResponses, RefgetSequenceErrors, ThrowOnError>({ url: '/sequence/{checksum}', ...options });
 
 export const gene = <ThrowOnError extends boolean = true>(options: Options<GeneData, ThrowOnError>) => (options.client ?? client).get<GeneResponses, GeneErrors, ThrowOnError>({ url: '/v2/gene/id/{gene_id}', ...options });
+
+export const geneExpression = <ThrowOnError extends boolean = true>(options: Options<GeneExpressionData, ThrowOnError>) => (options.client ?? client).get<GeneExpressionResponses, GeneExpressionErrors, ThrowOnError>({ url: '/v2/gene/id/{gene_id}/expression', ...options });
 
 export const geneSearch = <ThrowOnError extends boolean = true>(options?: Options<GeneSearchData, ThrowOnError>) => (options?.client ?? client).get<GeneSearchResponses, unknown, ThrowOnError>({ url: '/v2/gene/search', ...options });
 

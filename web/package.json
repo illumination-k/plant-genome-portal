@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "lint": "oxlint .",
+    "lint": "oxlint . && pnpm run lint:deps",
+    "lint:deps": "depcruise --config dependency-cruiser.config.json src",
     "openapi:generate": "cargo run -p api -- openapi --output ../target/openapi/api.json && openapi-ts",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run"
@@ -17,6 +18,9 @@
     "@jbrowse/react-linear-genome-view2": "^4.3.0",
     "@tanstack/react-query": "^5.100.11",
     "@tanstack/react-table": "^8.21.3",
+    "d3-array": "3.2.4",
+    "d3-format": "3.1.2",
+    "d3-scale": "4.0.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router": "^7.15.1",
@@ -26,9 +30,13 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.97.2",
     "@tailwindcss/vite": "^4.3.0",
+    "@types/d3-array": "3.2.2",
+    "@types/d3-format": "3.0.4",
+    "@types/d3-scale": "4.0.9",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "dependency-cruiser": "^17.4.0",
     "oxfmt": "^0",
     "oxlint": "^1",
     "tailwindcss": "^4.3.0",

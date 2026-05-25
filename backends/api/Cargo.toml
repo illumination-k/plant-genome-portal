@@ -7,6 +7,8 @@ license.workspace = true
 [dependencies]
 axum.workspace = true
 clap.workspace = true
+expression-core = { path = "../../crates/expression-core", version = "0.1.0" }
+expression-store = { path = "../../crates/expression-store", version = "0.1.0" }
 genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
 rmp-serde.workspace = true
 serde.workspace = true

@@ -84,6 +84,14 @@ export type Exon = {
     transcript_id: TranscriptId;
 };
 
+/**
+ * Unit in which an expression value is reported.
+ *
+ * The variants cover the common normalized and count-based units used by
+ * downstream pipelines (Salmon, Kallisto, featureCounts, DESeq2, edgeR, ...).
+ */
+export type ExpressionUnit = 'tpm' | 'fpkm' | 'rpkm' | 'cpm' | 'raw_count' | 'normalized_count';
+
 export type FunctionalAnnotation = (InterProAnnotation & {
     kind: 'inter_pro';
 }) | (PfamAnnotation & {
@@ -111,6 +119,20 @@ export type Gene = {
     sequence_name: SequenceName;
     strand: Strand;
     symbol?: string | null;
+};
+
+export type GeneExpressionPoint = {
+    geneId: string;
+    label: string;
+    primaryGroup?: string | null;
+    run: string;
+    unit: ExpressionUnit;
+    value: number;
+};
+
+export type GeneExpressionQuery = {
+    limit?: number | null;
+    unit?: null | ExpressionUnit;
 };
 
 export type GeneId = string;
@@ -619,6 +641,43 @@ export type GeneResponses = {
 };
 
 export type GeneResponse = GeneResponses[keyof GeneResponses];
+
+export type GeneExpressionData = {
+    body?: never;
+    path: {
+        /**
+         * Gene identifier
+         */
+        gene_id: string;
+    };
+    query?: {
+        unit?: null | ExpressionUnit;
+        limit?: number | null;
+    };
+    url: '/v2/gene/id/{gene_id}/expression';
+};
+
+export type GeneExpressionErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Gene not found
+     */
+    404: ErrorResponse;
+};
+
+export type GeneExpressionError = GeneExpressionErrors[keyof GeneExpressionErrors];
+
+export type GeneExpressionResponses = {
+    /**
+     * Expression values for one gene
+     */
+    200: Array<GeneExpressionPoint>;
+};
+
+export type GeneExpressionResponse = GeneExpressionResponses[keyof GeneExpressionResponses];
 
 export type GeneSearchData = {
     body?: never;

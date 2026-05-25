@@ -9,6 +9,8 @@ use axum::{
     routing::{get, post},
 };
 use clap::{Parser, Subcommand};
+use expression_core::{ExpressionQuery, ExpressionRepository, ExpressionUnit};
+use expression_store::FileExpressionRepository;
 use genome_core::{AssemblyAccession, Gene, GeneSearch, Sequence, Strand, TaxId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use service::{
@@ -27,11 +29,13 @@ use tracing_subscriber::EnvFilter;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
 type AppService = GenomeService<FileGenomeRepository>;
+type AppExpressionRepository = FileExpressionRepository;
 type BlastJobManager = InMemoryJobManager<BlastnJobInput, AnnotatedHomologySearchResult>;
 
 #[derive(Clone)]
 struct AppState {
     service: AppService,
+    expression_repository: Option<AppExpressionRepository>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
 }
@@ -61,6 +65,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (Some(path), false) => Some(FastaReference::from_path(path)?),
     };
     let service = GenomeService::new(repository, reference);
+    let expression_repository = config
+        .expression_snapshot
+        .as_deref()
+        .map(FileExpressionRepository::from_snapshot_path)
+        .transpose()?;
     let blast_jobs = config.blast_db_prefix.clone().map(|blast_db_prefix| {
         InMemoryJobManager::new(BlastWorkerCommand {
             worker_bin: config.blast_worker_bin.clone(),
@@ -79,7 +88,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     axum::serve(
         listener,
-        router(service, default_assembly_accession, blast_jobs),
+        router(
+            service,
+            expression_repository,
+            default_assembly_accession,
+            blast_jobs,
+        ),
     )
     .await?;
 
@@ -112,6 +126,7 @@ fn write_openapi_schema(output: Option<&FsPath>) -> Result<(), Box<dyn std::erro
 
 fn router(
     service: AppService,
+    expression_repository: Option<AppExpressionRepository>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
 ) -> Router {
@@ -135,6 +150,7 @@ fn router(
         )
         .route("/v2/genome/taxon/{tax_id}", get(taxon))
         .route("/v2/gene/id/{gene_id}", get(gene))
+        .route("/v2/gene/id/{gene_id}/expression", get(gene_expression))
         .route("/v2/gene/search", get(gene_search))
         .route("/v2/tools/blastn/jobs", post(create_blastn_job))
         .route("/v2/tools/blastn/jobs/{job_id}", get(blastn_job))
@@ -151,6 +167,7 @@ fn router(
         .layer(CorsLayer::permissive())
         .with_state(AppState {
             service,
+            expression_repository,
             default_assembly_accession,
             blast_jobs,
         })
@@ -339,6 +356,59 @@ async fn gene(
 
 #[utoipa::path(
     get,
+    path = "/v2/gene/id/{gene_id}/expression",
+    params(
+        ("gene_id" = String, Path, description = "Gene identifier"),
+        GeneExpressionQuery,
+    ),
+    responses(
+        (status = 200, description = "Expression values for one gene", body = Vec<GeneExpressionPoint>),
+        (status = 404, description = "Gene not found", body = ErrorResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+    )
+)]
+async fn gene_expression(
+    State(state): State<AppState>,
+    Path(gene_id): Path<String>,
+    Query(query): Query<GeneExpressionQuery>,
+) -> Result<Json<Vec<GeneExpressionPoint>>, ApiError> {
+    let gene_record = state.service.gene(&gene_id)?;
+    let Some(expression_repository) = state.expression_repository.as_ref() else {
+        return Ok(Json(Vec::new()));
+    };
+
+    let expression_query = ExpressionQuery {
+        unit: query.unit,
+        limit: query.limit,
+        ..ExpressionQuery::default()
+    };
+    let points = expression_repository
+        .gene_expression(&gene_record.gene.id, &expression_query)
+        .into_iter()
+        .map(|measurement| {
+            let sample = expression_repository.sample(&measurement.run);
+            let label = sample
+                .as_ref()
+                .map(expression_core::Sample::display_label)
+                .unwrap_or_else(|| measurement.run.to_string());
+            let primary_group = sample.as_ref().and_then(sample_primary_group);
+
+            GeneExpressionPoint {
+                gene_id: measurement.gene_id.to_string(),
+                run: measurement.run.to_string(),
+                label,
+                primary_group,
+                value: measurement.value,
+                unit: measurement.unit,
+            }
+        })
+        .collect();
+
+    Ok(Json(points))
+}
+
+#[utoipa::path(
+    get,
     path = "/v2/gene/search",
     params(GeneSearchQuery),
     responses(
@@ -430,6 +500,8 @@ struct Config {
     #[arg(long)]
     no_fasta: bool,
     #[arg(long)]
+    expression_snapshot: Option<PathBuf>,
+    #[arg(long)]
     blast_db_prefix: Option<PathBuf>,
     #[arg(long, default_value = "target/debug/worker")]
     blast_worker_bin: PathBuf,
@@ -461,6 +533,7 @@ enum Command {
         assembly_sequences,
         taxon,
         gene,
+        gene_expression,
         gene_search,
         create_blastn_job,
         blastn_job,
@@ -475,6 +548,8 @@ enum Command {
         AnnotatedHomologySearchResultResponse,
         BlastnJobRequest,
         BlastnJobResponse,
+        GeneExpressionPoint,
+        GeneExpressionQuery,
         GeneSearchQuery,
         HealthResponse,
         JBrowseAssembly,
@@ -497,6 +572,7 @@ enum Command {
         sequence::SequenceOutputFormat,
         sequence::SequenceSegmentsQuery,
         TaxonResponse,
+        expression_core::ExpressionUnit,
         genome_core::AnnotationEvidence,
         genome_core::AnnotationSource,
         genome_core::Assembly,
@@ -549,6 +625,23 @@ struct HealthResponse {
 struct TaxonResponse {
     taxon: genome_core::Taxon,
     assemblies: Vec<genome_core::Assembly>,
+}
+
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
+struct GeneExpressionQuery {
+    unit: Option<ExpressionUnit>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct GeneExpressionPoint {
+    gene_id: String,
+    run: String,
+    label: String,
+    primary_group: Option<String>,
+    value: f64,
+    unit: ExpressionUnit,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -888,6 +981,15 @@ fn chrom_sizes_body(mut sequences: Vec<Sequence>) -> String {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n"
+}
+
+fn sample_primary_group(sample: &expression_core::Sample) -> Option<String> {
+    sample
+        .metadata
+        .primary_group
+        .as_deref()
+        .and_then(|key| sample.metadata_value(key))
+        .map(ToOwned::to_owned)
 }
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]

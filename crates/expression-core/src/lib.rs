@@ -26,6 +26,9 @@ pub use ids::{
 pub use matrix::ExpressionMatrix;
 pub use measurement::ExpressionMeasurement;
 pub use repository::{ExpressionQuery, ExpressionRepository};
-pub use sample::{BioProject, Sample};
+pub use sample::{
+    AttributeMetadataProfile, BioProject, Sample, SampleIdentity, SampleMetadata,
+    SampleMetadataProfile,
+};
 pub use unit::ExpressionUnit;
 pub use value::ExpressionValue;
