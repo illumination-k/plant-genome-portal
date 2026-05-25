@@ -11,7 +11,11 @@ run = "pnpm --dir web exec oxfmt --write src"
 [tasks."lint:ts"]
 description = "Lint and type-check TypeScript"
 
-run = ["CI=true pnpm --dir web exec oxlint .", "CI=true pnpm --dir web exec tsc --noEmit"]
+run = [
+  "CI=true pnpm --dir web exec oxlint .",
+  "CI=true pnpm --dir web run lint:deps",
+  "CI=true pnpm --dir web exec tsc --noEmit",
+]
 
 [tasks."test:ts"]
 description = "Run tests with vitest"

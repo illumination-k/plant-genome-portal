@@ -1,0 +1,228 @@
+{
+  "manifest": {
+    "source": "local-demo",
+    "description": "Small RNA-seq expression snapshot for development bar plot wiring."
+  },
+  "dataset": {
+    "assembly_accession": "GCA_037833805.1",
+    "bioprojects": [
+      {
+        "accession": "PRJNA3197",
+        "title": "Marchantia polymorpha demo expression panel",
+        "description": "Curated development fixture used by the local API."
+      }
+    ],
+    "samples": [
+      {
+        "identity": {
+          "run": "SRR000001",
+          "experiment": "SRX000001",
+          "study": "SRP000001",
+          "biosample": "SAMN000001",
+          "bioproject": "PRJNA3197",
+          "assembly_accession": "GCA_037833805.1",
+          "title": "Sporeling replicate 1",
+          "library_strategy": "RNA-Seq",
+          "library_layout": "PAIRED",
+          "platform": "ILLUMINA"
+        },
+        "metadata": {
+          "profile": "marchantia_expression",
+          "display_label": "Sporeling R1",
+          "primary_group": "organ",
+          "sort_key": "sort_order",
+          "attributes": {
+            "organ": "sporeling",
+            "stage": "early",
+            "sort_order": "001"
+          }
+        }
+      },
+      {
+        "identity": {
+          "run": "SRR000002",
+          "experiment": "SRX000002",
+          "study": "SRP000001",
+          "biosample": "SAMN000002",
+          "bioproject": "PRJNA3197",
+          "assembly_accession": "GCA_037833805.1",
+          "title": "Sporeling replicate 2",
+          "library_strategy": "RNA-Seq",
+          "library_layout": "PAIRED",
+          "platform": "ILLUMINA"
+        },
+        "metadata": {
+          "profile": "marchantia_expression",
+          "display_label": "Sporeling R2",
+          "primary_group": "organ",
+          "sort_key": "sort_order",
+          "attributes": {
+            "organ": "sporeling",
+            "stage": "early",
+            "sort_order": "002"
+          }
+        }
+      },
+      {
+        "identity": {
+          "run": "SRR000003",
+          "experiment": "SRX000003",
+          "study": "SRP000001",
+          "biosample": "SAMN000003",
+          "bioproject": "PRJNA3197",
+          "assembly_accession": "GCA_037833805.1",
+          "title": "Thallus replicate 1",
+          "library_strategy": "RNA-Seq",
+          "library_layout": "PAIRED",
+          "platform": "ILLUMINA"
+        },
+        "metadata": {
+          "profile": "marchantia_expression",
+          "display_label": "Thallus R1",
+          "primary_group": "organ",
+          "sort_key": "sort_order",
+          "attributes": {
+            "organ": "thallus",
+            "stage": "vegetative",
+            "sort_order": "003"
+          }
+        }
+      },
+      {
+        "identity": {
+          "run": "SRR000004",
+          "experiment": "SRX000004",
+          "study": "SRP000001",
+          "biosample": "SAMN000004",
+          "bioproject": "PRJNA3197",
+          "assembly_accession": "GCA_037833805.1",
+          "title": "Thallus replicate 2",
+          "library_strategy": "RNA-Seq",
+          "library_layout": "PAIRED",
+          "platform": "ILLUMINA"
+        },
+        "metadata": {
+          "profile": "marchantia_expression",
+          "display_label": "Thallus R2",
+          "primary_group": "organ",
+          "sort_key": "sort_order",
+          "attributes": {
+            "organ": "thallus",
+            "stage": "vegetative",
+            "sort_order": "004"
+          }
+        }
+      },
+      {
+        "identity": {
+          "run": "SRR000005",
+          "experiment": "SRX000005",
+          "study": "SRP000001",
+          "biosample": "SAMN000005",
+          "bioproject": "PRJNA3197",
+          "assembly_accession": "GCA_037833805.1",
+          "title": "Gemma cup replicate 1",
+          "library_strategy": "RNA-Seq",
+          "library_layout": "PAIRED",
+          "platform": "ILLUMINA"
+        },
+        "metadata": {
+          "profile": "marchantia_expression",
+          "display_label": "Gemma cup R1",
+          "primary_group": "organ",
+          "sort_key": "sort_order",
+          "attributes": {
+            "organ": "gemma cup",
+            "stage": "reproductive",
+            "sort_order": "005"
+          }
+        }
+      },
+      {
+        "identity": {
+          "run": "SRR000006",
+          "experiment": "SRX000006",
+          "study": "SRP000001",
+          "biosample": "SAMN000006",
+          "bioproject": "PRJNA3197",
+          "assembly_accession": "GCA_037833805.1",
+          "title": "Gemma cup replicate 2",
+          "library_strategy": "RNA-Seq",
+          "library_layout": "PAIRED",
+          "platform": "ILLUMINA"
+        },
+        "metadata": {
+          "profile": "marchantia_expression",
+          "display_label": "Gemma cup R2",
+          "primary_group": "organ",
+          "sort_key": "sort_order",
+          "attributes": {
+            "organ": "gemma cup",
+            "stage": "reproductive",
+            "sort_order": "006"
+          }
+        }
+      }
+    ],
+    "matrices": [
+      {
+        "assembly_accession": "GCA_037833805.1",
+        "unit": "tpm",
+        "gene_ids": [
+          "MpPBT00010",
+          "Mp1g00070",
+          "Mp1g00080",
+          "Mp1g00090",
+          "Mp1g00100",
+          "Mp1g00110"
+        ],
+        "runs": [
+          "SRR000001",
+          "SRR000002",
+          "SRR000003",
+          "SRR000004",
+          "SRR000005",
+          "SRR000006"
+        ],
+        "values": [
+          4.8,
+          5.1,
+          6.2,
+          6.0,
+          7.5,
+          7.9,
+          8.2,
+          9.4,
+          24.7,
+          22.1,
+          13.8,
+          15.2,
+          2.1,
+          2.8,
+          7.5,
+          8.0,
+          18.4,
+          19.1,
+          15.0,
+          16.2,
+          11.8,
+          10.9,
+          4.3,
+          5.0,
+          0.9,
+          1.1,
+          3.4,
+          3.7,
+          27.5,
+          30.2,
+          12.4,
+          13.1,
+          5.6,
+          6.2,
+          8.7,
+          9.5
+        ]
+      }
+    ]
+  }
+}

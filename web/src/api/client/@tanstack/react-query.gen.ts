@@ -3,8 +3,8 @@
 import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { assembly, assemblySequences, blastnJob, createBlastnJob, gene, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, type Options, refgetSequence, refgetServiceInfo, regionFeatures, sequenceSegments, taxon } from '../sdk.gen';
-import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, GeneData, GeneError, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, SequenceSegmentsData, SequenceSegmentsError, SequenceSegmentsResponse, TaxonData, TaxonError, TaxonResponse2 } from '../types.gen';
+import { assembly, assemblySequences, blastnJob, createBlastnJob, gene, geneExpression, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, type Options, refgetSequence, refgetServiceInfo, regionFeatures, sequenceSegments, taxon } from '../sdk.gen';
+import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, GeneData, GeneError, GeneExpressionData, GeneExpressionError, GeneExpressionResponse, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, SequenceSegmentsData, SequenceSegmentsError, SequenceSegmentsResponse, TaxonData, TaxonError, TaxonResponse2 } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -234,6 +234,21 @@ export const geneOptions = (options: Options<GeneData>) => queryOptions<GeneResp
         return data;
     },
     queryKey: geneQueryKey(options)
+});
+
+export const geneExpressionQueryKey = (options: Options<GeneExpressionData>) => createQueryKey('geneExpression', options);
+
+export const geneExpressionOptions = (options: Options<GeneExpressionData>) => queryOptions<GeneExpressionResponse, GeneExpressionError, GeneExpressionResponse, ReturnType<typeof geneExpressionQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await geneExpression({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: geneExpressionQueryKey(options)
 });
 
 export const geneSearchQueryKey = (options?: Options<GeneSearchData>) => createQueryKey('geneSearch', options);

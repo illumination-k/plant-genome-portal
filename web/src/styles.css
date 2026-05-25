@@ -1,6 +1,6 @@
 @import "tailwindcss";
-@import "./design/tokens.css";
-@import "./design/typography.css";
+@import "./shared/design/tokens.css";
+@import "./shared/design/typography.css";
 
 /*
  * Expose design tokens as Tailwind v4 utilities. `@theme inline` keeps

@@ -41,6 +41,35 @@ export const vErrorResponse = v.object({
     error: v.string()
 });
 
+/**
+ * Unit in which an expression value is reported.
+ *
+ * The variants cover the common normalized and count-based units used by
+ * downstream pipelines (Salmon, Kallisto, featureCounts, DESeq2, edgeR, ...).
+ */
+export const vExpressionUnit = v.picklist([
+    'tpm',
+    'fpkm',
+    'rpkm',
+    'cpm',
+    'raw_count',
+    'normalized_count'
+]);
+
+export const vGeneExpressionPoint = v.object({
+    geneId: v.string(),
+    label: v.string(),
+    primaryGroup: v.nullish(v.string()),
+    run: v.string(),
+    unit: vExpressionUnit,
+    value: v.number()
+});
+
+export const vGeneExpressionQuery = v.object({
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    unit: v.nullish(vExpressionUnit)
+});
+
 export const vGeneId = v.string();
 
 export const vGeneSearchQuery = v.object({
@@ -551,6 +580,20 @@ export const vGenePath = v.object({
  * Gene detail
  */
 export const vGeneResponse = vGeneRecord;
+
+export const vGeneExpressionPath = v.object({
+    gene_id: v.string()
+});
+
+export const vGeneExpressionQuery2 = v.object({
+    unit: v.nullish(vExpressionUnit),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
+/**
+ * Expression values for one gene
+ */
+export const vGeneExpressionResponse = v.array(vGeneExpressionPoint);
 
 export const vGeneSearchQuery2 = v.object({
     tax_id: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647'))),

@@ -113,7 +113,7 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
 - 遺伝子詳細 (座標 + 配列 + functional annotation: GO/Pfam/InterPro/KEGG/KOG/NCBIfam + nomenclature)
 - 領域内 feature 取得 (`Chr1:1000-2000` → 遺伝子リスト)
 - refget 準拠の参照配列取得
-- JBrowse 2 によるゲノムブラウザ表示 (バックエンドは `/jbrowse/*` 提供済み、フロント側 wrapper は未実装)
+- JBrowse 2 によるゲノムブラウザ表示 (`/jbrowse/*` API + フロント側 wrapper)
 
 ### MVP に入れない (v2 以降)
 
@@ -142,7 +142,7 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
 | Frontend lint/format   | oxlint, oxfmt, `tsc --noEmit`                                                             |
 | Frontend tests         | Vitest                                                                                    |
 | PBT                    | Schemathesis (`uvx`) against live API                                                     |
-| Genome browser         | JBrowse 2 (planned — endpoints exist, frontend wrapper TBD)                               |
+| Genome browser         | JBrowse 2 (`@jbrowse/react-linear-genome-view2` + custom feature adapter)                 |
 
 ### Snapshot-based data flow (MVP)
 

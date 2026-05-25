@@ -63,7 +63,7 @@ impl FileExpressionRepository {
         let sample_by_run = dataset
             .samples
             .iter()
-            .map(|sample| (sample.run.clone(), sample.clone()))
+            .map(|sample| (sample.run().clone(), sample.clone()))
             .collect();
         let bioproject_by_accession = dataset
             .bioprojects
@@ -129,12 +129,12 @@ impl FileExpressionRepository {
             return false;
         };
         if let Some(study) = &query.study
-            && sample.study.as_ref() != Some(study)
+            && sample.study() != Some(study)
         {
             return false;
         }
         if let Some(bioproject) = &query.bioproject
-            && sample.bioproject.as_ref() != Some(bioproject)
+            && sample.bioproject() != Some(bioproject)
         {
             return false;
         }
@@ -158,7 +158,7 @@ impl ExpressionRepository for FileExpressionRepository {
         self.dataset
             .samples
             .iter()
-            .filter(|sample| sample.bioproject.as_ref() == Some(accession))
+            .filter(|sample| sample.bioproject() == Some(accession))
             .cloned()
             .collect()
     }
@@ -167,7 +167,7 @@ impl ExpressionRepository for FileExpressionRepository {
         self.dataset
             .samples
             .iter()
-            .filter(|sample| sample.biosample.as_ref() == Some(accession))
+            .filter(|sample| sample.biosample() == Some(accession))
             .cloned()
             .collect()
     }
@@ -273,7 +273,8 @@ mod tests {
 
     use expression_core::{
         BioProject, BioProjectAccession, BioSampleAccession, ExpressionMatrix, ExpressionUnit,
-        Sample, SraExperimentAccession, SraRunAccession, SraStudyAccession,
+        Sample, SampleIdentity, SampleMetadata, SraExperimentAccession, SraRunAccession,
+        SraStudyAccession,
     };
     use genome_core::{AssemblyAccession, GeneId};
 
@@ -300,24 +301,21 @@ mod tests {
         biosample: Option<&str>,
     ) -> Sample {
         Sample {
-            run: run(run_id),
-            experiment: Some(SraExperimentAccession::new("SRX000001").unwrap()),
-            study: study.map(|s| SraStudyAccession::new(s).unwrap()),
-            biosample: biosample.map(|s| BioSampleAccession::new(s).unwrap()),
-            bioproject: bioproject.map(|s| BioProjectAccession::new(s).unwrap()),
-            assembly_accession: assembly(),
-            title: None,
-            tissue: None,
-            developmental_stage: None,
-            treatment: None,
-            condition: None,
-            replicate: None,
-            library_strategy: None,
-            library_layout: None,
-            platform: None,
-            instrument_model: None,
-            description: None,
-            attributes: BTreeMap::new(),
+            identity: SampleIdentity {
+                run: run(run_id),
+                experiment: Some(SraExperimentAccession::new("SRX000001").unwrap()),
+                study: study.map(|s| SraStudyAccession::new(s).unwrap()),
+                biosample: biosample.map(|s| BioSampleAccession::new(s).unwrap()),
+                bioproject: bioproject.map(|s| BioProjectAccession::new(s).unwrap()),
+                assembly_accession: assembly(),
+                title: None,
+                description: None,
+                library_strategy: None,
+                library_layout: None,
+                platform: None,
+                instrument_model: None,
+            },
+            metadata: SampleMetadata::default(),
         }
     }
 
@@ -425,7 +423,7 @@ mod tests {
     fn sample_lookup_by_run() {
         let repo = make_repository();
         assert_eq!(
-            repo.sample(&run("SRR000001")).unwrap().run,
+            repo.sample(&run("SRR000001")).unwrap().identity.run,
             run("SRR000001")
         );
         assert!(repo.sample(&run("SRR999999")).is_none());

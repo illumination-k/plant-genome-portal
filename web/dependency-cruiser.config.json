@@ -1,0 +1,157 @@
+{
+  "forbidden": [
+    {
+      "comment": "Circular dependencies make feature boundaries hard to reason about.",
+      "from": {},
+      "name": "no-circular",
+      "severity": "error",
+      "to": {
+        "circular": true
+      }
+    },
+    {
+      "comment": "Every import must resolve through TypeScript/Vite aliases or node_modules.",
+      "from": {},
+      "name": "not-to-unresolvable",
+      "severity": "error",
+      "to": {
+        "couldNotResolve": true
+      }
+    },
+    {
+      "comment": "Shared code must stay reusable and cannot depend on app shell or features.",
+      "from": {
+        "path": "^src/shared/"
+      },
+      "name": "shared-is-leaf",
+      "severity": "error",
+      "to": {
+        "path": "^src/(app|features)/"
+      }
+    },
+    {
+      "comment": "Feature code must not depend on app shell wiring.",
+      "from": {
+        "path": "^src/features/"
+      },
+      "name": "features-do-not-import-app",
+      "severity": "error",
+      "to": {
+        "path": "^src/app/"
+      }
+    },
+    {
+      "comment": "Generated API client code must not import application code.",
+      "from": {
+        "path": "^src/api/"
+      },
+      "name": "api-client-is-generated-leaf",
+      "severity": "error",
+      "to": {
+        "path": "^src/(app|features|shared)/"
+      }
+    },
+    {
+      "comment": "Route wiring imports features; layout components should stay shell-only.",
+      "from": {
+        "path": "^src/app/layouts/"
+      },
+      "name": "app-layouts-do-not-import-features",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/"
+      }
+    },
+    {
+      "from": {
+        "path": "^src/features/landing/"
+      },
+      "name": "landing-stays-in-lane",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(analysis|datasets|expression|genes|genome-browser|tools)/"
+      }
+    },
+    {
+      "from": {
+        "path": "^src/features/datasets/"
+      },
+      "name": "datasets-stays-in-lane",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(analysis|expression|genes|genome-browser|landing|tools)/"
+      }
+    },
+    {
+      "from": {
+        "path": "^src/features/analysis/"
+      },
+      "name": "analysis-stays-in-lane",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(datasets|expression|genes|genome-browser|landing|tools)/"
+      }
+    },
+    {
+      "from": {
+        "path": "^src/features/expression/"
+      },
+      "name": "expression-stays-in-lane",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(analysis|datasets|genes|genome-browser|landing|tools)/"
+      }
+    },
+    {
+      "from": {
+        "path": "^src/features/genome-browser/"
+      },
+      "name": "genome-browser-stays-in-lane",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(analysis|datasets|expression|genes|landing|tools)/"
+      }
+    },
+    {
+      "from": {
+        "path": "^src/features/tools/"
+      },
+      "name": "tools-stay-in-lane",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(analysis|datasets|expression|genes|genome-browser|landing)/"
+      }
+    },
+    {
+      "comment": "Gene detail may embed expression and genome browser widgets; other feature imports stay forbidden.",
+      "from": {
+        "path": "^src/features/genes/"
+      },
+      "name": "genes-only-use-approved-feature-widgets",
+      "severity": "error",
+      "to": {
+        "path": "^src/features/(analysis|datasets|landing|tools)/"
+      }
+    }
+  ],
+  "options": {
+    "doNotFollow": {
+      "dependencyTypes": [
+        "npm",
+        "npm-dev",
+        "npm-optional",
+        "npm-peer",
+        "npm-bundled",
+        "npm-no-pkg"
+      ],
+      "path": "node_modules"
+    },
+    "enhancedResolveOptions": {
+      "conditionNames": ["import", "types", "default"],
+      "exportsFields": ["exports"]
+    },
+    "tsConfig": {
+      "fileName": "tsconfig.json"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import "./styles.css";
-import AppProviders from "@/AppProviders";
+import AppProviders from "@/app/AppProviders";
 import { client } from "@/api/client/client.gen";
 import { createRoot } from "react-dom/client";
 
