@@ -35,5 +35,20 @@ jobs:
       - name: Build
         run: cargo build --locked --workspace --all-features --verbose
 
-      - name: CI
-        run: mise run ci:rust --verbose
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: cargo-deny
+        run: cargo deny check
+
+      - name: cargo-audit
+        run: cargo audit
+
+      - name: Nextest
+        run: cargo nextest run --locked --all-features
+
+      - name: Doctests
+        run: cargo test --doc --locked --all-features
