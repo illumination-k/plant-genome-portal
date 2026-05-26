@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      pull-requests: write
     env:
       MISE_ENV: rust
     steps:
@@ -33,22 +34,51 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Build
-        run: cargo build --locked --workspace --all-features --verbose
+        id: step_build
+        run: cargo build --locked --workspace --all-features --verbose 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        id: step_clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
 
       - name: Format check
-        run: cargo fmt --all --check
+        id: step_fmt
+        run: cargo fmt --all --check 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
 
       - name: cargo-deny
-        run: cargo deny check
+        id: step_deny
+        run: cargo deny check 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
 
       - name: cargo-audit
-        run: cargo audit
+        id: step_audit
+        run: cargo audit 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
 
       - name: Nextest
-        run: cargo nextest run --locked --all-features
+        id: step_nextest
+        run: cargo nextest run --locked --all-features 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
 
       - name: Doctests
-        run: cargo test --doc --locked --all-features
+        id: step_doctest
+        run: cargo test --doc --locked --all-features 2>&1 | tee /tmp/step.log; exit ${PIPESTATUS[0]}
+
+      - name: Comment failure log on PR
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "## CI Rust failure log (auto-posted)"
+            echo
+            echo "Last 200 lines of the failing step:"
+            echo
+            echo '```'
+            tail -n 200 /tmp/step.log 2>/dev/null || echo "(no log captured)"
+            echo '```'
+          } > /tmp/comment.md
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -d "$(python3 -c "import json,sys; print(json.dumps({'body': open('/tmp/comment.md').read()}))")"
