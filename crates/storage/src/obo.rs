@@ -272,6 +272,23 @@ mod tests {
     }
 
     #[test]
+    fn is_empty_and_iter_reflect_loaded_terms() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("go.obo");
+        std::fs::write(&path, SAMPLE_OBO).unwrap();
+        let ontology = load_go_ontology(&path).unwrap();
+        assert!(!ontology.is_empty());
+
+        let ids: Vec<&str> = ontology.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids.len(), 5);
+        assert!(ids.contains(&"GO:0008150"));
+
+        let empty = GoOntology::default();
+        assert!(empty.is_empty());
+        assert_eq!(empty.iter().count(), 0);
+    }
+
+    #[test]
     fn records_obsolete_flag() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("go.obo");

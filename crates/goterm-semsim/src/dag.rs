@@ -222,6 +222,17 @@ mod tests {
     }
 
     #[test]
+    fn len_and_is_empty_match_node_count() {
+        let dag = linear_dag();
+        assert_eq!(dag.len(), 3);
+        assert!(!dag.is_empty());
+
+        let empty = GoDag::builder().build();
+        assert_eq!(empty.len(), 0);
+        assert!(empty.is_empty());
+    }
+
+    #[test]
     fn ancestors_are_inclusive_and_follow_is_a() {
         let dag = linear_dag();
         let anc = dag.ancestors(&id("GO:0044238")).unwrap();

@@ -359,6 +359,66 @@ mod tests {
     }
 
     #[test]
+    fn lin_for_sibling_pair_matches_closed_form() {
+        // Use a corpus IC whose values are exactly computable so the
+        // assertion pins down the full Lin formula. Each leaf is annotated
+        // by exactly one gene; the intermediate node covers both leaf
+        // genes; the distant sibling has its own gene. After true-path
+        // propagation the per-namespace max count is 3 (root, all three
+        // genes).
+        let dag = bp_dag();
+        let annotations = vec![
+            vec![id("GO:0000002")],
+            vec![id("GO:0000003")],
+            vec![id("GO:0000010")],
+        ];
+        let ic = CorpusIc::from_gene_annotations(&dag, annotations);
+        let leaf_ic = (3.0_f64).ln(); // -ln(1/3)
+        let mid_ic = (1.5_f64).ln(); // -ln(2/3)
+        let expected = 2.0 * mid_ic / (2.0 * leaf_ic);
+        let actual = similarity(
+            &dag,
+            &ic,
+            &id("GO:0000002"),
+            &id("GO:0000003"),
+            SimilarityMethod::Lin,
+        )
+        .unwrap();
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn jiang_conrath_for_sibling_pair_matches_closed_form() {
+        let dag = bp_dag();
+        let annotations = vec![
+            vec![id("GO:0000002")],
+            vec![id("GO:0000003")],
+            vec![id("GO:0000010")],
+        ];
+        let ic = CorpusIc::from_gene_annotations(&dag, annotations);
+        let leaf_ic = (3.0_f64).ln();
+        let mid_ic = (1.5_f64).ln();
+        // dist = 2·leaf_ic - 2·mid_ic = 2·ln(2)
+        let dist = 2.0 * (leaf_ic - mid_ic);
+        let expected = 1.0 / (1.0 + dist);
+        let actual = similarity(
+            &dag,
+            &ic,
+            &id("GO:0000002"),
+            &id("GO:0000003"),
+            SimilarityMethod::JiangConrath,
+        )
+        .unwrap();
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
     fn lin_is_higher_for_closely_related_pair() {
         let dag = bp_dag();
         let ic = IntrinsicIc::from_dag(&dag);
@@ -409,6 +469,100 @@ mod tests {
         )
         .unwrap();
         assert!((v - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn wang_for_sibling_pair_matches_closed_form() {
+        // bp_dag siblings: GO:0000002 and GO:0000003 each have
+        //   S(self)=1, S(intermediate)=0.8, S(root)=0.8·0.8=0.64
+        //   SV = 1 + 0.8 + 0.64 = 2.44
+        // Common ancestors are intermediate + root:
+        //   numerator = (0.8+0.8) + (0.64+0.64) = 2.88
+        //   wang = 2.88 / (2.44 + 2.44) = 0.590163...
+        let dag = bp_dag();
+        let v = wang(
+            &dag,
+            &id("GO:0000002"),
+            &id("GO:0000003"),
+            WangOptions::default(),
+        )
+        .unwrap();
+        let expected = 2.88 / 4.88;
+        assert!((v - expected).abs() < 1e-9, "expected {expected}, got {v}");
+    }
+
+    #[test]
+    fn wang_with_custom_weight_propagates_along_chain() {
+        // Linear chain leaf -> mid -> root with is_a edges.
+        // With weight w = 0.5: S_leaf = {leaf:1, mid:0.5, root:0.25}, SV=1.75
+        // For root alone: SV = 1.
+        // wang(leaf, root): common = {root}, numerator = 0.25 + 1 = 1.25
+        // wang = 1.25 / 2.75
+        let mut b = GoDag::builder();
+        b.insert(term("GO:0008150", GoNamespace::BiologicalProcess, &[], &[]))
+            .insert(term(
+                "GO:0009987",
+                GoNamespace::BiologicalProcess,
+                &["GO:0008150"],
+                &[],
+            ))
+            .insert(term(
+                "GO:0044238",
+                GoNamespace::BiologicalProcess,
+                &["GO:0009987"],
+                &[],
+            ));
+        let dag = b.build();
+        let opts = WangOptions {
+            is_a_weight: 0.5,
+            part_of_weight: 0.6,
+        };
+        let v = wang(&dag, &id("GO:0044238"), &id("GO:0008150"), opts).unwrap();
+        let expected = 1.25 / 2.75;
+        assert!((v - expected).abs() < 1e-9, "expected {expected}, got {v}");
+    }
+
+    #[test]
+    fn wang_keeps_maximum_when_multiple_paths_reach_an_ancestor() {
+        // Diamond DAG: X reaches R both via P1 (is_a) and P2 (part_of).
+        //   S_X(P1) = 0.8, S_X(P2) = 0.6
+        //   S_X(R)  = max(0.8·0.8, 0.6·0.6) = 0.64   ← `>=` guard matters here
+        //   SV(X)   = 1 + 0.8 + 0.6 + 0.64 = 3.04
+        // For R alone: SV(R) = 1.
+        // wang(X, R) common = {R}: numerator = 0.64 + 1
+        // wang = 1.64 / 4.04.
+        // If the guard accepted any update (taking the minimum path) the
+        // answer would change to (0.36 + 1) / (1 + 0.8 + 0.6 + 0.36 + 1).
+        let mut b = GoDag::builder();
+        b.insert(term("GO:0000020", GoNamespace::BiologicalProcess, &[], &[]))
+            .insert(term(
+                "GO:0000021",
+                GoNamespace::BiologicalProcess,
+                &["GO:0000020"],
+                &[],
+            ))
+            .insert(term(
+                "GO:0000022",
+                GoNamespace::BiologicalProcess,
+                &[],
+                &["GO:0000020"],
+            ))
+            .insert(term(
+                "GO:0000023",
+                GoNamespace::BiologicalProcess,
+                &["GO:0000021"],
+                &["GO:0000022"],
+            ));
+        let dag = b.build();
+        let v = wang(
+            &dag,
+            &id("GO:0000023"),
+            &id("GO:0000020"),
+            WangOptions::default(),
+        )
+        .unwrap();
+        let expected = (0.64 + 1.0) / (3.04 + 1.0);
+        assert!((v - expected).abs() < 1e-9, "expected {expected}, got {v}");
     }
 
     #[test]
@@ -485,6 +639,77 @@ mod tests {
             let v = set_similarity(&set, &set, agg, pairwise).unwrap();
             assert!((v - 1.0).abs() < 1e-12, "{agg:?} → {v}");
         }
+    }
+
+    #[test]
+    fn set_similarity_max_picks_highest_score_over_unequal_pairs() {
+        // Two-element set_a, singleton set_b. One pair scores 1.0 (self),
+        // the other scores 0.0 (root vs leaf via Lin → 0 since MICA = root,
+        // IC(MICA) = 0). Max must return 1.0 — replacing `>` with `<`,
+        // `==`, or `>=` would change the chosen winner.
+        let dag = bp_dag();
+        let ic = IntrinsicIc::from_dag(&dag);
+        let v = set_similarity(
+            &[id("GO:0000002"), id("GO:0008150")],
+            &[id("GO:0000002")],
+            SetAggregator::Max,
+            |a, b| similarity(&dag, &ic, a, b, SimilarityMethod::Lin),
+        )
+        .unwrap();
+        assert!((v - 1.0).abs() < 1e-12, "got {v}");
+    }
+
+    #[test]
+    fn set_similarity_average_divides_by_pair_count() {
+        // Two pairs with distinct, non-zero Lin scores. Average must equal
+        // (s1 + s2) / 2 — replacing `/` with `*` would yield 2·(s1 + s2),
+        // dropping the / from the formula.
+        let dag = bp_dag();
+        let ic = IntrinsicIc::from_dag(&dag);
+        let pairwise =
+            |a: &GoTermId, b: &GoTermId| similarity(&dag, &ic, a, b, SimilarityMethod::Lin);
+        let self_score = pairwise(&id("GO:0000002"), &id("GO:0000002")).unwrap();
+        let sib_score = pairwise(&id("GO:0000002"), &id("GO:0000003")).unwrap();
+        let v = set_similarity(
+            &[id("GO:0000002")],
+            &[id("GO:0000002"), id("GO:0000003")],
+            SetAggregator::Average,
+            pairwise,
+        )
+        .unwrap();
+        let expected = (self_score + sib_score) / 2.0;
+        assert!((v - expected).abs() < 1e-12, "expected {expected}, got {v}");
+        // Sanity: the two scores are different, so / vs * is detectable.
+        assert!((self_score - sib_score).abs() > 1e-6);
+    }
+
+    #[test]
+    fn set_similarity_bma_averages_per_side_best_matches() {
+        // set_a = {leaf1, distant_sibling}; set_b = {leaf1, leaf2_sib}.
+        // The per-side averages differ from each other and from any
+        // individual pair, so a `/` → `*` mutation on either side's
+        // average changes the answer.
+        let dag = bp_dag();
+        let ic = IntrinsicIc::from_dag(&dag);
+        let pairwise =
+            |a: &GoTermId, b: &GoTermId| similarity(&dag, &ic, a, b, SimilarityMethod::Lin);
+        let set_a = vec![id("GO:0000002"), id("GO:0000010")];
+        let set_b = vec![id("GO:0000002"), id("GO:0000003")];
+        let actual =
+            set_similarity(&set_a, &set_b, SetAggregator::BestMatchAverage, pairwise).unwrap();
+
+        let lin = |t1: &GoTermId, t2: &GoTermId| pairwise(t1, t2).unwrap_or(0.0);
+        let a_best0 = lin(&set_a[0], &set_b[0]).max(lin(&set_a[0], &set_b[1]));
+        let a_best1 = lin(&set_a[1], &set_b[0]).max(lin(&set_a[1], &set_b[1]));
+        let b_best0 = lin(&set_b[0], &set_a[0]).max(lin(&set_b[0], &set_a[1]));
+        let b_best1 = lin(&set_b[1], &set_a[0]).max(lin(&set_b[1], &set_a[1]));
+        let expected = ((a_best0 + a_best1) / 2.0 + (b_best0 + b_best1) / 2.0) / 2.0;
+        assert!(
+            (actual - expected).abs() < 1e-12,
+            "expected {expected}, got {actual}"
+        );
+        // Sanity: actual ∈ (0, 1) strict — kills constant-return mutants.
+        assert!(actual > 0.0 && actual < 1.0);
     }
 
     #[test]
