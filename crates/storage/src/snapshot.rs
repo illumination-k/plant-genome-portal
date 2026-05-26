@@ -108,27 +108,9 @@ pub fn build_genome_snapshot(config: &GenomeSnapshotBuild) -> Result<GenomeSnaps
     let mut parsed_gff = parse_gff3(&config.gff_path, &config.assembly.accession)?;
     enrich_parsed_gff(&mut parsed_gff, config)?;
 
-    let kegg_catalog = if config.kegg_catalog_paths.is_empty() {
-        KeggCatalog::default()
-    } else {
-        build_kegg_catalog(&parsed_gff, &config.kegg_catalog_paths.as_input())?
-    };
-
-    let sequence_models = sequences
-        .values()
-        .map(|sequence| {
-            Ok(Sequence {
-                name: SequenceName::new(sequence.name.clone())?,
-                assembly_accession: config.assembly.accession.clone(),
-                length: sequence.bases.len() as u64,
-                refget_checksum: refget_checksum(sequence.bases.as_bytes()),
-            })
-        })
-        .collect::<Result<Vec<_>, StorageError>>()?;
-
-    let assembly_checksum = assembly_checksum(&sequence_models);
-    let mut assembly = config.assembly.clone();
-    assembly.refget_checksum = Some(assembly_checksum);
+    let kegg_catalog = build_optional_kegg_catalog(&parsed_gff, &config.kegg_catalog_paths)?;
+    let sequence_models = build_sequence_models(config, sequences.values())?;
+    let assembly = assembly_with_refget_checksum(&config.assembly, &sequence_models);
 
     Ok(GenomeSnapshot {
         manifest: config.manifest.clone(),
@@ -143,6 +125,38 @@ pub fn build_genome_snapshot(config: &GenomeSnapshotBuild) -> Result<GenomeSnaps
             kegg_catalog,
         },
     })
+}
+
+fn build_optional_kegg_catalog(
+    parsed_gff: &ParsedGff,
+    paths: &KeggCatalogPaths,
+) -> Result<KeggCatalog, StorageError> {
+    if paths.is_empty() {
+        return Ok(KeggCatalog::default());
+    }
+    build_kegg_catalog(parsed_gff, &paths.as_input())
+}
+
+fn build_sequence_models<'a>(
+    config: &GenomeSnapshotBuild,
+    sequences: impl Iterator<Item = &'a crate::fasta::FastaSequence>,
+) -> Result<Vec<Sequence>, StorageError> {
+    sequences
+        .map(|sequence| {
+            Ok(Sequence {
+                name: SequenceName::new(sequence.name.clone())?,
+                assembly_accession: config.assembly.accession.clone(),
+                length: sequence.bases.len() as u64,
+                refget_checksum: refget_checksum(sequence.bases.as_bytes()),
+            })
+        })
+        .collect()
+}
+
+fn assembly_with_refget_checksum(assembly: &Assembly, sequences: &[Sequence]) -> Assembly {
+    let mut assembly = assembly.clone();
+    assembly.refget_checksum = Some(assembly_checksum(sequences));
+    assembly
 }
 
 fn enrich_parsed_gff(

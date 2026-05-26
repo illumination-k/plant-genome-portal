@@ -13,35 +13,54 @@ use crate::snapshot::read_snapshot;
 #[derive(Debug, Clone)]
 pub struct FileGenomeRepository {
     dataset: GenomeDataset,
-    genes_by_id: HashMap<GeneId, Gene>,
-    transcripts_by_id: HashMap<TranscriptId, Transcript>,
-    transcripts_by_gene: HashMap<GeneId, Vec<Transcript>>,
-    exons_by_transcript: HashMap<TranscriptId, Vec<Exon>>,
-    cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>>,
-    sequence_by_checksum: HashMap<String, Sequence>,
-    genes_by_kegg_ko: HashMap<KeggEntryId, Vec<GeneId>>,
+    genes: GeneIndex,
+    transcripts: TranscriptIndex,
+    sequences: SequenceIndex,
+    kegg: KeggKoIndex,
 }
 
-impl FileGenomeRepository {
-    pub fn new(dataset: GenomeDataset) -> Self {
-        let genes_by_id = dataset
-            .genes
-            .iter()
-            .map(|gene| (gene.id.clone(), gene.clone()))
-            .collect::<HashMap<_, _>>();
+#[derive(Debug, Clone)]
+struct GeneIndex {
+    by_id: HashMap<GeneId, Gene>,
+}
 
-        let mut transcripts_by_gene: HashMap<GeneId, Vec<Transcript>> = HashMap::new();
-        let mut transcripts_by_id: HashMap<TranscriptId, Transcript> = HashMap::new();
-        for transcript in &dataset.transcripts {
-            transcripts_by_gene
+impl GeneIndex {
+    fn new(genes: &[Gene]) -> Self {
+        Self {
+            by_id: genes
+                .iter()
+                .map(|gene| (gene.id.clone(), gene.clone()))
+                .collect(),
+        }
+    }
+
+    fn get(&self, gene_id: &GeneId) -> Option<Gene> {
+        self.by_id.get(gene_id).cloned()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TranscriptIndex {
+    by_id: HashMap<TranscriptId, Transcript>,
+    by_gene: HashMap<GeneId, Vec<Transcript>>,
+    exons_by_transcript: HashMap<TranscriptId, Vec<Exon>>,
+    cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>>,
+}
+
+impl TranscriptIndex {
+    fn new(transcripts: &[Transcript], exons: &[Exon], cdss: &[Cds]) -> Self {
+        let mut by_gene: HashMap<GeneId, Vec<Transcript>> = HashMap::new();
+        let mut by_id: HashMap<TranscriptId, Transcript> = HashMap::new();
+        for transcript in transcripts {
+            by_gene
                 .entry(transcript.gene_id.clone())
                 .or_default()
                 .push(transcript.clone());
-            transcripts_by_id.insert(transcript.id.clone(), transcript.clone());
+            by_id.insert(transcript.id.clone(), transcript.clone());
         }
 
         let mut exons_by_transcript: HashMap<TranscriptId, Vec<Exon>> = HashMap::new();
-        for exon in &dataset.exons {
+        for exon in exons {
             exons_by_transcript
                 .entry(exon.transcript_id.clone())
                 .or_default()
@@ -49,30 +68,108 @@ impl FileGenomeRepository {
         }
 
         let mut cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>> = HashMap::new();
-        for cds in &dataset.cdss {
+        for cds in cdss {
             cdss_by_transcript
                 .entry(cds.transcript_id.clone())
                 .or_default()
                 .push(cds.clone());
         }
 
-        let sequence_by_checksum = dataset
-            .sequences
-            .iter()
-            .map(|sequence| (sequence.refget_checksum.clone(), sequence.clone()))
-            .collect::<HashMap<_, _>>();
+        Self {
+            by_id,
+            by_gene,
+            exons_by_transcript,
+            cdss_by_transcript,
+        }
+    }
 
-        let genes_by_kegg_ko = build_kegg_ko_index(&dataset.genes);
+    fn get(&self, transcript_id: &TranscriptId) -> Option<Transcript> {
+        self.by_id.get(transcript_id).cloned()
+    }
+
+    fn record_parts_for_gene(&self, gene_id: &GeneId) -> (Vec<Transcript>, Vec<Exon>, Vec<Cds>) {
+        let transcripts = self.by_gene.get(gene_id).cloned().unwrap_or_default();
+        let exons = transcripts
+            .iter()
+            .flat_map(|transcript| {
+                self.exons_by_transcript
+                    .get(&transcript.id)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
+        let cdss = transcripts
+            .iter()
+            .flat_map(|transcript| {
+                self.cdss_by_transcript
+                    .get(&transcript.id)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        (transcripts, exons, cdss)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SequenceIndex {
+    by_checksum: HashMap<String, Sequence>,
+}
+
+impl SequenceIndex {
+    fn new(sequences: &[Sequence]) -> Self {
+        Self {
+            by_checksum: sequences
+                .iter()
+                .map(|sequence| (sequence.refget_checksum.clone(), sequence.clone()))
+                .collect(),
+        }
+    }
+
+    fn by_checksum(&self, checksum: &str) -> Option<Sequence> {
+        self.by_checksum.get(checksum).cloned()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct KeggKoIndex {
+    genes_by_ko: HashMap<KeggEntryId, Vec<GeneId>>,
+}
+
+impl KeggKoIndex {
+    fn new(genes: &[Gene]) -> Self {
+        Self {
+            genes_by_ko: build_kegg_ko_index(genes),
+        }
+    }
+
+    fn genes_with_ko(&self, ko: &KeggEntryId, genes: &GeneIndex) -> Vec<Gene> {
+        self.genes_by_ko
+            .get(ko)
+            .map(|gene_ids| {
+                gene_ids
+                    .iter()
+                    .filter_map(|gene_id| genes.get(gene_id))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+impl FileGenomeRepository {
+    pub fn new(dataset: GenomeDataset) -> Self {
+        let genes = GeneIndex::new(&dataset.genes);
+        let transcripts = TranscriptIndex::new(&dataset.transcripts, &dataset.exons, &dataset.cdss);
+        let sequences = SequenceIndex::new(&dataset.sequences);
+        let kegg = KeggKoIndex::new(&dataset.genes);
 
         Self {
             dataset,
-            genes_by_id,
-            transcripts_by_id,
-            transcripts_by_gene,
-            exons_by_transcript,
-            cdss_by_transcript,
-            sequence_by_checksum,
-            genes_by_kegg_ko,
+            genes,
+            transcripts,
+            sequences,
+            kegg,
         }
     }
 
@@ -112,34 +209,12 @@ impl GenomeRepository for FileGenomeRepository {
     }
 
     fn sequence_by_checksum(&self, checksum: &str) -> Option<Sequence> {
-        self.sequence_by_checksum.get(checksum).cloned()
+        self.sequences.by_checksum(checksum)
     }
 
     fn gene(&self, gene_id: &GeneId) -> Option<GeneRecord> {
-        let gene = self.genes_by_id.get(gene_id)?.clone();
-        let transcripts = self
-            .transcripts_by_gene
-            .get(gene_id)
-            .cloned()
-            .unwrap_or_default();
-        let exons = transcripts
-            .iter()
-            .flat_map(|transcript| {
-                self.exons_by_transcript
-                    .get(&transcript.id)
-                    .cloned()
-                    .unwrap_or_default()
-            })
-            .collect::<Vec<_>>();
-        let cdss = transcripts
-            .iter()
-            .flat_map(|transcript| {
-                self.cdss_by_transcript
-                    .get(&transcript.id)
-                    .cloned()
-                    .unwrap_or_default()
-            })
-            .collect::<Vec<_>>();
+        let gene = self.genes.get(gene_id)?;
+        let (transcripts, exons, cdss) = self.transcripts.record_parts_for_gene(gene_id);
 
         Some(GeneRecord {
             gene,
@@ -150,7 +225,7 @@ impl GenomeRepository for FileGenomeRepository {
     }
 
     fn transcript(&self, transcript_id: &TranscriptId) -> Option<Transcript> {
-        self.transcripts_by_id.get(transcript_id).cloned()
+        self.transcripts.get(transcript_id)
     }
 
     fn search_genes(&self, search: &GeneSearch) -> Vec<Gene> {
@@ -193,15 +268,7 @@ impl GenomeRepository for FileGenomeRepository {
     }
 
     fn genes_with_kegg_ko(&self, ko: &KeggEntryId) -> Vec<Gene> {
-        self.genes_by_kegg_ko
-            .get(ko)
-            .map(|gene_ids| {
-                gene_ids
-                    .iter()
-                    .filter_map(|gene_id| self.genes_by_id.get(gene_id).cloned())
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.kegg.genes_with_ko(ko, &self.genes)
     }
 }
 

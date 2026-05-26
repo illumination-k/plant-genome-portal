@@ -70,47 +70,13 @@ where
         .collect();
     let study_size = study_in_population.len() as u64;
 
-    let mut partial: Vec<(EnrichmentResult<T>, ())> = Vec::new();
-
-    for (term, items) in input.term_to_items {
-        let mut population_hits: u64 = 0;
-        let mut study_hits: u64 = 0;
-        for item in items {
-            if input.population.contains(item) {
-                population_hits += 1;
-                if study_in_population.contains(item) {
-                    study_hits += 1;
-                }
-            }
-        }
-
-        if population_hits < options.min_population_hits {
-            continue;
-        }
-
-        let p_value =
-            hypergeometric_upper_tail(population_size, population_hits, study_size, study_hits)?;
-        let fold_enrichment = EnrichmentResult::<T>::compute_fold(
-            study_hits,
-            study_size,
-            population_hits,
-            population_size,
-        );
-
-        partial.push((
-            EnrichmentResult {
-                term: term.clone(),
-                study_hits,
-                study_size,
-                population_hits,
-                population_size,
-                fold_enrichment,
-                p_value,
-                q_value: f64::NAN,
-            },
-            (),
-        ));
-    }
+    let partial = tested_terms(
+        input,
+        options,
+        &study_in_population,
+        population_size,
+        study_size,
+    )?;
 
     let p_values: Vec<f64> = partial.iter().map(|(r, _)| r.p_value).collect();
     let q_values = benjamini_hochberg(&p_values);
@@ -131,6 +97,94 @@ where
     });
 
     Ok(results)
+}
+
+fn tested_terms<T, G>(
+    input: EnrichmentInput<'_, T, G>,
+    options: EnrichmentOptions,
+    study_in_population: &HashSet<&G>,
+    population_size: u64,
+    study_size: u64,
+) -> Result<Vec<(EnrichmentResult<T>, ())>, EnrichmentError>
+where
+    T: Clone,
+    G: Eq + Hash,
+{
+    let mut partial = Vec::new();
+    for (term, items) in input.term_to_items {
+        let Some(result) = tested_term(
+            term,
+            items,
+            input.population,
+            study_in_population,
+            options,
+            population_size,
+            study_size,
+        )?
+        else {
+            continue;
+        };
+        partial.push((result, ()));
+    }
+    Ok(partial)
+}
+
+fn tested_term<T, G>(
+    term: &T,
+    items: &HashSet<G>,
+    population: &HashSet<G>,
+    study_in_population: &HashSet<&G>,
+    options: EnrichmentOptions,
+    population_size: u64,
+    study_size: u64,
+) -> Result<Option<EnrichmentResult<T>>, EnrichmentError>
+where
+    T: Clone,
+    G: Eq + Hash,
+{
+    let (population_hits, study_hits) = count_hits(items, population, study_in_population);
+    if population_hits < options.min_population_hits {
+        return Ok(None);
+    }
+
+    let p_value =
+        hypergeometric_upper_tail(population_size, population_hits, study_size, study_hits)?;
+    Ok(Some(EnrichmentResult {
+        term: term.clone(),
+        study_hits,
+        study_size,
+        population_hits,
+        population_size,
+        fold_enrichment: EnrichmentResult::<T>::compute_fold(
+            study_hits,
+            study_size,
+            population_hits,
+            population_size,
+        ),
+        p_value,
+        q_value: f64::NAN,
+    }))
+}
+
+fn count_hits<'a, G>(
+    items: &'a HashSet<G>,
+    population: &'a HashSet<G>,
+    study_in_population: &HashSet<&'a G>,
+) -> (u64, u64)
+where
+    G: Eq + Hash,
+{
+    let mut population_hits = 0;
+    let mut study_hits = 0;
+    for item in items {
+        if population.contains(item) {
+            population_hits += 1;
+            if study_in_population.contains(item) {
+                study_hits += 1;
+            }
+        }
+    }
+    (population_hits, study_hits)
 }
 
 #[cfg(test)]

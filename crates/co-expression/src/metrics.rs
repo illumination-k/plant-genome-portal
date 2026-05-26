@@ -289,61 +289,18 @@ pub fn build_coexpression_matrices(
     let mut ranks = vec![0_u32; total_cells];
 
     fill_exact_fallback_correlations(&mut correlations, matrix, &prepared, options);
-
-    ranks
-        .par_chunks_mut(gene_count.max(1))
-        .enumerate()
-        .for_each(|(source, rank_row)| {
-            if gene_count == 0 {
-                return;
-            }
-
-            let correlation_row = raw_matrix_row(&correlations, source, gene_count);
-            let mut scored_targets = Vec::with_capacity(gene_count.saturating_sub(1));
-            for (target, &correlation) in correlation_row.iter().enumerate() {
-                if source == target {
-                    continue;
-                }
-                if correlation.is_finite() {
-                    scored_targets.push((target, options.rank_mode.score(f64::from(correlation))));
-                }
-            }
-
-            assign_ranks(&mut scored_targets, rank_row);
-        });
+    rank_correlation_targets(&correlations, &mut ranks, gene_count, options.rank_mode);
 
     let mut mutual_ranks = vec![f32::NAN; total_cells];
     let mut highest_reciprocal_ranks = vec![0_u32; total_cells];
     let mut logit_scores = vec![f32::NAN; total_cells];
-
-    mutual_ranks
-        .par_chunks_mut(gene_count.max(1))
-        .zip(highest_reciprocal_ranks.par_chunks_mut(gene_count.max(1)))
-        .zip(logit_scores.par_chunks_mut(gene_count.max(1)))
-        .enumerate()
-        .for_each(|(source, ((mutual_rank_row, hrr_row), logit_score_row))| {
-            for target in 0..gene_count {
-                if source == target {
-                    continue;
-                }
-                let rank_source_to_target = ranks[source * gene_count + target];
-                let rank_target_to_source = ranks[target * gene_count + source];
-                if rank_source_to_target == 0 || rank_target_to_source == 0 {
-                    continue;
-                }
-
-                let mr = mutual_rank(
-                    rank_source_to_target as usize,
-                    rank_target_to_source as usize,
-                );
-                mutual_rank_row[target] = mr as f32;
-                hrr_row[target] = highest_reciprocal_rank(
-                    rank_source_to_target as usize,
-                    rank_target_to_source as usize,
-                ) as u32;
-                logit_score_row[target] = logit_score(mr, gene_count) as f32;
-            }
-        });
+    fill_rank_scores(
+        &ranks,
+        gene_count,
+        &mut mutual_ranks,
+        &mut highest_reciprocal_ranks,
+        &mut logit_scores,
+    );
 
     Ok(CoexpressionIndex {
         assembly_accession: matrix.assembly_accession.clone(),
@@ -356,6 +313,92 @@ pub fn build_coexpression_matrices(
         highest_reciprocal_ranks,
         logit_scores,
     })
+}
+
+fn rank_correlation_targets(
+    correlations: &[f32],
+    ranks: &mut [u32],
+    gene_count: usize,
+    rank_mode: RankMode,
+) {
+    ranks
+        .par_chunks_mut(gene_count.max(1))
+        .enumerate()
+        .for_each(|(source, rank_row)| {
+            if gene_count == 0 {
+                return;
+            }
+
+            let correlation_row = raw_matrix_row(correlations, source, gene_count);
+            let mut scored_targets = Vec::with_capacity(gene_count.saturating_sub(1));
+            for (target, &correlation) in correlation_row.iter().enumerate() {
+                if source == target {
+                    continue;
+                }
+                if correlation.is_finite() {
+                    scored_targets.push((target, rank_mode.score(f64::from(correlation))));
+                }
+            }
+
+            assign_ranks(&mut scored_targets, rank_row);
+        });
+}
+
+fn fill_rank_scores(
+    ranks: &[u32],
+    gene_count: usize,
+    mutual_ranks: &mut [f32],
+    highest_reciprocal_ranks: &mut [u32],
+    logit_scores: &mut [f32],
+) {
+    mutual_ranks
+        .par_chunks_mut(gene_count.max(1))
+        .zip(highest_reciprocal_ranks.par_chunks_mut(gene_count.max(1)))
+        .zip(logit_scores.par_chunks_mut(gene_count.max(1)))
+        .enumerate()
+        .for_each(|(source, ((mutual_rank_row, hrr_row), logit_score_row))| {
+            for target in 0..gene_count {
+                fill_rank_score_cell(
+                    ranks,
+                    gene_count,
+                    source,
+                    target,
+                    mutual_rank_row,
+                    hrr_row,
+                    logit_score_row,
+                );
+            }
+        });
+}
+
+fn fill_rank_score_cell(
+    ranks: &[u32],
+    gene_count: usize,
+    source: usize,
+    target: usize,
+    mutual_rank_row: &mut [f32],
+    hrr_row: &mut [u32],
+    logit_score_row: &mut [f32],
+) {
+    if source == target {
+        return;
+    }
+    let rank_source_to_target = ranks[source * gene_count + target];
+    let rank_target_to_source = ranks[target * gene_count + source];
+    if rank_source_to_target == 0 || rank_target_to_source == 0 {
+        return;
+    }
+
+    let mr = mutual_rank(
+        rank_source_to_target as usize,
+        rank_target_to_source as usize,
+    );
+    mutual_rank_row[target] = mr as f32;
+    hrr_row[target] = highest_reciprocal_rank(
+        rank_source_to_target as usize,
+        rank_target_to_source as usize,
+    ) as u32;
+    logit_score_row[target] = logit_score(mr, gene_count) as f32;
 }
 
 fn assign_ranks(scored_targets: &mut [(usize, f64)], rank_row: &mut [u32]) {
