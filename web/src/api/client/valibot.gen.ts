@@ -89,6 +89,7 @@ export const vExpressionUnit = v.picklist([
 
 export const vExpressionClustergramQuery = v.object({
   assemblyAccession: v.string(),
+  dropMissingGenes: v.nullish(v.boolean()),
   geneIds: v.string(),
   limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
   runs: v.nullish(v.string()),
@@ -335,6 +336,12 @@ export const vKeggPathwayKoEntry = v.object({
 
 export const vKeggPathwayDetail = v.object({
   kos: v.array(vKeggPathwayKoEntry),
+  pathway: vKeggPathway,
+});
+
+export const vKeggPathwaySummary = v.object({
+  gene_count: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  ko_count: v.pipe(v.number(), v.integer(), v.minValue(0)),
   pathway: vKeggPathway,
 });
 
@@ -817,6 +824,7 @@ export const vExpressionClustergramQuery2 = v.object({
   unit: v.nullish(vExpressionUnit),
   runs: v.nullish(v.string()),
   limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+  dropMissingGenes: v.nullish(v.boolean()),
 });
 
 /**
@@ -963,6 +971,11 @@ export const vKeggPathwayPath = v.object({
  * KEGG pathway detail with KOs and the genes annotated with each KO
  */
 export const vKeggPathwayResponse = vKeggPathwayDetail;
+
+/**
+ * KEGG pathway catalog with dataset-level KO and gene counts
+ */
+export const vKeggPathwaysResponse = v.array(vKeggPathwaySummary);
 
 export const vCreateBlastnJobBody = vBlastnJobRequest;
 

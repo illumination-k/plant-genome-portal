@@ -111,6 +111,7 @@ export type Exon = {
 
 export type ExpressionClustergramQuery = {
   assemblyAccession: string;
+  dropMissingGenes?: boolean | null;
   geneIds: string;
   limit?: number | null;
   runs?: string | null;
@@ -427,6 +428,12 @@ export type KeggPathwayId = string;
 export type KeggPathwayKoEntry = {
   genes: Array<KeggGeneSummary>;
   ko: KeggEntryId;
+};
+
+export type KeggPathwaySummary = {
+  gene_count: number;
+  ko_count: number;
+  pathway: KeggPathway;
 };
 
 export type KeggReaction = {
@@ -755,6 +762,7 @@ export type ExpressionClustergramData = {
     unit?: null | ExpressionUnit;
     runs?: string | null;
     limit?: number | null;
+    dropMissingGenes?: boolean | null;
   };
   url: "/v2/expression/clustergram";
 };
@@ -1131,6 +1139,22 @@ export type KeggPathwayResponses = {
 };
 
 export type KeggPathwayResponse = KeggPathwayResponses[keyof KeggPathwayResponses];
+
+export type KeggPathwaysData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/v2/kegg/pathways";
+};
+
+export type KeggPathwaysResponses = {
+  /**
+   * KEGG pathway catalog with dataset-level KO and gene counts
+   */
+  200: Array<KeggPathwaySummary>;
+};
+
+export type KeggPathwaysResponse = KeggPathwaysResponses[keyof KeggPathwaysResponses];
 
 export type CreateBlastnJobData = {
   body: BlastnJobRequest;

@@ -96,6 +96,36 @@ where
         self.repository.search_genes(&search)
     }
 
+    /// KEGG pathway catalog summary, including how many KOs and dataset genes
+    /// currently connect to each pathway.
+    pub fn kegg_pathways(&self) -> Vec<KeggPathwaySummary> {
+        let catalog = self.repository.kegg_catalog();
+        let mut summaries = catalog
+            .pathways
+            .iter()
+            .map(|pathway| {
+                let ko_links = catalog
+                    .ko_links
+                    .iter()
+                    .filter(|links| links.pathways.contains(&pathway.id))
+                    .collect::<Vec<_>>();
+                let mut genes = std::collections::HashSet::new();
+                for links in &ko_links {
+                    for gene in self.repository.genes_with_kegg_ko(&links.ko) {
+                        genes.insert(gene.id);
+                    }
+                }
+                KeggPathwaySummary {
+                    pathway: pathway.clone(),
+                    ko_count: ko_links.len(),
+                    gene_count: genes.len(),
+                }
+            })
+            .collect::<Vec<_>>();
+        summaries.sort_by(|left, right| left.pathway.id.cmp(&right.pathway.id));
+        summaries
+    }
+
     pub fn features_in_region(
         &self,
         accession: &str,
@@ -242,6 +272,13 @@ where
 pub struct KeggPathwayDetail {
     pub pathway: KeggPathway,
     pub kos: Vec<KeggPathwayKoEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct KeggPathwaySummary {
+    pub pathway: KeggPathway,
+    pub ko_count: usize,
+    pub gene_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -480,6 +517,21 @@ mod tests {
             .unwrap();
         assert_eq!(k2.genes.len(), 1);
         assert_eq!(k2.genes[0].id.as_str(), "MpBBB");
+    }
+
+    #[test]
+    fn kegg_pathways_returns_catalog_with_ko_and_gene_counts() {
+        let service = kegg_service();
+        let pathways = service.kegg_pathways();
+
+        assert_eq!(pathways.len(), 2);
+        assert_eq!(pathways[0].pathway.id.as_str(), "map00010");
+        assert_eq!(pathways[0].pathway.name.as_deref(), Some("Glycolysis"));
+        assert_eq!(pathways[0].ko_count, 2);
+        assert_eq!(pathways[0].gene_count, 2);
+        assert_eq!(pathways[1].pathway.id.as_str(), "map00020");
+        assert_eq!(pathways[1].ko_count, 1);
+        assert_eq!(pathways[1].gene_count, 1);
     }
 
     #[test]
