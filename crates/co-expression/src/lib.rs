@@ -5,12 +5,14 @@
 //! clustergrams, plus ranked gene-pair metrics such as MR, HRR, and LS.
 
 mod error;
+mod graph;
 mod metrics;
 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 pub use error::CoexpressionError;
+pub use graph::{CoexpressionGraph, EdgeFilter};
 pub use metrics::{
     CoexpressionEdge, CoexpressionIndex, CoexpressionMatrices, CoexpressionOptions,
     CorrelationMethod, RankMode, build_coexpression_index, build_coexpression_matrices,
