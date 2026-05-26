@@ -7,6 +7,7 @@ import type {
 import { max } from "d3-array";
 import { format } from "d3-format";
 import { scaleBand } from "d3-scale";
+import { interpolateViridis } from "d3-scale-chromatic";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 
@@ -48,37 +49,12 @@ const matrixOffset = (
   sampleIndex: number,
 ): number => geneIndex * matrix.samples.length + sampleIndex;
 
-const hexToRgb = (hex: string): [number, number, number] => {
-  const value = hex.replace("#", "");
-  return [
-    Number.parseInt(value.slice(0, 2), 16),
-    Number.parseInt(value.slice(2, 4), 16),
-    Number.parseInt(value.slice(4, 6), 16),
-  ];
-};
-
-const rgbToHex = (rgb: [number, number, number]): string =>
-  `#${rgb.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
-
-const mix = (from: string, to: string, amount: number): string => {
-  const left = hexToRgb(from);
-  const right = hexToRgb(to);
-  return rgbToHex([
-    left[0] + (right[0] - left[0]) * amount,
-    left[1] + (right[1] - left[1]) * amount,
-    left[2] + (right[2] - left[2]) * amount,
-  ]);
-};
-
 const zColor = (value: number, zMax: number): string => {
   if (zMax === 0) {
-    return "#f4f2ee";
+    return interpolateViridis(0.5);
   }
   const clamped = Math.max(-1, Math.min(1, value / zMax));
-  if (clamped < 0) {
-    return mix("#2f6fbb", "#f4f2ee", clamped + 1);
-  }
-  return mix("#f4f2ee", "#c77800", clamped);
+  return interpolateViridis((clamped + 1) / 2);
 };
 
 const nodeChildren = (node: ClusterDendrogramNode): [number, number] | undefined => {
