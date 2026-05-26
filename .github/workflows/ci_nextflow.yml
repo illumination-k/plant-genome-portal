@@ -1,0 +1,52 @@
+name: CI Nextflow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pipelines/transcriptome/**"
+      - ".github/workflows/ci_nextflow.yml"
+  pull_request:
+    paths:
+      - "pipelines/transcriptome/**"
+      - ".github/workflows/ci_nextflow.yml"
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Inspect pipeline (syntax + DAG)
+        run: bash pipelines/transcriptome/tests/inspect.sh
+
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify docker is available
+        run: docker version
+
+      - name: Run smoke test against synthetic fixture
+        run: bash pipelines/transcriptome/tests/run_smoke.sh
+
+      - name: Upload pipeline outputs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: transcriptome-smoke-results
+          path: |
+            pipelines/transcriptome/tests/_results
+            pipelines/transcriptome/tests/_work/nf-work/*/.command.log
+          if-no-files-found: ignore
