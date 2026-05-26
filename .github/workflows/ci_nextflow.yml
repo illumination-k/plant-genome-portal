@@ -6,11 +6,13 @@ on:
     paths:
       - "pipelines/transcriptome/**"
       - "pipelines/chipseq/**"
+      - "pipelines/atacseq/**"
       - ".github/workflows/ci_nextflow.yml"
   pull_request:
     paths:
       - "pipelines/transcriptome/**"
       - "pipelines/chipseq/**"
+      - "pipelines/atacseq/**"
       - ".github/workflows/ci_nextflow.yml"
 
 jobs:
@@ -29,6 +31,9 @@ jobs:
 
       - name: Inspect chipseq pipeline (syntax + DAG)
         run: bash pipelines/chipseq/tests/inspect.sh
+
+      - name: Inspect atacseq pipeline (syntax + DAG)
+        run: bash pipelines/atacseq/tests/inspect.sh
 
   smoke:
     runs-on: ubuntu-latest
