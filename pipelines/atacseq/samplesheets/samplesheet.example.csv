@@ -1,0 +1,4 @@
+sample,group,replicate,sra,fastq_1,fastq_2
+MpATAC_rep1,MpATAC,1,,/path/to/atac_r1_R1.fastq.gz,/path/to/atac_r1_R2.fastq.gz
+MpATAC_rep2,MpATAC,2,,/path/to/atac_r2_R1.fastq.gz,/path/to/atac_r2_R2.fastq.gz
+MpATAC_sra,MpATAC,3,SRR99999999,,

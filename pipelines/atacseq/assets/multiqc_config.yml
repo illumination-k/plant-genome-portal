@@ -1,0 +1,18 @@
+report_comment: >
+  Plant Genome Portal — ATAC-seq pipeline report.
+report_section_order:
+  fastp:
+    order: 1000
+  bowtie2:
+    order: 900
+  samtools:
+    order: 800
+  picard:
+    order: 700
+  macs3:
+    order: 600
+  homer:
+    order: 500
+  frip:
+    order: 400
+disable_version_detection: false
