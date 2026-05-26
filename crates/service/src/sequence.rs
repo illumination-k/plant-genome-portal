@@ -2,6 +2,42 @@ use genome_core::{AssemblyAccession, GenomeRepository, HalfOpenRegion, SequenceN
 
 use crate::{GenomeService, ServiceError};
 
+pub struct TranscriptProtein {
+    pub transcript_id: String,
+    pub checksum: String,
+    pub sequence: String,
+}
+
+impl<R> GenomeService<R>
+where
+    R: GenomeRepository,
+{
+    /// Return the translated protein for a transcript, looked up via the
+    /// transcript's `protein_checksum` against the configured FASTA reference.
+    pub fn transcript_protein(
+        &self,
+        transcript_id: &str,
+    ) -> Result<TranscriptProtein, ServiceError> {
+        let transcript = self.transcript(transcript_id)?;
+        let checksum = transcript
+            .protein_checksum
+            .clone()
+            .ok_or_else(|| ServiceError::ProteinSequenceUnavailable(transcript.id.to_string()))?;
+        let reference = self
+            .reference
+            .as_ref()
+            .ok_or_else(|| ServiceError::ProteinSequenceUnavailable(transcript.id.to_string()))?;
+        let sequence = reference
+            .get(&checksum, None, None)
+            .ok_or_else(|| ServiceError::ProteinSequenceUnavailable(transcript.id.to_string()))?;
+        Ok(TranscriptProtein {
+            transcript_id: transcript.id.into_string(),
+            checksum,
+            sequence,
+        })
+    }
+}
+
 impl<R> GenomeService<R>
 where
     R: GenomeRepository,

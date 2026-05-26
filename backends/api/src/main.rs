@@ -1,3 +1,4 @@
+mod protein;
 mod refget;
 mod sequence;
 
@@ -36,6 +37,7 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 type AppService = GenomeService<FileGenomeRepository>;
 type AppExpressionRepository = FileExpressionRepository;
 type BlastJobManager = InMemoryJobManager<BlastnJobInput, AnnotatedHomologySearchResult>;
+type BlastpJobManager = InMemoryJobManager<BlastpJobInput, AnnotatedHomologySearchResult>;
 
 #[derive(Clone)]
 struct AppState {
@@ -43,6 +45,7 @@ struct AppState {
     expression_repository: Option<AppExpressionRepository>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
+    blastp_jobs: Option<BlastpJobManager>,
 }
 
 #[tokio::main]
@@ -67,7 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_assembly_accession = repository.default_assembly_accession().into_string();
     let reference = match (&config.fasta, config.no_fasta) {
         (_, true) | (None, false) => None,
-        (Some(path), false) => Some(FastaReference::from_path(path)?),
+        (Some(path), false) => {
+            let mut reference = FastaReference::from_path(path)?;
+            if let Some(protein_path) = &config.protein_fasta {
+                reference.extend_from_path(protein_path)?;
+            }
+            Some(reference)
+        }
     };
     let service = GenomeService::new(repository, reference);
     let expression_repository = config
@@ -80,8 +89,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             worker_bin: config.blast_worker_bin.clone(),
             blast_db_prefix,
             work_dir: config.blast_work_dir.clone(),
-            blastn: config.blastn.clone(),
+            program: config.blastn.clone(),
             snapshot: Some(snapshot.clone()),
+            method: BlastMethod::Blastn,
+        })
+    });
+    let blastp_jobs = config.blastp_db_prefix.clone().map(|blast_db_prefix| {
+        InMemoryJobManager::new(BlastWorkerCommand {
+            worker_bin: config.blast_worker_bin.clone(),
+            blast_db_prefix,
+            work_dir: config.blast_work_dir.clone(),
+            program: config.blastp.clone(),
+            snapshot: Some(snapshot.clone()),
+            method: BlastMethod::Blastp,
         })
     });
 
@@ -98,6 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             expression_repository,
             default_assembly_accession,
             blast_jobs,
+            blastp_jobs,
         ),
     )
     .await?;
@@ -134,6 +155,7 @@ fn router(
     expression_repository: Option<AppExpressionRepository>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
+    blastp_jobs: Option<BlastpJobManager>,
 ) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -161,8 +183,14 @@ fn router(
         .route("/v2/gene/id/{gene_id}/expression", get(gene_expression))
         .route("/v2/expression/clustergram", get(expression_clustergram))
         .route("/v2/gene/search", get(gene_search))
+        .route(
+            "/v2/transcript/id/{transcript_id}/protein",
+            get(protein::sequence),
+        )
         .route("/v2/tools/blastn/jobs", post(create_blastn_job))
         .route("/v2/tools/blastn/jobs/{job_id}", get(blastn_job))
+        .route("/v2/tools/blastp/jobs", post(create_blastp_job))
+        .route("/v2/tools/blastp/jobs/{job_id}", get(blastp_job))
         .route(
             "/v2/genome/accession/{accession}/sequence/{sequence_name}",
             get(sequence::segments),
@@ -179,6 +207,7 @@ fn router(
             expression_repository,
             default_assembly_accession,
             blast_jobs,
+            blastp_jobs,
         })
 }
 
@@ -694,18 +723,26 @@ struct Config {
     snapshot: Option<PathBuf>,
     #[arg(long, conflicts_with = "no_fasta")]
     fasta: Option<PathBuf>,
+    /// Additional FASTA file to load into the refget reference (e.g. a protein
+    /// FASTA whose records are addressable by their refget checksum).
+    #[arg(long)]
+    protein_fasta: Option<PathBuf>,
     #[arg(long)]
     no_fasta: bool,
     #[arg(long)]
     expression_snapshot: Option<PathBuf>,
     #[arg(long)]
     blast_db_prefix: Option<PathBuf>,
+    #[arg(long)]
+    blastp_db_prefix: Option<PathBuf>,
     #[arg(long, default_value = "target/debug/worker")]
     blast_worker_bin: PathBuf,
     #[arg(long, default_value = "target/api/blast")]
     blast_work_dir: PathBuf,
     #[arg(long, default_value = "blastn")]
     blastn: PathBuf,
+    #[arg(long, default_value = "blastp")]
+    blastp: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]
@@ -738,6 +775,9 @@ enum Command {
         gene_search,
         create_blastn_job,
         blastn_job,
+        create_blastp_job,
+        blastp_job,
+        protein::sequence,
         sequence::segments,
         region_features,
         refget::service_info,
@@ -749,6 +789,8 @@ enum Command {
         AnnotatedHomologySearchResultResponse,
         BlastnJobRequest,
         BlastnJobResponse,
+        BlastpJobRequest,
+        protein::ProteinQuery,
         GeneExpressionPoint,
         GeneExpressionQuery,
         ExpressionClustergramQuery,
@@ -984,6 +1026,101 @@ fn validate_blastn_task(task: &str) -> Result<(), ApiError> {
     }
 }
 
+fn validate_blastp_task(task: &str) -> Result<(), ApiError> {
+    if matches!(task, "blastp" | "blastp-short" | "blastp-fast") {
+        Ok(())
+    } else {
+        Err(ServiceError::InvalidRequest(format!("unsupported BLASTP task: {task}")).into())
+    }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+struct BlastpJobRequest {
+    assembly_accession: String,
+    query: String,
+    task: Option<String>,
+    evalue: Option<f64>,
+    max_target_seqs: Option<usize>,
+}
+
+impl BlastpJobRequest {
+    fn into_job_input(self) -> Result<BlastpJobInput, ApiError> {
+        let assembly_accession = AssemblyAccession::new(&self.assembly_accession)
+            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+        let task = self.task.unwrap_or_else(|| "blastp".to_owned());
+        validate_blastp_task(&task)?;
+        let evalue = self.evalue.unwrap_or(10.0);
+        if evalue <= 0.0 {
+            return Err(ServiceError::InvalidRequest(
+                "evalue must be greater than zero".to_owned(),
+            )
+            .into());
+        }
+        let max_target_seqs = self.max_target_seqs.unwrap_or(50);
+        if max_target_seqs == 0 {
+            return Err(ServiceError::InvalidRequest(
+                "maxTargetSeqs must be greater than zero".to_owned(),
+            )
+            .into());
+        }
+        if self.query.trim().is_empty() {
+            return Err(ServiceError::InvalidRequest("query must not be empty".to_owned()).into());
+        }
+
+        Ok(BlastpJobInput {
+            assembly_accession,
+            query: self.query,
+            task,
+            evalue,
+            max_target_seqs,
+        })
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/v2/tools/blastp/jobs",
+    request_body = BlastpJobRequest,
+    responses(
+        (status = 202, description = "BLASTP job accepted", body = BlastnJobResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 503, description = "BLASTP worker is not configured", body = ErrorResponse),
+    )
+)]
+async fn create_blastp_job(
+    State(state): State<AppState>,
+    Json(request): Json<BlastpJobRequest>,
+) -> Result<(StatusCode, Json<BlastnJobResponse>), ApiError> {
+    let manager = state
+        .blastp_jobs
+        .as_ref()
+        .ok_or_else(|| ApiError::BlastUnavailable("BLASTP worker is not configured".to_owned()))?;
+    let record = manager.submit("homology.blastp".to_owned(), request.into_job_input()?)?;
+    Ok((StatusCode::ACCEPTED, Json(record.into())))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/tools/blastp/jobs/{job_id}",
+    params(("job_id" = String, Path, description = "BLASTP job identifier")),
+    responses(
+        (status = 200, description = "BLASTP job status", body = BlastnJobResponse),
+        (status = 404, description = "Job not found", body = ErrorResponse),
+        (status = 503, description = "BLASTP worker is not configured", body = ErrorResponse),
+    )
+)]
+async fn blastp_job(
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<BlastnJobResponse>, ApiError> {
+    let manager = state
+        .blastp_jobs
+        .as_ref()
+        .ok_or_else(|| ApiError::BlastUnavailable("BLASTP worker is not configured".to_owned()))?;
+    Ok(Json(manager.get(&job_id)?.into()))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BlastnJobInput {
@@ -994,47 +1131,75 @@ struct BlastnJobInput {
     max_target_seqs: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BlastpJobInput {
+    assembly_accession: AssemblyAccession,
+    query: String,
+    task: String,
+    evalue: f64,
+    max_target_seqs: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BlastMethod {
+    Blastn,
+    Blastp,
+}
+
+impl BlastMethod {
+    fn subcommand(self) -> &'static str {
+        match self {
+            Self::Blastn => "blastn-job",
+            Self::Blastp => "blastp-job",
+        }
+    }
+
+    fn program_flag(self) -> &'static str {
+        match self {
+            Self::Blastn => "--blastn",
+            Self::Blastp => "--blastp",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct BlastWorkerCommand {
     worker_bin: PathBuf,
     blast_db_prefix: PathBuf,
     work_dir: PathBuf,
-    blastn: PathBuf,
+    program: PathBuf,
     snapshot: Option<PathBuf>,
+    method: BlastMethod,
 }
 
-impl JobExecutor<BlastnJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
-    fn execute(
+impl BlastWorkerCommand {
+    fn dispatch(
         &self,
-        job: WorkerJob<BlastnJobInput>,
+        job_id: String,
+        kind: String,
+        worker_input: BlastWorkerInput,
     ) -> Result<AnnotatedHomologySearchResult, String> {
         fs::create_dir_all(&self.work_dir).map_err(|error| error.to_string())?;
-        let input_path = self.work_dir.join(format!("{}.input.msgpack", job.id));
-        let output_path = self.work_dir.join(format!("{}.output.msgpack", job.id));
+        let input_path = self.work_dir.join(format!("{job_id}.input.msgpack"));
+        let output_path = self.work_dir.join(format!("{job_id}.output.msgpack"));
         let worker_job = WorkerJob {
-            id: job.id.clone(),
-            kind: job.kind,
-            payload: BlastWorkerInput {
-                assembly_accession: job.payload.assembly_accession,
-                query: job.payload.query,
-                task: job.payload.task,
-                evalue: job.payload.evalue,
-                max_target_seqs: job.payload.max_target_seqs,
-                snapshot: self.snapshot.clone(),
-            },
+            id: job_id,
+            kind,
+            payload: worker_input,
         };
 
         fs::write(&input_path, encode_message_pack(&worker_job)?)
             .map_err(|error| error.to_string())?;
 
         let output = ProcessCommand::new(&self.worker_bin)
-            .arg("blastn-job")
+            .arg(self.method.subcommand())
             .arg("--blast-db-prefix")
             .arg(&self.blast_db_prefix)
             .arg("--work-dir")
             .arg(&self.work_dir)
-            .arg("--blastn")
-            .arg(&self.blastn)
+            .arg(self.method.program_flag())
+            .arg(&self.program)
             .arg("--input")
             .arg(&input_path)
             .arg("--output")
@@ -1058,6 +1223,46 @@ impl JobExecutor<BlastnJobInput, AnnotatedHomologySearchResult> for BlastWorkerC
         let result_bytes = fs::read(&output_path).map_err(|error| error.to_string())?;
         let _ = fs::remove_file(&output_path);
         decode_message_pack(&result_bytes)
+    }
+}
+
+impl JobExecutor<BlastnJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
+    fn execute(
+        &self,
+        job: WorkerJob<BlastnJobInput>,
+    ) -> Result<AnnotatedHomologySearchResult, String> {
+        self.dispatch(
+            job.id,
+            job.kind,
+            BlastWorkerInput {
+                assembly_accession: job.payload.assembly_accession,
+                query: job.payload.query,
+                task: job.payload.task,
+                evalue: job.payload.evalue,
+                max_target_seqs: job.payload.max_target_seqs,
+                snapshot: self.snapshot.clone(),
+            },
+        )
+    }
+}
+
+impl JobExecutor<BlastpJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
+    fn execute(
+        &self,
+        job: WorkerJob<BlastpJobInput>,
+    ) -> Result<AnnotatedHomologySearchResult, String> {
+        self.dispatch(
+            job.id,
+            job.kind,
+            BlastWorkerInput {
+                assembly_accession: job.payload.assembly_accession,
+                query: job.payload.query,
+                task: job.payload.task,
+                evalue: job.payload.evalue,
+                max_target_seqs: job.payload.max_target_seqs,
+                snapshot: self.snapshot.clone(),
+            },
+        )
     }
 }
 
@@ -1527,7 +1732,9 @@ impl IntoResponse for ApiError {
                 ServiceError::TaxonNotFound(_)
                 | ServiceError::AssemblyNotFound(_)
                 | ServiceError::GeneNotFound(_)
+                | ServiceError::TranscriptNotFound(_)
                 | ServiceError::SequenceNotFound(_)
+                | ServiceError::ProteinSequenceUnavailable(_)
                 | ServiceError::KeggPathwayNotFound(_),
             )
             | Self::Job(JobManagerError::JobNotFound(_)) => StatusCode::NOT_FOUND,

@@ -55,6 +55,42 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Run one BLASTP homology search and write a domain-normalized JSON result.
+    BlastpOnce {
+        #[arg(long)]
+        assembly_accession: AssemblyAccession,
+        #[arg(long)]
+        blast_db_prefix: PathBuf,
+        #[arg(long, default_value = "target/worker")]
+        work_dir: PathBuf,
+        #[arg(long, default_value = "blastp")]
+        blastp: PathBuf,
+        #[arg(long)]
+        query: String,
+        #[arg(long)]
+        snapshot: Option<PathBuf>,
+        #[arg(long, default_value = "blastp")]
+        task: String,
+        #[arg(long, default_value_t = 10.0)]
+        evalue: f64,
+        #[arg(long, default_value_t = 50)]
+        max_target_seqs: usize,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Run one BLASTP homology search from a MessagePack WorkerJob and write a MessagePack result.
+    BlastpJob {
+        #[arg(long)]
+        blast_db_prefix: PathBuf,
+        #[arg(long, default_value = "target/worker")]
+        work_dir: PathBuf,
+        #[arg(long, default_value = "blastp")]
+        blastp: PathBuf,
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -73,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_target_seqs,
             output,
         } => {
-            let runner = BlastRunner::from_prepared(blast_db_prefix, work_dir, blastn)?;
+            let runner = BlastRunner::blastn(blast_db_prefix, work_dir, blastn)?;
             let payload = BlastHomologySearchInput {
                 assembly_accession,
                 query,
@@ -97,7 +133,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             output,
         } => {
-            let runner = BlastRunner::from_prepared(blast_db_prefix, work_dir, blastn)?;
+            let runner = BlastRunner::blastn(blast_db_prefix, work_dir, blastn)?;
+            let bytes = fs::read(input)?;
+            let job = MessagePack::<WorkerJob<BlastHomologySearchInput>>::decode(&bytes)?;
+            let result = runner.run(job)?;
+            let bytes = MessagePack::encode(&result)?;
+            fs::write(output, bytes)?;
+        }
+        Command::BlastpOnce {
+            assembly_accession,
+            blast_db_prefix,
+            work_dir,
+            blastp,
+            query,
+            snapshot,
+            task,
+            evalue,
+            max_target_seqs,
+            output,
+        } => {
+            let runner = BlastRunner::blastp(blast_db_prefix, work_dir, blastp)?;
+            let payload = BlastHomologySearchInput {
+                assembly_accession,
+                query,
+                task,
+                evalue,
+                max_target_seqs,
+                snapshot,
+            };
+            let job = WorkerJob {
+                id: "blastp-once".to_owned(),
+                kind: "homology.blastp".to_owned(),
+                payload,
+            };
+            let result = runner.run(job)?;
+            serde_json::to_writer_pretty(File::create(output)?, &result)?;
+        }
+        Command::BlastpJob {
+            blast_db_prefix,
+            work_dir,
+            blastp,
+            input,
+            output,
+        } => {
+            let runner = BlastRunner::blastp(blast_db_prefix, work_dir, blastp)?;
             let bytes = fs::read(input)?;
             let job = MessagePack::<WorkerJob<BlastHomologySearchInput>>::decode(&bytes)?;
             let result = runner.run(job)?;

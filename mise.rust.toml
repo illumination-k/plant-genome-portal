@@ -63,7 +63,7 @@ cargo watch \
   -w Cargo.toml \
   -w Cargo.lock \
   -x 'build -p worker' \
-  -x 'run -p api -- --bind 127.0.0.1:3000 --snapshot data/marpolbase/MpTak1_v7.1/snapshot.json --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz --expression-snapshot tests/fixtures/expression/snapshot.json --blast-db-prefix target/blast/MpTak1_v7.1 --blast-worker-bin target/debug/worker' &
+  -x 'run -p api -- --bind 127.0.0.1:3000 --snapshot data/marpolbase/MpTak1_v7.1/snapshot.json --fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.fa.gz --protein-fasta data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.protein.fa --expression-snapshot tests/fixtures/expression/snapshot.json --blast-db-prefix target/blast/MpTak1_v7.1 --blastp-db-prefix target/blastp/MpTak1_v7.1 --blast-worker-bin target/debug/worker' &
 child_pid="$!"
 printf '%s\n' "$child_pid" > "$pid_file"
 set +e

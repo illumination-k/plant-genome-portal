@@ -64,11 +64,23 @@ pub struct FastaReference {
 
 impl FastaReference {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, StorageError> {
-        let by_checksum = read_fasta_sequences(path)?
-            .into_values()
-            .map(|sequence| (refget_checksum(sequence.bases.as_bytes()), sequence.bases))
-            .collect::<HashMap<_, _>>();
-        Ok(Self { by_checksum })
+        let mut reference = Self {
+            by_checksum: HashMap::new(),
+        };
+        reference.extend_from_path(path)?;
+        Ok(reference)
+    }
+
+    /// Load an additional FASTA file (e.g. a protein FASTA) into the same
+    /// checksum-keyed index. Records that share a refget checksum with an
+    /// already-loaded sequence are silently de-duplicated.
+    pub fn extend_from_path(&mut self, path: impl AsRef<Path>) -> Result<(), StorageError> {
+        for sequence in read_fasta_sequences(path)?.into_values() {
+            self.by_checksum
+                .entry(refget_checksum(sequence.bases.as_bytes()))
+                .or_insert(sequence.bases);
+        }
+        Ok(())
     }
 
     pub fn get(&self, checksum: &str, start: Option<u64>, end: Option<u64>) -> Option<String> {

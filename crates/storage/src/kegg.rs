@@ -463,6 +463,8 @@ mod tests {
                     AnnotationEvidence::new(AnnotationSource::Kegg),
                 ))],
                 attributes: BTreeMap::new(),
+                protein_checksum: None,
+                protein_length: None,
             }],
             exons: Vec::new(),
             cdss: Vec::new(),

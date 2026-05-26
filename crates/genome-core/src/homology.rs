@@ -3,12 +3,13 @@ use utoipa::ToSchema;
 
 use crate::coord::{ClosedRegion, Position1, Strand};
 use crate::error::DomainError;
-use crate::ids::{AssemblyAccession, SequenceName};
+use crate::ids::{AssemblyAccession, SequenceName, TranscriptId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HomologySearchMethod {
     Blastn,
+    Blastp,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -42,6 +43,54 @@ pub struct HomologyHit {
 }
 
 impl HomologyHit {
+    /// Build a blastp hit. The subject is a transcript (protein) identifier,
+    /// not a genomic sequence — `sequence_name` carries the transcript id and
+    /// `subject_region` describes amino-acid positions on that protein. Protein
+    /// alignments are non-stranded; we record `Strand::Unknown`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_blastp_alignment(
+        assembly_accession: AssemblyAccession,
+        query_id: String,
+        subject_transcript_id: TranscriptId,
+        percent_identity: f64,
+        alignment_length: u64,
+        mismatches: u64,
+        gap_opens: u64,
+        query_start: Position1,
+        query_end: Position1,
+        subject_start: Position1,
+        subject_end: Position1,
+        evalue: f64,
+        bit_score: f64,
+        query_alignment: String,
+        subject_alignment: String,
+    ) -> Result<Self, DomainError> {
+        let sequence_name = SequenceName::new(subject_transcript_id.as_str())?;
+        let region_start = subject_start.min(subject_end);
+        let region_end = subject_start.max(subject_end);
+        let subject_region = ClosedRegion::new(sequence_name.clone(), region_start, region_end)?;
+
+        Ok(Self {
+            query_id,
+            assembly_accession,
+            sequence_name,
+            subject_region,
+            strand: Strand::Unknown,
+            percent_identity,
+            alignment_length,
+            mismatches,
+            gap_opens,
+            query_start,
+            query_end,
+            subject_start,
+            subject_end,
+            evalue,
+            bit_score,
+            query_alignment,
+            subject_alignment,
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn from_blastn_alignment(
         assembly_accession: AssemblyAccession,

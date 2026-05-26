@@ -6,7 +6,8 @@ mod sequence;
 use genome_core::{
     Assembly, AssemblyAccession, ClosedRegion, FunctionalAnnotation, Gene, GeneId, GeneRecord,
     GeneSearch, GenomeRepository, KeggEntryId, KeggKoLinks, KeggModule, KeggModuleId, KeggPathway,
-    KeggPathwayId, KeggReaction, KeggReactionId, Sequence, TaxId, Taxon, ko_entry_id,
+    KeggPathwayId, KeggReaction, KeggReactionId, Sequence, TaxId, Taxon, Transcript, TranscriptId,
+    ko_entry_id,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -23,6 +24,7 @@ pub use job::{
     InMemoryJobManager, JobExecutor, JobManager, JobManagerError, JobRecord, JobStatus, Worker,
     WorkerExecutor, WorkerJob,
 };
+pub use sequence::TranscriptProtein;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
@@ -32,8 +34,12 @@ pub enum ServiceError {
     AssemblyNotFound(String),
     #[error("gene not found: {0}")]
     GeneNotFound(String),
+    #[error("transcript not found: {0}")]
+    TranscriptNotFound(String),
     #[error("sequence not found: {0}")]
     SequenceNotFound(String),
+    #[error("protein sequence not available: {0}")]
+    ProteinSequenceUnavailable(String),
     #[error("KEGG pathway not found: {0}")]
     KeggPathwayNotFound(String),
     #[error("invalid request: {0}")]
@@ -90,6 +96,14 @@ where
         self.repository
             .gene(&gene_id)
             .ok_or_else(|| ServiceError::GeneNotFound(gene_id.into_string()))
+    }
+
+    pub fn transcript(&self, transcript_id: &str) -> Result<Transcript, ServiceError> {
+        let transcript_id = TranscriptId::new(transcript_id)
+            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+        self.repository
+            .transcript(&transcript_id)
+            .ok_or_else(|| ServiceError::TranscriptNotFound(transcript_id.into_string()))
     }
 
     pub fn search_genes(&self, search: GeneSearch) -> Vec<Gene> {

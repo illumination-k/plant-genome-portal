@@ -11,6 +11,7 @@ use crate::fasta::{assembly_checksum, read_fasta_sequences, refget_checksum};
 use crate::gff::{ParsedGff, parse_gff3};
 use crate::kegg::{KeggCatalogInput, build_kegg_catalog};
 use crate::nomenclature::{apply_nomenclature, parse_nomenclature};
+use crate::protein::apply_protein_sequences;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotManifest {
@@ -21,6 +22,8 @@ pub struct SnapshotManifest {
     pub nomenclature_file: Option<String>,
     #[serde(default)]
     pub kegg_files: Option<KeggManifest>,
+    #[serde(default)]
+    pub protein_fasta_file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +96,7 @@ pub struct GenomeSnapshotBuild {
     pub gff_path: PathBuf,
     pub functional_annotation_path: Option<PathBuf>,
     pub nomenclature_path: Option<PathBuf>,
+    pub protein_fasta_path: Option<PathBuf>,
     pub kegg_catalog_paths: KeggCatalogPaths,
     pub manifest: SnapshotManifest,
     pub taxon: Taxon,
@@ -151,6 +155,9 @@ fn enrich_parsed_gff(
     if let Some(path) = &config.nomenclature_path {
         apply_nomenclature(parsed, &parse_nomenclature(path)?);
     }
+    if let Some(path) = &config.protein_fasta_path {
+        apply_protein_sequences(parsed, path)?;
+    }
 
     Ok(())
 }
@@ -171,6 +178,7 @@ mod tests {
                 functional_annotation_file: None,
                 nomenclature_file: None,
                 kegg_files: None,
+                protein_fasta_file: None,
             },
             dataset: GenomeDataset {
                 taxon: Taxon {

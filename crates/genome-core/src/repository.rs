@@ -1,7 +1,7 @@
 use crate::assembly::{Assembly, Sequence, Taxon};
 use crate::coord::HalfOpenRegion;
-use crate::feature::{Gene, GeneRecord};
-use crate::ids::{AssemblyAccession, GeneId, KeggEntryId, TaxId};
+use crate::feature::{Gene, GeneRecord, Transcript};
+use crate::ids::{AssemblyAccession, GeneId, KeggEntryId, TaxId, TranscriptId};
 use crate::kegg::KeggCatalog;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -20,6 +20,7 @@ pub trait GenomeRepository: Send + Sync + 'static {
     fn sequences_for_assembly(&self, accession: &AssemblyAccession) -> Vec<Sequence>;
     fn sequence_by_checksum(&self, checksum: &str) -> Option<Sequence>;
     fn gene(&self, gene_id: &GeneId) -> Option<GeneRecord>;
+    fn transcript(&self, transcript_id: &TranscriptId) -> Option<Transcript>;
     fn search_genes(&self, search: &GeneSearch) -> Vec<Gene>;
     fn features_in_region(
         &self,

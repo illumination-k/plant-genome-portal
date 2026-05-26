@@ -48,6 +48,9 @@ const makeUrl = (geneRecord: GeneRecord, segments: SequenceSegment[], strand?: S
     strand,
   });
 
+const proteinDownloadUrl = (transcriptId: string): string =>
+  `/v2/transcript/id/${encodeURIComponent(transcriptId)}/protein?format=fasta`;
+
 const appendTranscriptLinks = (
   links: DownloadLink[],
   geneRecord: GeneRecord,
@@ -69,6 +72,14 @@ const appendTranscriptLinks = (
       filename: `${gene.id}.${transcript.id}.cds.fa`,
       label: `${transcriptLabel(transcript)} CDS`,
       url: makeUrl(geneRecord, cdsSegments, gene.strand),
+    });
+  }
+
+  if (transcript.protein_checksum) {
+    links.push({
+      filename: `${gene.id}.${transcript.id}.protein.fa`,
+      label: `${transcriptLabel(transcript)} protein`,
+      url: proteinDownloadUrl(transcript.id),
     });
   }
 };

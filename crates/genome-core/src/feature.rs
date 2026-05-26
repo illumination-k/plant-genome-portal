@@ -32,6 +32,14 @@ pub struct Transcript {
     pub feature_type: String,
     pub annotations: Vec<FunctionalAnnotation>,
     pub attributes: BTreeMap<String, String>,
+    /// refget checksum of the translated protein sequence (24-byte SHA-512
+    /// truncated, URL-safe base64), when a protein FASTA was supplied at
+    /// snapshot build time. `None` for non-coding or pre-protein imports.
+    #[serde(default)]
+    pub protein_checksum: Option<String>,
+    /// Length of the protein in amino acids (excluding any stop symbol).
+    #[serde(default)]
+    pub protein_length: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

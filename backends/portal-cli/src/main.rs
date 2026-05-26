@@ -16,6 +16,7 @@ const MARPOLBASE_MPTAK1_V7_1_BASE_URL: &str = "https://marchantia.info/data/MpTa
 const MARPOLBASE_MPTAK1_V7_1_FASTA_FILE: &str = "MpTak1_v7.1.fa.gz";
 const MARPOLBASE_MPTAK1_V7_1_GFF_FILE: &str = "MpTak1_v7.1.gff";
 const MARPOLBASE_MPTAK1_V7_1_FUNC_ANNOTATION_FILE: &str = "MpTak1_v7.1.func_annotation.1_line.tsv";
+const MARPOLBASE_MPTAK1_V7_1_PROTEIN_FILE: &str = "MpTak1_v7.1.protein.fa";
 const MARPOLBASE_MPTAK1_V7_1_ACCESSION: &str = "GCA_037833805.1";
 const MARPOLBASE_NOMENCLATURE_URL: &str = "https://marchantia.info/nomenclature/nomenlatures.txt";
 const MARPOLBASE_NOMENCLATURE_FILE: &str = "nomenlatures.txt";
@@ -69,7 +70,8 @@ struct PrepareCommand {
 impl PrepareCommand {
     fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         match self.target {
-            PrepareTarget::Blastn(command) => command.run(),
+            PrepareTarget::Blastn(command) => command.run("nucl"),
+            PrepareTarget::Blastp(command) => command.run("prot"),
         }
     }
 }
@@ -77,11 +79,13 @@ impl PrepareCommand {
 #[derive(Debug, Subcommand)]
 enum PrepareTarget {
     /// Prepare a nucleotide BLAST database from a genome FASTA.
-    Blastn(BlastnPrepare),
+    Blastn(BlastDatabasePrepare),
+    /// Prepare a protein BLAST database from a protein FASTA.
+    Blastp(BlastDatabasePrepare),
 }
 
 #[derive(Debug, Args)]
-struct BlastnPrepare {
+struct BlastDatabasePrepare {
     #[arg(long)]
     fasta: PathBuf,
     #[arg(long, default_value = "target/blast")]
@@ -92,9 +96,9 @@ struct BlastnPrepare {
     manifest: Option<PathBuf>,
 }
 
-impl BlastnPrepare {
-    fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        let prepared = prepare_blastn_database(&self.fasta, &self.out, &self.makeblastdb)?;
+impl BlastDatabasePrepare {
+    fn run(self, dbtype: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let prepared = prepare_blast_database(&self.fasta, &self.out, &self.makeblastdb, dbtype)?;
 
         match self.manifest {
             Some(path) => {
@@ -125,10 +129,11 @@ struct PreparedBlastDatabase {
     fasta: PathBuf,
 }
 
-fn prepare_blastn_database(
+fn prepare_blast_database(
     fasta: &Path,
     out: &Path,
     makeblastdb: &Path,
+    dbtype: &str,
 ) -> Result<PreparedBlastDatabase, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(out)?;
     let fasta = materialize_fasta(fasta, out)?;
@@ -137,7 +142,7 @@ fn prepare_blastn_database(
         .arg("-in")
         .arg(&fasta)
         .arg("-dbtype")
-        .arg("nucl")
+        .arg(dbtype)
         .arg("-parse_seqids")
         .arg("-out")
         .arg(&db_prefix)
@@ -261,6 +266,9 @@ impl MarpolbaseMptak1V7_1Import {
         if let Some(nomenclature_path) = &config.snapshot.nomenclature_path {
             download_if_needed(&config.nomenclature_url, nomenclature_path, self.force).await?;
         }
+        if let Some(protein_fasta_path) = &config.snapshot.protein_fasta_path {
+            download_if_needed(&config.protein_fasta_url, protein_fasta_path, self.force).await?;
+        }
         for download in &config.kegg_downloads {
             download_if_needed(&download.url, &download.path, self.force).await?;
         }
@@ -287,6 +295,7 @@ impl MarpolbaseMptak1V7_1Import {
         let gff_path = self.out.join(MARPOLBASE_MPTAK1_V7_1_GFF_FILE);
         let functional_annotation_path = self.out.join(MARPOLBASE_MPTAK1_V7_1_FUNC_ANNOTATION_FILE);
         let nomenclature_path = self.out.join(MARPOLBASE_NOMENCLATURE_FILE);
+        let protein_fasta_path = self.out.join(MARPOLBASE_MPTAK1_V7_1_PROTEIN_FILE);
         let snapshot_path = self.out.join("snapshot.json");
         let tax_id = TaxId::new(3197);
 
@@ -315,6 +324,9 @@ impl MarpolbaseMptak1V7_1Import {
                 "{MARPOLBASE_MPTAK1_V7_1_BASE_URL}/{MARPOLBASE_MPTAK1_V7_1_FUNC_ANNOTATION_FILE}"
             ),
             nomenclature_url: MARPOLBASE_NOMENCLATURE_URL.to_owned(),
+            protein_fasta_url: format!(
+                "{MARPOLBASE_MPTAK1_V7_1_BASE_URL}/{MARPOLBASE_MPTAK1_V7_1_PROTEIN_FILE}"
+            ),
             snapshot_path,
             kegg_downloads,
             snapshot: GenomeSnapshotBuild {
@@ -322,6 +334,7 @@ impl MarpolbaseMptak1V7_1Import {
                 gff_path,
                 functional_annotation_path: Some(functional_annotation_path),
                 nomenclature_path: Some(nomenclature_path),
+                protein_fasta_path: Some(protein_fasta_path),
                 kegg_catalog_paths,
                 manifest: SnapshotManifest {
                     source_base_url: MARPOLBASE_MPTAK1_V7_1_BASE_URL.to_owned(),
@@ -332,6 +345,7 @@ impl MarpolbaseMptak1V7_1Import {
                     ),
                     nomenclature_file: Some(MARPOLBASE_NOMENCLATURE_FILE.to_owned()),
                     kegg_files: kegg_manifest,
+                    protein_fasta_file: Some(MARPOLBASE_MPTAK1_V7_1_PROTEIN_FILE.to_owned()),
                 },
                 taxon: Taxon {
                     tax_id,
@@ -429,6 +443,7 @@ struct ImportConfig {
     gff_url: String,
     functional_annotation_url: String,
     nomenclature_url: String,
+    protein_fasta_url: String,
     snapshot_path: PathBuf,
     kegg_downloads: Vec<KeggDownload>,
     snapshot: GenomeSnapshotBuild,
@@ -446,6 +461,11 @@ impl ImportConfig {
             && self
                 .snapshot
                 .nomenclature_path
+                .as_ref()
+                .is_none_or(|path| path.exists())
+            && self
+                .snapshot
+                .protein_fasta_path
                 .as_ref()
                 .is_none_or(|path| path.exists())
             && self
