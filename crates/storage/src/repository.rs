@@ -509,4 +509,135 @@ mod tests {
         let other = AssemblyAccession::new("GCA_other").unwrap();
         assert!(repo.features_in_region(&other, &region(0, 1000)).is_empty());
     }
+
+    fn gene_with_kegg(id: &str, kos: &[&str]) -> Gene {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        Gene {
+            id: GeneId::new(id).unwrap(),
+            assembly_accession: accession,
+            symbol: None,
+            locus_tag: None,
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: region(0, 10),
+            strand: Strand::Forward,
+            feature_type: "gene".to_owned(),
+            annotations: kos
+                .iter()
+                .map(|ko| {
+                    FunctionalAnnotation::Kegg(genome_core::KeggAnnotation::new(
+                        KeggEntryId::new(*ko).unwrap(),
+                        None,
+                        genome_core::AnnotationEvidence::new(genome_core::AnnotationSource::Kegg),
+                    ))
+                })
+                .collect(),
+            attributes: BTreeMap::new(),
+        }
+    }
+
+    fn repository_with_genes(genes: Vec<Gene>) -> FileGenomeRepository {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        FileGenomeRepository::new(GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(TAX_ID),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession,
+                tax_id: TaxId::new(TAX_ID),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: Vec::new(),
+            genes,
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
+        })
+    }
+
+    #[test]
+    fn genes_with_kegg_ko_groups_by_normalized_ko_and_strips_prefix() {
+        // Gene A has both `K00001` (bare) and `ko:K00001` (prefixed) — both
+        // should canonicalize to `K00001` and produce one entry, not two.
+        // Gene B has a different KO, so it must NOT match K00001.
+        let repo = repository_with_genes(vec![
+            gene_with_kegg("MpAAA", &["K00001", "ko:K00001"]),
+            gene_with_kegg("MpBBB", &["K00002"]),
+        ]);
+
+        let hits = repo.genes_with_kegg_ko(&KeggEntryId::new("K00001").unwrap());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id.as_str(), "MpAAA");
+
+        let other = repo.genes_with_kegg_ko(&KeggEntryId::new("K00002").unwrap());
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].id.as_str(), "MpBBB");
+    }
+
+    #[test]
+    fn genes_with_kegg_ko_ignores_non_orthology_kegg_entries() {
+        // A KEGG annotation whose entry id is a pathway (not a K-code) must
+        // not be indexed under `ko_entry_id`.
+        let repo = repository_with_genes(vec![gene_with_kegg("MpPATH", &["map00010"])]);
+        assert!(
+            repo.genes_with_kegg_ko(&KeggEntryId::new("map00010").unwrap())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn genes_with_kegg_ko_returns_empty_for_unknown_ko() {
+        let repo = repository_with_genes(vec![gene_with_kegg("MpAAA", &["K00001"])]);
+        assert!(
+            repo.genes_with_kegg_ko(&KeggEntryId::new("K99999").unwrap())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn kegg_catalog_returns_the_actual_dataset_catalog() {
+        // Build a non-empty catalog so a default-replacement mutation on
+        // `kegg_catalog` would visibly differ from the truth.
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let catalog = genome_core::KeggCatalog {
+            pathways: vec![genome_core::KeggPathway {
+                id: genome_core::KeggPathwayId::new("map00010").unwrap(),
+                name: Some("Glycolysis".to_owned()),
+            }],
+            modules: Vec::new(),
+            reactions: Vec::new(),
+            ko_links: Vec::new(),
+        };
+        let repo = FileGenomeRepository::new(GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(TAX_ID),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession,
+                tax_id: TaxId::new(TAX_ID),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: Vec::new(),
+            genes: Vec::new(),
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: catalog,
+        });
+
+        let exposed = repo.kegg_catalog();
+        assert_eq!(exposed.pathways.len(), 1);
+        assert_eq!(exposed.pathways[0].id.as_str(), "map00010");
+        assert_eq!(exposed.pathways[0].name.as_deref(), Some("Glycolysis"));
+    }
 }

@@ -255,4 +255,25 @@ mod tests {
         let other = KeggEntryId::new("M00001").unwrap();
         assert!(ko_entry_id(&other).is_none());
     }
+
+    #[test]
+    fn pathway_id_display_and_into_string_preserve_value() {
+        let id = KeggPathwayId::new("map00010").unwrap();
+        assert_eq!(id.to_string(), "map00010");
+        assert_eq!(id.clone().into_string(), "map00010");
+    }
+
+    #[test]
+    fn module_id_display_and_into_string_preserve_value() {
+        let id = KeggModuleId::new("M00001").unwrap();
+        assert_eq!(id.to_string(), "M00001");
+        assert_eq!(id.clone().into_string(), "M00001");
+    }
+
+    #[test]
+    fn reaction_id_display_and_into_string_preserve_value() {
+        let id = KeggReactionId::new("R00754").unwrap();
+        assert_eq!(id.to_string(), "R00754");
+        assert_eq!(id.clone().into_string(), "R00754");
+    }
 }

@@ -346,4 +346,202 @@ mod tests {
 
         GenomeService::new(FileGenomeRepository::new(dataset), None)
     }
+
+    fn kegg_gene(id: &str, kos: &[&str]) -> Gene {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        Gene {
+            id: GeneId::new(id).unwrap(),
+            assembly_accession: accession,
+            symbol: Some(format!("SYMB_{id}")),
+            locus_tag: Some(format!("LOC_{id}")),
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: HalfOpenRegion::new(
+                SequenceName::new("chr1").unwrap(),
+                Position0::new(0),
+                Position0::new(10),
+            )
+            .unwrap(),
+            strand: Strand::Forward,
+            feature_type: "gene".to_owned(),
+            annotations: kos
+                .iter()
+                .map(|ko| {
+                    FunctionalAnnotation::Kegg(genome_core::KeggAnnotation::new(
+                        KeggEntryId::new(*ko).unwrap(),
+                        Some(format!("name of {ko}")),
+                        genome_core::AnnotationEvidence::new(genome_core::AnnotationSource::Kegg),
+                    ))
+                })
+                .collect(),
+            attributes: BTreeMap::new(),
+        }
+    }
+
+    fn kegg_service() -> GenomeService<FileGenomeRepository> {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let catalog = genome_core::KeggCatalog {
+            pathways: vec![
+                KeggPathway {
+                    id: KeggPathwayId::new("map00010").unwrap(),
+                    name: Some("Glycolysis".to_owned()),
+                },
+                KeggPathway {
+                    id: KeggPathwayId::new("map00020").unwrap(),
+                    name: Some("TCA cycle".to_owned()),
+                },
+            ],
+            modules: vec![KeggModule {
+                id: KeggModuleId::new("M00001").unwrap(),
+                name: Some("Module-one".to_owned()),
+            }],
+            reactions: vec![KeggReaction {
+                id: KeggReactionId::new("R00754").unwrap(),
+                name: Some("Reaction-one".to_owned()),
+            }],
+            ko_links: vec![
+                genome_core::KeggKoLinks {
+                    ko: KeggEntryId::new("K00001").unwrap(),
+                    pathways: vec![KeggPathwayId::new("map00010").unwrap()],
+                    modules: vec![KeggModuleId::new("M00001").unwrap()],
+                    reactions: vec![KeggReactionId::new("R00754").unwrap()],
+                },
+                genome_core::KeggKoLinks {
+                    ko: KeggEntryId::new("K00002").unwrap(),
+                    pathways: vec![KeggPathwayId::new("map00010").unwrap()],
+                    modules: Vec::new(),
+                    reactions: Vec::new(),
+                },
+                genome_core::KeggKoLinks {
+                    ko: KeggEntryId::new("K00003").unwrap(),
+                    pathways: vec![KeggPathwayId::new("map00020").unwrap()],
+                    modules: Vec::new(),
+                    reactions: Vec::new(),
+                },
+            ],
+        };
+        let dataset = GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: accession.clone(),
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: Vec::new(),
+            // gene_a covers K00001 (and a duplicate `ko:K00001`).
+            // gene_b covers K00002.
+            // gene_c covers K00003 (only on map00020).
+            genes: vec![
+                kegg_gene("MpAAA", &["K00001", "ko:K00001"]),
+                kegg_gene("MpBBB", &["K00002"]),
+                kegg_gene("MpCCC", &["K00003"]),
+            ],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: catalog,
+        };
+        GenomeService::new(FileGenomeRepository::new(dataset), None)
+    }
+
+    #[test]
+    fn kegg_pathway_returns_kos_in_pathway_with_matching_genes() {
+        let service = kegg_service();
+        let detail = service.kegg_pathway("map00010").unwrap();
+
+        assert_eq!(detail.pathway.id.as_str(), "map00010");
+        assert_eq!(detail.pathway.name.as_deref(), Some("Glycolysis"));
+        // Both K00001 and K00002 link to map00010; K00003 does not.
+        let kos: Vec<&str> = detail.kos.iter().map(|k| k.ko.as_str()).collect();
+        assert!(kos.contains(&"K00001"));
+        assert!(kos.contains(&"K00002"));
+        assert!(!kos.contains(&"K00003"));
+
+        // The K00001 entry must include MpAAA (which has K00001) and not MpBBB/MpCCC.
+        let k1 = detail
+            .kos
+            .iter()
+            .find(|k| k.ko.as_str() == "K00001")
+            .unwrap();
+        assert_eq!(k1.genes.len(), 1);
+        assert_eq!(k1.genes[0].id.as_str(), "MpAAA");
+
+        // The K00002 entry must include MpBBB only.
+        let k2 = detail
+            .kos
+            .iter()
+            .find(|k| k.ko.as_str() == "K00002")
+            .unwrap();
+        assert_eq!(k2.genes.len(), 1);
+        assert_eq!(k2.genes[0].id.as_str(), "MpBBB");
+    }
+
+    #[test]
+    fn kegg_pathway_canonicalizes_input_id() {
+        // `ko00010` should canonicalize to `map00010`.
+        let service = kegg_service();
+        let detail = service.kegg_pathway("ko00010").unwrap();
+        assert_eq!(detail.pathway.id.as_str(), "map00010");
+    }
+
+    #[test]
+    fn kegg_pathway_returns_not_found_for_missing_id() {
+        let service = kegg_service();
+        let err = service.kegg_pathway("map99999").unwrap_err();
+        assert!(matches!(err, ServiceError::KeggPathwayNotFound(_)));
+    }
+
+    #[test]
+    fn kegg_pathway_returns_invalid_request_for_bad_id() {
+        let service = kegg_service();
+        let err = service.kegg_pathway("not-a-pathway").unwrap_err();
+        assert!(matches!(err, ServiceError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn gene_kegg_view_dedups_ko_and_hydrates_names() {
+        let service = kegg_service();
+        let view = service.gene_kegg_view("MpAAA").unwrap();
+
+        // MpAAA has both `K00001` and `ko:K00001` — they collapse to one entry.
+        assert_eq!(view.gene_id.as_str(), "MpAAA");
+        assert_eq!(view.entries.len(), 1);
+        let entry = &view.entries[0];
+        assert_eq!(entry.ko.as_str(), "K00001");
+
+        // Pathway/module/reaction names come from the catalog.
+        assert_eq!(entry.pathways.len(), 1);
+        assert_eq!(entry.pathways[0].id.as_str(), "map00010");
+        assert_eq!(entry.pathways[0].name.as_deref(), Some("Glycolysis"));
+        assert_eq!(entry.modules.len(), 1);
+        assert_eq!(entry.modules[0].name.as_deref(), Some("Module-one"));
+        assert_eq!(entry.reactions.len(), 1);
+        assert_eq!(entry.reactions[0].name.as_deref(), Some("Reaction-one"));
+    }
+
+    #[test]
+    fn gene_kegg_view_returns_empty_links_for_ko_with_no_catalog_entry() {
+        let service = kegg_service();
+        // MpBBB only has K00002 which links to map00010 but no module/reaction.
+        let view = service.gene_kegg_view("MpBBB").unwrap();
+        assert_eq!(view.entries.len(), 1);
+        assert_eq!(view.entries[0].ko.as_str(), "K00002");
+        assert_eq!(view.entries[0].pathways.len(), 1);
+        assert_eq!(view.entries[0].pathways[0].id.as_str(), "map00010");
+        assert!(view.entries[0].modules.is_empty());
+        assert!(view.entries[0].reactions.is_empty());
+    }
+
+    #[test]
+    fn gene_kegg_view_returns_not_found_for_missing_gene() {
+        let service = kegg_service();
+        let err = service.gene_kegg_view("MpZZZ").unwrap_err();
+        assert!(matches!(err, ServiceError::GeneNotFound(_)));
+    }
 }

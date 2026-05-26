@@ -180,7 +180,7 @@ where
     for line in reader.lines() {
         let line = line?;
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
+        if is_skippable_tsv_line(line) {
             continue;
         }
         let Some((raw_ko, raw_target)) = line.split_once('\t') else {
@@ -213,7 +213,7 @@ where
     for line in reader.lines() {
         let line = line?;
         let line = line.trim_end_matches(['\n', '\r']);
-        if line.trim().is_empty() || line.starts_with('#') {
+        if is_skippable_tsv_line(line.trim()) {
             continue;
         }
         let Some((raw_id, name)) = line.split_once('\t') else {
@@ -225,6 +225,16 @@ where
         out.insert(id, name.trim().to_owned());
     }
     Ok(out)
+}
+
+/// Lines that should be ignored in KEGG REST TSV dumps: empty lines and
+/// `#`-prefixed comments. Extracted so we can mutation-test the skip logic
+/// independently of the actual parsers.
+fn is_skippable_tsv_line(line: &str) -> bool {
+    if line.is_empty() {
+        return true;
+    }
+    line.starts_with('#')
 }
 
 #[cfg(test)]
@@ -355,5 +365,271 @@ mod tests {
         assert!(catalog.modules.is_empty());
         assert!(catalog.reactions.is_empty());
         assert!(catalog.ko_links.is_empty());
+    }
+
+    #[test]
+    fn build_catalog_hydrates_module_and_reaction_names_from_list_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        let module_path = dir.path().join("link_module.tsv");
+        let reaction_path = dir.path().join("link_reaction.tsv");
+        let list_module_path = dir.path().join("list_module.tsv");
+        let list_reaction_path = dir.path().join("list_reaction.tsv");
+
+        write_tsv(&pathway_path, "");
+        write_tsv(&module_path, "ko:K00001\tmd:M00001\n");
+        write_tsv(&reaction_path, "ko:K00001\trn:R00001\n");
+        write_tsv(&list_module_path, "M00001\tGlycolysis module\n");
+        write_tsv(&list_reaction_path, "R00001\talcohol dehydrogenase\n");
+
+        let parsed = ParsedGff {
+            genes: vec![gene_with_kegg(&["K00001"])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                link_ko_module: Some(&module_path),
+                link_ko_reaction: Some(&reaction_path),
+                list_pathway: None,
+                list_module: Some(&list_module_path),
+                list_reaction: Some(&list_reaction_path),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(catalog.modules.len(), 1);
+        assert_eq!(
+            catalog.modules[0].name.as_deref(),
+            Some("Glycolysis module")
+        );
+        assert_eq!(catalog.reactions.len(), 1);
+        assert_eq!(
+            catalog.reactions[0].name.as_deref(),
+            Some("alcohol dehydrogenase")
+        );
+    }
+
+    #[test]
+    fn build_catalog_drops_ko_links_with_no_targets() {
+        // K00002 is in the dataset but the link TSVs contain no entries for it;
+        // it must not appear in `ko_links` because it has nothing to link to.
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        write_tsv(&pathway_path, "ko:K00001\tpath:map00010\n");
+
+        let parsed = ParsedGff {
+            genes: vec![gene_with_kegg(&["K00001", "K00002"])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                ..KeggCatalogInput::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(catalog.ko_links.len(), 1);
+        assert_eq!(catalog.ko_links[0].ko.as_str(), "K00001");
+    }
+
+    #[test]
+    fn build_catalog_collects_transcript_level_kegg_annotations() {
+        // Annotations attached to transcripts (not directly to genes) must
+        // still feed the catalog's `keep_kos` filter.
+        use genome_core::Transcript;
+
+        let parsed = ParsedGff {
+            genes: Vec::new(),
+            transcripts: vec![Transcript {
+                id: genome_core::TranscriptId::new("Mp1g00010.1").unwrap(),
+                gene_id: genome_core::GeneId::new("Mp1g00010").unwrap(),
+                sequence_name: SequenceName::new("chr1").unwrap(),
+                region: region(),
+                strand: Strand::Forward,
+                feature_type: "mRNA".to_owned(),
+                annotations: vec![FunctionalAnnotation::Kegg(KeggAnnotation::new(
+                    KeggEntryId::new("K00007").unwrap(),
+                    None,
+                    AnnotationEvidence::new(AnnotationSource::Kegg),
+                ))],
+                attributes: BTreeMap::new(),
+            }],
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        write_tsv(&pathway_path, "ko:K00007\tpath:map00030\n");
+
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                ..KeggCatalogInput::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(catalog.ko_links.len(), 1);
+        assert_eq!(catalog.ko_links[0].ko.as_str(), "K00007");
+        assert_eq!(catalog.ko_links[0].pathways[0].as_str(), "map00030");
+    }
+
+    #[test]
+    fn parse_link_tsv_skips_comments_blank_and_malformed_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        // The `#`-prefixed line contains tabs that look like a real KO link:
+        // if the comment skip is replaced by `&&` (so the line is parsed),
+        // the parser would try to register `# header` as a KO entry. The
+        // empty line similarly has no tab and must be skipped explicitly.
+        write_tsv(
+            &pathway_path,
+            "# header\tko:K77777\tpath:map00010\n\
+             \n\
+             missing-tab-line\n\
+             ko:not-a-valid-ko\tpath:map00010\n\
+             ko:K00001\tnot-a-valid-pathway\n\
+             ko:K00001\tpath:map00010\n",
+        );
+
+        let parsed = ParsedGff {
+            genes: vec![gene_with_kegg(&["K00001"])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                ..KeggCatalogInput::default()
+            },
+        )
+        .unwrap();
+
+        // Only the one valid line should survive.
+        assert_eq!(catalog.pathways.len(), 1);
+        assert_eq!(catalog.pathways[0].id.as_str(), "map00010");
+    }
+
+    #[test]
+    fn parse_link_tsv_skips_empty_lines_when_starts_with_check_is_combined() {
+        // A purely empty line must be skipped by the `is_empty()` branch.
+        // If the skip condition is mutated from `||` to `&&`, the empty
+        // line continues into parsing, which would silently swallow it.
+        // We pair the empty line with a `#`-prefixed line that, if not
+        // skipped, would try to parse with an unparseable KO and silently
+        // skip — but the `Default::default()` for HashSet-based filtering
+        // would still leave the valid map00010 entry. So we also assert
+        // exactly the expected number of valid pathways.
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        write_tsv(&pathway_path, "\nko:K00001\tpath:map00010\n");
+        let parsed = ParsedGff {
+            genes: vec![gene_with_kegg(&["K00001"])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                ..KeggCatalogInput::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(catalog.pathways.len(), 1);
+    }
+
+    #[test]
+    fn parse_list_tsv_skips_comments_blank_and_malformed_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        let list_pathway_path = dir.path().join("list_pathway.tsv");
+        write_tsv(&pathway_path, "ko:K00001\tpath:map00010\n");
+        // The `#`-prefixed line has a tab so split_once succeeds — only the
+        // explicit comment-skip guard keeps the parser from registering
+        // "# map00010" as a synonym for "Bogus header".
+        write_tsv(
+            &list_pathway_path,
+            "# map00010\tBogus header\n\
+             \n\
+             missing-tab-row\n\
+             not-a-valid-id\tname\n\
+             map00010\tGlycolysis / Gluconeogenesis\n",
+        );
+
+        let parsed = ParsedGff {
+            genes: vec![gene_with_kegg(&["K00001"])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                list_pathway: Some(&list_pathway_path),
+                ..KeggCatalogInput::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            catalog.pathways[0].name.as_deref(),
+            Some("Glycolysis / Gluconeogenesis")
+        );
+    }
+
+    #[test]
+    fn is_skippable_tsv_line_treats_blank_and_comment_lines_as_skippable() {
+        assert!(is_skippable_tsv_line(""));
+        assert!(is_skippable_tsv_line("# header"));
+        assert!(is_skippable_tsv_line("#"));
+        assert!(!is_skippable_tsv_line("ko:K00001\tpath:map00010"));
+        assert!(!is_skippable_tsv_line("map00010\tname"));
+        // Lines that contain '#' but don't start with it must be kept.
+        assert!(!is_skippable_tsv_line("ko:K00001\t# inline"));
+    }
+
+    #[test]
+    fn build_catalog_skips_unparseable_ko_entries() {
+        // The link TSV contains a line whose KO field is not a valid
+        // orthology id; we expect that whole row to be skipped rather than
+        // producing an empty/zero-length entry.
+        let dir = tempfile::tempdir().unwrap();
+        let pathway_path = dir.path().join("link_pathway.tsv");
+        write_tsv(
+            &pathway_path,
+            "ko:not-a-K-code\tpath:map00010\nko:K00001\tpath:map00010\n",
+        );
+        let parsed = ParsedGff {
+            genes: vec![gene_with_kegg(&["K00001"])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        };
+        let catalog = build_kegg_catalog(
+            &parsed,
+            &KeggCatalogInput {
+                link_ko_pathway: Some(&pathway_path),
+                ..KeggCatalogInput::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(catalog.pathways.len(), 1);
+        assert_eq!(catalog.ko_links.len(), 1);
     }
 }
