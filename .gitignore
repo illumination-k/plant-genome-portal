@@ -12,3 +12,10 @@ mutants.out.old/
 mutants.out/
 mutants.out.old/
 .miserc.toml
+
+# Nextflow
+.nextflow*
+work/
+results/
+pipelines/**/tests/_work/
+pipelines/**/tests/_results/

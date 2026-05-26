@@ -1,0 +1,14 @@
+report_comment: >
+  Plant Genome Portal — transcriptome pipeline report.
+report_section_order:
+  fastp:
+    order: 1000
+  hisat2:
+    order: 900
+  samtools:
+    order: 800
+  qualimap:
+    order: 700
+  salmon:
+    order: 600
+disable_version_detection: false
