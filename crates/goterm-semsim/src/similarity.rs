@@ -518,6 +518,53 @@ mod tests {
     }
 
     #[test]
+    fn wang_overwrites_when_a_larger_candidate_arrives_later() {
+        // 2-step diamond where the SMALLER candidate arrives at R first
+        // and the LARGER candidate arrives second. The `*existing >=
+        // candidate` guard must reject the smaller existing in favour of
+        // the larger candidate — replacing the guard with `true` would
+        // always skip and lock R at the smaller value.
+        //
+        //   X (GO:0000023)
+        //     ├─ is_a    → P1 (GO:0000021) ─is_a→    R    via 0.8·0.8 = 0.64 (larger)
+        //     └─ part_of → P2 (GO:0000022) ─part_of→ R    via 0.6·0.6 = 0.36 (smaller)
+        //
+        // P2 is pushed last (LIFO) so it pops first → R is set to 0.36,
+        // then P1 pops and offers 0.64 → guard must let it through.
+        let mut b = GoDag::builder();
+        b.insert(term("GO:0000020", GoNamespace::BiologicalProcess, &[], &[]))
+            .insert(term(
+                "GO:0000021",
+                GoNamespace::BiologicalProcess,
+                &["GO:0000020"],
+                &[],
+            ))
+            .insert(term(
+                "GO:0000022",
+                GoNamespace::BiologicalProcess,
+                &[],
+                &["GO:0000020"],
+            ))
+            .insert(term(
+                "GO:0000023",
+                GoNamespace::BiologicalProcess,
+                &["GO:0000021"],
+                &["GO:0000022"],
+            ));
+        let dag = b.build();
+        let v = wang(
+            &dag,
+            &id("GO:0000023"),
+            &id("GO:0000020"),
+            WangOptions::default(),
+        )
+        .unwrap();
+        // Subgraph(X) = {X:1, P1:0.8, P2:0.6, R:0.64}. SV(X) = 3.04.
+        let expected = (0.64 + 1.0) / (3.04 + 1.0);
+        assert!((v - expected).abs() < 1e-9, "expected {expected}, got {v}");
+    }
+
+    #[test]
     fn wang_keeps_maximum_when_a_smaller_candidate_arrives_later() {
         // Asymmetric DAG with two paths from X to R: a 2-step path via C
         // and a 3-step path via A→B. The traversal pops C first (LIFO,
