@@ -1,8 +1,14 @@
-import { blastnJobOptions, createBlastnJobMutation } from "@/api/client/@tanstack/react-query.gen";
+import {
+  blastnJobOptions,
+  blastpJobOptions,
+  createBlastnJobMutation,
+  createBlastpJobMutation,
+} from "@/api/client/@tanstack/react-query.gen";
 import type {
   AnnotatedHomologyHitResponse,
   BlastnJobResponse,
   CreateBlastnJobError,
+  HomologySearchMethod,
 } from "@/api/client/types.gen";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -12,13 +18,21 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import type { ColumnDef, RowData, SortingState } from "@tanstack/react-table";
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
 import { useMemo, useState } from "react";
 import ErrorState from "@/shared/ui/ErrorState";
 
+declare module "@tanstack/react-table" {
+  // oxlint-disable-next-line consistent-type-definitions
+  interface TableMeta<TData extends RowData> {
+    method?: HomologySearchMethod;
+  }
+}
+
 const defaultAssemblyAccession = "GCA_037833805.1";
-const defaultQuery = "ACGTACGTACGTACGTACGTACGTACGTACGT";
+const defaultBlastnQuery = "ACGTACGTACGTACGTACGTACGTACGTACGT";
+const defaultBlastpQuery = "MVTAGSMMHLERMGSELKCPVCLSLYKSAATISCNHTFCRSCILESVRATSCCPICKAHT";
 const exponentialScoreThreshold = 0.001;
 const exponentialScoreDigits = 2;
 const pollingIntervalMs = 1500;
@@ -26,15 +40,20 @@ const emptyLength = 0;
 
 const activeStatuses = new Set(["queued", "running"]);
 
+const blastnTasks = ["blastn", "blastn-short", "megablast", "dc-megablast"] as const;
+const blastpTasks = ["blastp", "blastp-short", "blastp-fast"] as const;
+
 type BlastForm = {
   assemblyAccession: string;
   evalue: string;
   maxTargetSeqs: string;
+  method: HomologySearchMethod;
   query: string;
   task: string;
 };
 
 type BlastHitRowData = AnnotatedHomologyHitResponse & {
+  method: HomologySearchMethod;
   rowId: string;
 };
 
@@ -42,9 +61,25 @@ const initialForm: BlastForm = {
   assemblyAccession: defaultAssemblyAccession,
   evalue: "10",
   maxTargetSeqs: "50",
-  query: defaultQuery,
+  method: "blastn",
+  query: defaultBlastnQuery,
   task: "blastn",
 };
+
+const methodDefaults = (method: HomologySearchMethod): { query: string; task: string } => {
+  if (method === "blastp") {
+    return { query: defaultBlastpQuery, task: "blastp" };
+  }
+  return { query: defaultBlastnQuery, task: "blastn" };
+};
+
+const methodLabel = (method: HomologySearchMethod): string =>
+  method === "blastp" ? "BLASTP" : "BLASTN";
+
+const methodDescription = (method: HomologySearchMethod): string =>
+  method === "blastp"
+    ? "Marchantia protein homology search"
+    : "Marchantia reference genome homology search";
 
 const formatNumber = (value: number): string => new Intl.NumberFormat("en-US").format(value);
 
@@ -86,18 +121,23 @@ const sortLabel = (sort: false | "asc" | "desc"): string => {
   return "";
 };
 
+const subjectHeader = (method: HomologySearchMethod): string =>
+  method === "blastp" ? "Transcript" : "Subject";
+
 const blastHitColumns: Array<ColumnDef<BlastHitRowData>> = [
   {
     accessorFn: (row) => row.hit.sequenceName,
     cell: (info) => (
       <span className="font-mono text-[12px] text-text-muted">{info.getValue<string>()}</span>
     ),
-    header: "Subject",
+    header: (info) => subjectHeader(info.table.options.meta?.method ?? "blastn"),
     id: "subject",
   },
   {
     accessorFn: regionText,
-    cell: (info) => <BlastRegionCell hit={info.row.original} />,
+    cell: (info) => (
+      <BlastRegionCell hit={info.row.original} method={info.row.original.method} />
+    ),
     header: "Region",
     id: "region",
   },
@@ -139,20 +179,33 @@ const blastHitColumns: Array<ColumnDef<BlastHitRowData>> = [
 const BlastPage = (): ReactElement => {
   const [form, setForm] = useState<BlastForm>(initialForm);
   const [jobId, setJobId] = useState<string | undefined>();
-  const createJob = useMutation(createBlastnJobMutation());
-  const jobQuery = useQuery({
+  const [jobMethod, setJobMethod] = useState<HomologySearchMethod>("blastn");
+
+  const createBlastn = useMutation(createBlastnJobMutation());
+  const createBlastp = useMutation(createBlastpJobMutation());
+  const blastnQuery = useQuery({
     ...blastnJobOptions({ path: { job_id: jobId ?? "" } }),
-    enabled: jobId !== undefined,
+    enabled: jobId !== undefined && jobMethod === "blastn",
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && activeStatuses.has(status) ? pollingIntervalMs : false;
+    },
+  });
+  const blastpQuery = useQuery({
+    ...blastpJobOptions({ path: { job_id: jobId ?? "" } }),
+    enabled: jobId !== undefined && jobMethod === "blastp",
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status && activeStatuses.has(status) ? pollingIntervalMs : false;
     },
   });
 
-  const job = jobQuery.data ?? createJob.data;
-  const isSubmitting = createJob.isPending;
+  const activeMutation = form.method === "blastp" ? createBlastp : createBlastn;
+  const activeQuery = jobMethod === "blastp" ? blastpQuery : blastnQuery;
+  const job = activeQuery.data ?? activeMutation.data;
+  const isSubmitting = activeMutation.isPending;
   const isRunning = job ? activeStatuses.has(job.status) : false;
-  const error = errorMessage(createJob.error ?? jobQuery.error ?? job?.error);
+  const error = errorMessage(activeMutation.error ?? activeQuery.error ?? job?.error);
 
   const onChange = (
     event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
@@ -160,32 +213,63 @@ const BlastPage = (): ReactElement => {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   };
 
+  const onMethodChange = (method: HomologySearchMethod): void => {
+    setForm((current) => {
+      if (current.method === method) {
+        return current;
+      }
+      const defaults = methodDefaults(method);
+      return { ...current, method, query: defaults.query, task: defaults.task };
+    });
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const response = await createJob.mutateAsync({
-      body: {
-        assemblyAccession: form.assemblyAccession.trim(),
-        evalue: Number(form.evalue),
-        maxTargetSeqs: Number(form.maxTargetSeqs),
-        query: form.query,
-        task: form.task,
-      },
-    });
+    const body = {
+      assemblyAccession: form.assemblyAccession.trim(),
+      evalue: Number(form.evalue),
+      maxTargetSeqs: Number(form.maxTargetSeqs),
+      query: form.query,
+      task: form.task,
+    };
+    const method = form.method;
+    const response =
+      method === "blastp"
+        ? await createBlastp.mutateAsync({ body })
+        : await createBlastn.mutateAsync({ body });
+    setJobMethod(method);
     setJobId(response.id);
   };
+
+  const taskOptions = form.method === "blastp" ? blastpTasks : blastnTasks;
 
   return (
     <section className="grid grid-cols-12 gap-6">
       <div className="col-span-12 rounded-lg border border-border-subtle bg-surface p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-semibold">BLASTN</h2>
-            <p className="mt-2 text-sm text-text-muted">Marchantia reference homology search</p>
+            <h2 className="text-2xl font-semibold">{methodLabel(form.method)}</h2>
+            <p className="mt-2 text-sm text-text-muted">{methodDescription(form.method)}</p>
           </div>
           {job && <JobStatusPill job={job} />}
         </div>
 
         <form className="mt-6 grid grid-cols-12 gap-4" onSubmit={onSubmit}>
+          <fieldset className="col-span-12 flex flex-wrap items-center gap-3">
+            <legend className="sr-only">BLAST method</legend>
+            <span className="text-xs font-medium uppercase text-text-subtle">Method</span>
+            <MethodRadio
+              checked={form.method === "blastn"}
+              label="blastn (nucleotide)"
+              onChange={() => onMethodChange("blastn")}
+            />
+            <MethodRadio
+              checked={form.method === "blastp"}
+              label="blastp (protein)"
+              onChange={() => onMethodChange("blastp")}
+            />
+          </fieldset>
+
           <label className="col-span-12 flex flex-col gap-1 md:col-span-5">
             <span className="text-xs font-medium uppercase text-text-subtle">
               Assembly accession
@@ -203,16 +287,17 @@ const BlastPage = (): ReactElement => {
           <label className="col-span-12 flex flex-col gap-1 sm:col-span-4 md:col-span-3">
             <span className="text-xs font-medium uppercase text-text-subtle">Task</span>
             <select
-              aria-label="BLASTN task"
+              aria-label="BLAST task"
               className="min-h-10 rounded-md border border-border bg-surface px-3 text-sm text-text outline-none transition focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
               name="task"
               onChange={onChange}
               value={form.task}
             >
-              <option value="blastn">blastn</option>
-              <option value="blastn-short">blastn-short</option>
-              <option value="megablast">megablast</option>
-              <option value="dc-megablast">dc-megablast</option>
+              {taskOptions.map((task) => (
+                <option key={task} value={task}>
+                  {task}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -265,7 +350,7 @@ const BlastPage = (): ReactElement => {
               disabled={isSubmitting || isRunning}
               type="submit"
             >
-              {isSubmitting || isRunning ? "Running" : "Run BLASTN"}
+              {isSubmitting || isRunning ? "Running" : `Run ${methodLabel(form.method)}`}
             </button>
             {job && <span className="font-mono text-xs text-text-muted">{job.id}</span>}
           </div>
@@ -276,11 +361,29 @@ const BlastPage = (): ReactElement => {
         <div className="border-b border-border-subtle px-6 py-4">
           <h3 className="text-base font-semibold">Results</h3>
         </div>
-        <BlastResults error={error} job={job} />
+        <BlastResults error={error} job={job} method={jobMethod} />
       </div>
     </section>
   );
 };
+
+const MethodRadio = (props: {
+  checked: boolean;
+  label: string;
+  onChange: () => void;
+}): ReactElement => (
+  <label className="inline-flex items-center gap-2 text-sm text-text">
+    <input
+      aria-label={props.label}
+      checked={props.checked}
+      className="h-4 w-4 accent-primary-700"
+      name="method"
+      onChange={props.onChange}
+      type="radio"
+    />
+    {props.label}
+  </label>
+);
 
 const JobStatusPill = (props: { job: BlastnJobResponse }): ReactElement => (
   <span className="rounded-full border border-border bg-surface-muted px-3 py-1 font-mono text-xs text-text-muted">
@@ -291,6 +394,7 @@ const JobStatusPill = (props: { job: BlastnJobResponse }): ReactElement => (
 const BlastResults = (props: {
   error: string | undefined;
   job: BlastnJobResponse | undefined;
+  method: HomologySearchMethod;
 }): ReactElement => {
   if (props.error) {
     return (
@@ -308,16 +412,20 @@ const BlastResults = (props: {
   if (!props.job.result || props.job.result.hits.length === emptyLength) {
     return <p className="px-6 py-8 text-sm text-text-muted">No hits found.</p>;
   }
-  return <BlastHitTable hits={props.job.result.hits} />;
+  return <BlastHitTable hits={props.job.result.hits} method={props.method} />;
 };
 
-const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactElement => {
+const BlastHitTable = (props: {
+  hits: AnnotatedHomologyHitResponse[];
+  method: HomologySearchMethod;
+}): ReactElement => {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const data = useMemo(
     () =>
       props.hits.map((hit) => ({
         ...hit,
+        method: props.method,
         rowId: [
           hit.hit.queryId,
           hit.hit.sequenceName,
@@ -328,7 +436,7 @@ const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactEl
           hit.hit.bitScore,
         ].join(":"),
       })),
-    [props.hits],
+    [props.hits, props.method],
   );
   const table = useReactTable({
     columns: blastHitColumns,
@@ -337,6 +445,7 @@ const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactEl
     getFilteredRowModel: getFilteredRowModel(),
     getRowId: (row) => row.rowId,
     getSortedRowModel: getSortedRowModel(),
+    meta: { method: props.method },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
     state: {
@@ -400,18 +509,29 @@ const BlastHitTable = (props: { hits: AnnotatedHomologyHitResponse[] }): ReactEl
   );
 };
 
-const BlastRegionCell = (props: { hit: AnnotatedHomologyHitResponse }): ReactElement => {
+const BlastRegionCell = (props: {
+  hit: AnnotatedHomologyHitResponse;
+  method: HomologySearchMethod;
+}): ReactElement => {
   const hit = props.hit.hit;
   const region = regionText(props.hit);
-
-  return (
-    <div>
+  // For blastn the subject is a chromosome rendered as a link into the
+  // Genome browser; for blastp it is a transcript so we render plain text.
+  const regionContent =
+    props.method === "blastn" ? (
       <a
         className="font-mono text-[12px] text-primary-800 hover:underline"
         href={`/browser?loc=${encodeURIComponent(region)}`}
       >
         {region}
       </a>
+    ) : (
+      <span className="font-mono text-[12px] text-text-muted">{region}</span>
+    );
+
+  return (
+    <div>
+      {regionContent}
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-text-subtle">Alignment</summary>
         <pre className="mt-2 max-w-[40rem] overflow-x-auto rounded-md bg-surface-muted p-3 font-mono text-[11px] leading-5 text-text-muted">
