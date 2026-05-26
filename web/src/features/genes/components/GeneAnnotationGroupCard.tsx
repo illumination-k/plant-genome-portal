@@ -10,9 +10,7 @@ type Entry = {
 
 const EMPTY_ENTRIES = 0;
 
-const renderEmpty = (): ReactElement => (
-  <span className="text-[12px] text-text-subtle">—</span>
-);
+const renderEmpty = (): ReactElement => <span className="text-[12px] text-text-subtle">—</span>;
 
 const renderChip = (label: string, entry: Entry): ReactElement => (
   <FunctionalAnnotationChip
@@ -30,10 +28,7 @@ const renderEntries = (label: string, entries: Entry[]): ReactElement | ReactEle
   return entries.map((entry) => renderChip(label, entry));
 };
 
-const GeneAnnotationGroupCard = (props: {
-  entries: Entry[];
-  label: string;
-}): ReactElement => (
+const GeneAnnotationGroupCard = (props: { entries: Entry[]; label: string }): ReactElement => (
   <div className="rounded-lg border border-border-subtle bg-surface p-5">
     <FunctionalAnnotationGroup count={props.entries.length} label={props.label}>
       {renderEntries(props.label, props.entries)}

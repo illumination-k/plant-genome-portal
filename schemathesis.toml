@@ -11,6 +11,7 @@ deterministic = true
 accession = "GCA_PBT000001.1"
 tax_id = 3197
 gene_id = "MpPBT00010"
+pathway_id = "map00010"
 region = "chr1:1-20"
 checksum = "71mfZw47FLWJKQ_wvBCMgGungdTJFoft"
 ref_name = "chr1"

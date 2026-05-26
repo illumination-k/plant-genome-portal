@@ -17,8 +17,9 @@ use expression_store::FileExpressionRepository;
 use genome_core::{AssemblyAccession, Gene, GeneSearch, Sequence, Strand, TaxId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use service::{
-    AnnotatedHomologySearchResult, GenomeService, InMemoryJobManager, JobExecutor, JobManager,
-    JobManagerError, JobRecord, JobStatus, ServiceError, WorkerJob,
+    AnnotatedHomologySearchResult, GeneKeggOrthologyEntry, GeneKeggView, GenomeService,
+    InMemoryJobManager, JobExecutor, JobManager, JobManagerError, JobRecord, JobStatus,
+    KeggGeneSummary, KeggPathwayDetail, KeggPathwayKoEntry, ServiceError, WorkerJob,
 };
 use std::collections::BTreeMap;
 use std::fs::{self, File};
@@ -153,6 +154,8 @@ fn router(
         )
         .route("/v2/genome/taxon/{tax_id}", get(taxon))
         .route("/v2/gene/id/{gene_id}", get(gene))
+        .route("/v2/gene/id/{gene_id}/kegg", get(gene_kegg))
+        .route("/v2/kegg/pathway/{pathway_id}", get(kegg_pathway))
         .route("/v2/gene/id/{gene_id}/expression", get(gene_expression))
         .route("/v2/expression/clustergram", get(expression_clustergram))
         .route("/v2/gene/search", get(gene_search))
@@ -356,6 +359,40 @@ async fn gene(
     Path(gene_id): Path<String>,
 ) -> Result<Json<genome_core::GeneRecord>, ApiError> {
     Ok(Json(state.service.gene(&gene_id)?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/gene/id/{gene_id}/kegg",
+    params(("gene_id" = String, Path, description = "Gene identifier")),
+    responses(
+        (status = 200, description = "Per-gene KEGG view with KOs hydrated by their related pathways/modules/reactions", body = GeneKeggView),
+        (status = 404, description = "Gene not found", body = ErrorResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+    )
+)]
+async fn gene_kegg(
+    State(state): State<AppState>,
+    Path(gene_id): Path<String>,
+) -> Result<Json<GeneKeggView>, ApiError> {
+    Ok(Json(state.service.gene_kegg_view(&gene_id)?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/kegg/pathway/{pathway_id}",
+    params(("pathway_id" = String, Path, description = "Canonical KEGG pathway id (e.g. map00010)")),
+    responses(
+        (status = 200, description = "KEGG pathway detail with KOs and the genes annotated with each KO", body = KeggPathwayDetail),
+        (status = 404, description = "KEGG pathway not found", body = ErrorResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+    )
+)]
+async fn kegg_pathway(
+    State(state): State<AppState>,
+    Path(pathway_id): Path<String>,
+) -> Result<Json<KeggPathwayDetail>, ApiError> {
+    Ok(Json(state.service.kegg_pathway(&pathway_id)?))
 }
 
 #[utoipa::path(
@@ -645,6 +682,8 @@ enum Command {
         assembly_sequences,
         taxon,
         gene,
+        gene_kegg,
+        kegg_pathway,
         gene_expression,
         expression_clustergram,
         gene_search,
@@ -713,8 +752,21 @@ enum Command {
         genome_core::InterProAnnotation,
         genome_core::InterProId,
         genome_core::KeggAnnotation,
+        genome_core::KeggCatalog,
         genome_core::KeggEntryId,
         genome_core::KeggEntryKind,
+        genome_core::KeggKoLinks,
+        genome_core::KeggModule,
+        genome_core::KeggModuleId,
+        genome_core::KeggPathway,
+        genome_core::KeggPathwayId,
+        genome_core::KeggReaction,
+        genome_core::KeggReactionId,
+        GeneKeggOrthologyEntry,
+        GeneKeggView,
+        KeggGeneSummary,
+        KeggPathwayDetail,
+        KeggPathwayKoEntry,
         genome_core::KogAnnotation,
         genome_core::KogEntryId,
         genome_core::NcbiFamAccession,
@@ -1424,7 +1476,8 @@ impl IntoResponse for ApiError {
                 ServiceError::TaxonNotFound(_)
                 | ServiceError::AssemblyNotFound(_)
                 | ServiceError::GeneNotFound(_)
-                | ServiceError::SequenceNotFound(_),
+                | ServiceError::SequenceNotFound(_)
+                | ServiceError::KeggPathwayNotFound(_),
             )
             | Self::Job(JobManagerError::JobNotFound(_)) => StatusCode::NOT_FOUND,
             Self::Service(ServiceError::InvalidRequest(_)) => StatusCode::BAD_REQUEST,

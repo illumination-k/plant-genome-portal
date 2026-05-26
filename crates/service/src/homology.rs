@@ -169,6 +169,7 @@ mod tests {
             transcripts: Vec::new(),
             exons: Vec::new(),
             cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
         })
     }
 }

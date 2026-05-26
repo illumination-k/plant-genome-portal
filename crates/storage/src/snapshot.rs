@@ -2,13 +2,14 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-use genome_core::{Assembly, GenomeDataset, Sequence, SequenceName, Taxon};
+use genome_core::{Assembly, GenomeDataset, KeggCatalog, Sequence, SequenceName, Taxon};
 use serde::{Deserialize, Serialize};
 
 use crate::annotation::{apply_functional_annotations, parse_functional_annotations};
 use crate::error::StorageError;
 use crate::fasta::{assembly_checksum, read_fasta_sequences, refget_checksum};
 use crate::gff::{ParsedGff, parse_gff3};
+use crate::kegg::{KeggCatalogInput, build_kegg_catalog};
 use crate::nomenclature::{apply_nomenclature, parse_nomenclature};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,6 +19,19 @@ pub struct SnapshotManifest {
     pub gff_file: String,
     pub functional_annotation_file: Option<String>,
     pub nomenclature_file: Option<String>,
+    #[serde(default)]
+    pub kegg_files: Option<KeggManifest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeggManifest {
+    pub source_base_url: String,
+    pub link_ko_pathway: Option<String>,
+    pub link_ko_module: Option<String>,
+    pub link_ko_reaction: Option<String>,
+    pub list_pathway: Option<String>,
+    pub list_module: Option<String>,
+    pub list_reaction: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,12 +55,45 @@ pub fn write_snapshot(
     Ok(())
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct KeggCatalogPaths {
+    pub link_ko_pathway: Option<PathBuf>,
+    pub link_ko_module: Option<PathBuf>,
+    pub link_ko_reaction: Option<PathBuf>,
+    pub list_pathway: Option<PathBuf>,
+    pub list_module: Option<PathBuf>,
+    pub list_reaction: Option<PathBuf>,
+}
+
+impl KeggCatalogPaths {
+    pub fn is_empty(&self) -> bool {
+        self.link_ko_pathway.is_none()
+            && self.link_ko_module.is_none()
+            && self.link_ko_reaction.is_none()
+            && self.list_pathway.is_none()
+            && self.list_module.is_none()
+            && self.list_reaction.is_none()
+    }
+
+    fn as_input(&self) -> KeggCatalogInput<'_> {
+        KeggCatalogInput {
+            link_ko_pathway: self.link_ko_pathway.as_deref(),
+            link_ko_module: self.link_ko_module.as_deref(),
+            link_ko_reaction: self.link_ko_reaction.as_deref(),
+            list_pathway: self.list_pathway.as_deref(),
+            list_module: self.list_module.as_deref(),
+            list_reaction: self.list_reaction.as_deref(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GenomeSnapshotBuild {
     pub fasta_path: PathBuf,
     pub gff_path: PathBuf,
     pub functional_annotation_path: Option<PathBuf>,
     pub nomenclature_path: Option<PathBuf>,
+    pub kegg_catalog_paths: KeggCatalogPaths,
     pub manifest: SnapshotManifest,
     pub taxon: Taxon,
     pub assembly: Assembly,
@@ -56,6 +103,12 @@ pub fn build_genome_snapshot(config: &GenomeSnapshotBuild) -> Result<GenomeSnaps
     let sequences = read_fasta_sequences(&config.fasta_path)?;
     let mut parsed_gff = parse_gff3(&config.gff_path, &config.assembly.accession)?;
     enrich_parsed_gff(&mut parsed_gff, config)?;
+
+    let kegg_catalog = if config.kegg_catalog_paths.is_empty() {
+        KeggCatalog::default()
+    } else {
+        build_kegg_catalog(&parsed_gff, &config.kegg_catalog_paths.as_input())?
+    };
 
     let sequence_models = sequences
         .values()
@@ -83,6 +136,7 @@ pub fn build_genome_snapshot(config: &GenomeSnapshotBuild) -> Result<GenomeSnaps
             transcripts: parsed_gff.transcripts,
             exons: parsed_gff.exons,
             cdss: parsed_gff.cdss,
+            kegg_catalog,
         },
     })
 }
@@ -116,6 +170,7 @@ mod tests {
                 gff_file: "test.gff".to_owned(),
                 functional_annotation_file: None,
                 nomenclature_file: None,
+                kegg_files: None,
             },
             dataset: GenomeDataset {
                 taxon: Taxon {
@@ -136,6 +191,7 @@ mod tests {
                 transcripts: Vec::new(),
                 exons: Vec::new(),
                 cdss: Vec::new(),
+                kegg_catalog: KeggCatalog::default(),
             },
         }
     }

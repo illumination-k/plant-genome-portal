@@ -8,6 +8,12 @@ pub enum DomainError {
     InvalidInterProId(String),
     #[error("invalid Pfam accession: {0}")]
     InvalidPfamAccession(String),
+    #[error("invalid KEGG pathway id: {0}")]
+    InvalidKeggPathwayId(String),
+    #[error("invalid KEGG module id: {0}")]
+    InvalidKeggModuleId(String),
+    #[error("invalid KEGG reaction id: {0}")]
+    InvalidKeggReactionId(String),
     #[error("1-based positions must be greater than zero")]
     ZeroPosition1,
     #[error("region start must be <= end")]

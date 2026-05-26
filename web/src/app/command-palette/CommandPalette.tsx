@@ -10,7 +10,9 @@ const CommandPalette = (props: {
     props.onOpenChange(false);
   }, [props]);
 
-  return <CommandPaletteDialog onClose={onClose} onOpenChange={props.onOpenChange} open={props.open} />;
+  return (
+    <CommandPaletteDialog onClose={onClose} onOpenChange={props.onOpenChange} open={props.open} />
+  );
 };
 
 export default CommandPalette;

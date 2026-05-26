@@ -18,10 +18,7 @@ const renderPages = (pages: Page[], onSelect: (to: string) => void): ReactElemen
   </>
 );
 
-const renderContent = (
-  pages: Page[],
-  onSelect: (to: string) => void,
-): ReactElement => {
+const renderContent = (pages: Page[], onSelect: (to: string) => void): ReactElement => {
   if (pages.length === EMPTY) {
     return renderEmpty();
   }

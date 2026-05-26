@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use genome_core::{
-    Assembly, AssemblyAccession, Cds, Exon, Gene, GeneId, GeneRecord, GeneSearch, GenomeDataset,
-    GenomeRepository, HalfOpenRegion, Sequence, TaxId, Taxon, Transcript, TranscriptId,
+    Assembly, AssemblyAccession, Cds, Exon, FunctionalAnnotation, Gene, GeneId, GeneRecord,
+    GeneSearch, GenomeDataset, GenomeRepository, HalfOpenRegion, KeggCatalog, KeggEntryId,
+    Sequence, TaxId, Taxon, Transcript, TranscriptId, ko_entry_id,
 };
 
 use crate::error::StorageError;
@@ -17,6 +18,7 @@ pub struct FileGenomeRepository {
     exons_by_transcript: HashMap<TranscriptId, Vec<Exon>>,
     cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>>,
     sequence_by_checksum: HashMap<String, Sequence>,
+    genes_by_kegg_ko: HashMap<KeggEntryId, Vec<GeneId>>,
 }
 
 impl FileGenomeRepository {
@@ -57,6 +59,8 @@ impl FileGenomeRepository {
             .map(|sequence| (sequence.refget_checksum.clone(), sequence.clone()))
             .collect::<HashMap<_, _>>();
 
+        let genes_by_kegg_ko = build_kegg_ko_index(&dataset.genes);
+
         Self {
             dataset,
             genes_by_id,
@@ -64,6 +68,7 @@ impl FileGenomeRepository {
             exons_by_transcript,
             cdss_by_transcript,
             sequence_by_checksum,
+            genes_by_kegg_ko,
         }
     }
 
@@ -174,6 +179,38 @@ impl GenomeRepository for FileGenomeRepository {
             .cloned()
             .collect()
     }
+
+    fn kegg_catalog(&self) -> &KeggCatalog {
+        &self.dataset.kegg_catalog
+    }
+
+    fn genes_with_kegg_ko(&self, ko: &KeggEntryId) -> Vec<Gene> {
+        self.genes_by_kegg_ko
+            .get(ko)
+            .map(|gene_ids| {
+                gene_ids
+                    .iter()
+                    .filter_map(|gene_id| self.genes_by_id.get(gene_id).cloned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+fn build_kegg_ko_index(genes: &[Gene]) -> HashMap<KeggEntryId, Vec<GeneId>> {
+    let mut index: HashMap<KeggEntryId, Vec<GeneId>> = HashMap::new();
+    for gene in genes {
+        let mut seen = std::collections::HashSet::new();
+        for annotation in &gene.annotations {
+            if let FunctionalAnnotation::Kegg(kegg) = annotation
+                && let Some(ko) = ko_entry_id(&kegg.entry_id)
+                && seen.insert(ko.clone())
+            {
+                index.entry(ko).or_default().push(gene.id.clone());
+            }
+        }
+    }
+    index
 }
 
 fn search_symbol(gene: &Gene, symbol: Option<&str>) -> bool {
@@ -314,6 +351,7 @@ mod tests {
             transcripts: vec![transcript],
             exons: vec![exon],
             cdss: vec![cds],
+            kegg_catalog: KeggCatalog::default(),
         })
     }
 

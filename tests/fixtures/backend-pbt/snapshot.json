@@ -107,6 +107,25 @@
         "strand": "forward",
         "phase": 0
       }
-    ]
+    ],
+    "kegg_catalog": {
+      "pathways": [
+        { "id": "map00010", "name": "Glycolysis / Gluconeogenesis" }
+      ],
+      "modules": [
+        { "id": "M00001", "name": "Glycolysis (Embden-Meyerhof pathway)" }
+      ],
+      "reactions": [
+        { "id": "R00754", "name": "alcohol dehydrogenase" }
+      ],
+      "ko_links": [
+        {
+          "ko": "K00001",
+          "pathways": ["map00010"],
+          "modules": ["M00001"],
+          "reactions": ["R00754"]
+        }
+      ]
+    }
   }
 }

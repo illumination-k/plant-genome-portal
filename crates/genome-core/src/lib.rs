@@ -9,6 +9,7 @@ mod error;
 mod feature;
 mod homology;
 mod ids;
+mod kegg;
 mod repository;
 
 pub use annotation::{
@@ -24,5 +25,9 @@ pub use homology::{HomologyHit, HomologySearchMethod, HomologySearchResult};
 pub use ids::{
     AssemblyAccession, GeneId, GoTermId, InterProId, KeggEntryId, KogEntryId, NcbiFamAccession,
     PfamAccession, SequenceName, TaxId, TranscriptId,
+};
+pub use kegg::{
+    KeggCatalog, KeggKoLinks, KeggModule, KeggModuleId, KeggPathway, KeggPathwayId, KeggReaction,
+    KeggReactionId, ko_entry_id,
 };
 pub use repository::{GeneSearch, GenomeRepository};

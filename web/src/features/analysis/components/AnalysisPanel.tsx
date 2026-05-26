@@ -38,7 +38,9 @@ const normalizeGeneIds = (value: string): string =>
     .join(",");
 
 const hasMatrixData = (matrix: ExpressionClustergramResponse | undefined): boolean =>
-  Boolean(matrix && matrix.genes.length > 0 && matrix.samples.length > 0 && matrix.values.length > 0);
+  Boolean(
+    matrix && matrix.genes.length > 0 && matrix.samples.length > 0 && matrix.values.length > 0,
+  );
 
 const AnalysisPanel = (): ReactElement => {
   const [form, setForm] = useState<AnalysisForm>(initialForm);
@@ -173,7 +175,12 @@ const AnalysisPanel = (): ReactElement => {
         />
       )}
       {hasMatrixData(query.data) && (
-        <Tabs ariaLabel="Expression visualizations" onValueChange={setTab} tabs={tabs} value={tab} />
+        <Tabs
+          ariaLabel="Expression visualizations"
+          onValueChange={setTab}
+          tabs={tabs}
+          value={tab}
+        />
       )}
     </div>
   );

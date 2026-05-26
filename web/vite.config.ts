@@ -17,8 +17,8 @@ const ignoredPureAnnotationPackages = ["/mobx/", "/mobx-react/"];
 const asyncGenomeBrowserChunkWarningLimitKb = 2000;
 
 const isIgnoredPureAnnotationWarning = (warning: RolldownWarning): boolean =>
-  warning.code === "INVALID_ANNOTATION"
-  && ignoredPureAnnotationPackages.some((pkg) => warning.id?.includes(pkg));
+  warning.code === "INVALID_ANNOTATION" &&
+  ignoredPureAnnotationPackages.some((pkg) => warning.id?.includes(pkg));
 
 const onwarn: RolldownWarningHandler = (warning, defaultHandler) => {
   if (isIgnoredPureAnnotationWarning(warning)) {

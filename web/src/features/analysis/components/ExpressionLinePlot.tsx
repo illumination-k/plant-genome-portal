@@ -33,12 +33,13 @@ const matrixValue = (
   sampleIndex: number,
 ): number => matrix.values[geneIndex * matrix.samples.length + sampleIndex] ?? 0;
 
-const ExpressionLinePlot = (props: {
-  matrix: ExpressionClustergramResponse;
-}): ReactElement => {
+const ExpressionLinePlot = (props: { matrix: ExpressionClustergramResponse }): ReactElement => {
   const chart = useMemo(() => {
     const orderedSamples = props.matrix.columnOrder.map((index) => props.matrix.samples[index]);
-    const chartWidth = Math.max(minChartWidth, orderedSamples.length * sampleGap + margin.left + margin.right);
+    const chartWidth = Math.max(
+      minChartWidth,
+      orderedSamples.length * sampleGap + margin.left + margin.right,
+    );
     const x = scalePoint(
       orderedSamples.map((sample) => sample.run),
       [margin.left, chartWidth - margin.right],

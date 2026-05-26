@@ -4,12 +4,16 @@ mod refget;
 mod sequence;
 
 use genome_core::{
-    Assembly, AssemblyAccession, ClosedRegion, Gene, GeneId, GeneRecord, GeneSearch,
-    GenomeRepository, Sequence, TaxId, Taxon,
+    Assembly, AssemblyAccession, ClosedRegion, FunctionalAnnotation, Gene, GeneId, GeneRecord,
+    GeneSearch, GenomeRepository, KeggEntryId, KeggKoLinks, KeggModule, KeggModuleId, KeggPathway,
+    KeggPathwayId, KeggReaction, KeggReactionId, Sequence, TaxId, Taxon, ko_entry_id,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use storage::FastaReference;
+use utoipa::ToSchema;
 
 pub use homology::{
     AnnotatedHomologyHit, AnnotatedHomologySearchResult, HomologyAnnotationRepository,
@@ -30,6 +34,8 @@ pub enum ServiceError {
     GeneNotFound(String),
     #[error("sequence not found: {0}")]
     SequenceNotFound(String),
+    #[error("KEGG pathway not found: {0}")]
+    KeggPathwayNotFound(String),
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 }
@@ -108,6 +114,172 @@ where
 
         Ok(self.repository.features_in_region(&accession, &region))
     }
+
+    /// Pathway view: pathway info + the KOs that belong to it + the genes in
+    /// the dataset annotated with each of those KOs.
+    pub fn kegg_pathway(&self, pathway_id: &str) -> Result<KeggPathwayDetail, ServiceError> {
+        let pathway_id = KeggPathwayId::new(pathway_id)
+            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+        let catalog = self.repository.kegg_catalog();
+        let pathway = catalog
+            .pathways
+            .iter()
+            .find(|pathway| pathway.id == pathway_id)
+            .cloned()
+            .ok_or_else(|| ServiceError::KeggPathwayNotFound(pathway_id.clone().into_string()))?;
+
+        let kos: Vec<KeggEntryId> = catalog
+            .ko_links
+            .iter()
+            .filter(|links| links.pathways.contains(&pathway_id))
+            .map(|links| links.ko.clone())
+            .collect();
+        let ko_views = kos
+            .into_iter()
+            .map(|ko| KeggPathwayKoEntry {
+                genes: self
+                    .repository
+                    .genes_with_kegg_ko(&ko)
+                    .into_iter()
+                    .map(KeggGeneSummary::from)
+                    .collect(),
+                ko,
+            })
+            .collect();
+
+        Ok(KeggPathwayDetail {
+            pathway,
+            kos: ko_views,
+        })
+    }
+
+    /// Per-gene KEGG view that hydrates each KEGG orthology in the gene's
+    /// annotations with the pathways/modules/reactions it links to.
+    pub fn gene_kegg_view(&self, gene_id: &str) -> Result<GeneKeggView, ServiceError> {
+        let gene = self.gene(gene_id)?;
+        let catalog = self.repository.kegg_catalog();
+
+        let pathway_names: HashMap<&KeggPathwayId, &Option<String>> = catalog
+            .pathways
+            .iter()
+            .map(|pathway| (&pathway.id, &pathway.name))
+            .collect();
+        let module_names: HashMap<&KeggModuleId, &Option<String>> = catalog
+            .modules
+            .iter()
+            .map(|module| (&module.id, &module.name))
+            .collect();
+        let reaction_names: HashMap<&KeggReactionId, &Option<String>> = catalog
+            .reactions
+            .iter()
+            .map(|reaction| (&reaction.id, &reaction.name))
+            .collect();
+        let links_by_ko: HashMap<&KeggEntryId, &KeggKoLinks> = catalog
+            .ko_links
+            .iter()
+            .map(|links| (&links.ko, links))
+            .collect();
+
+        let mut entries = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for annotation in &gene.gene.annotations {
+            let FunctionalAnnotation::Kegg(kegg) = annotation else {
+                continue;
+            };
+            let Some(ko) = ko_entry_id(&kegg.entry_id) else {
+                continue;
+            };
+            if !seen.insert(ko.clone()) {
+                continue;
+            }
+            let (pathways, modules, reactions) = links_by_ko
+                .get(&ko)
+                .map(|links| {
+                    let pathways = links
+                        .pathways
+                        .iter()
+                        .map(|id| KeggPathway {
+                            id: id.clone(),
+                            name: pathway_names.get(id).and_then(|name| (*name).clone()),
+                        })
+                        .collect();
+                    let modules = links
+                        .modules
+                        .iter()
+                        .map(|id| KeggModule {
+                            id: id.clone(),
+                            name: module_names.get(id).and_then(|name| (*name).clone()),
+                        })
+                        .collect();
+                    let reactions = links
+                        .reactions
+                        .iter()
+                        .map(|id| KeggReaction {
+                            id: id.clone(),
+                            name: reaction_names.get(id).and_then(|name| (*name).clone()),
+                        })
+                        .collect();
+                    (pathways, modules, reactions)
+                })
+                .unwrap_or_else(|| (Vec::new(), Vec::new(), Vec::new()));
+            entries.push(GeneKeggOrthologyEntry {
+                ko,
+                name: kegg.name.clone(),
+                pathways,
+                modules,
+                reactions,
+            });
+        }
+
+        Ok(GeneKeggView {
+            gene_id: gene.gene.id,
+            entries,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct KeggPathwayDetail {
+    pub pathway: KeggPathway,
+    pub kos: Vec<KeggPathwayKoEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct KeggPathwayKoEntry {
+    pub ko: KeggEntryId,
+    pub genes: Vec<KeggGeneSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct KeggGeneSummary {
+    pub id: GeneId,
+    pub symbol: Option<String>,
+    pub locus_tag: Option<String>,
+}
+
+impl From<Gene> for KeggGeneSummary {
+    fn from(gene: Gene) -> Self {
+        Self {
+            id: gene.id,
+            symbol: gene.symbol,
+            locus_tag: gene.locus_tag,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GeneKeggView {
+    pub gene_id: GeneId,
+    pub entries: Vec<GeneKeggOrthologyEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GeneKeggOrthologyEntry {
+    pub ko: KeggEntryId,
+    pub name: Option<String>,
+    pub pathways: Vec<KeggPathway>,
+    pub modules: Vec<KeggModule>,
+    pub reactions: Vec<KeggReaction>,
 }
 
 #[cfg(test)]
@@ -169,6 +341,7 @@ mod tests {
             transcripts: Vec::new(),
             exons: Vec::new(),
             cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
         };
 
         GenomeService::new(FileGenomeRepository::new(dataset), None)

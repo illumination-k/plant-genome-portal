@@ -183,6 +183,7 @@ mod tests {
             transcripts: Vec::new(),
             exons: Vec::new(),
             cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
         };
 
         static NEXT_FASTA_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);

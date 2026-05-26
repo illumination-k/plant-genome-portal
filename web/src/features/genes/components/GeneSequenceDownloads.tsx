@@ -16,9 +16,7 @@ type SequenceSegment = {
 };
 
 const sortSegments = (segments: SequenceSegment[]): SequenceSegment[] =>
-  segments.toSorted(
-    (left, right) => left.start - right.start || left.end - right.end,
-  );
+  segments.toSorted((left, right) => left.start - right.start || left.end - right.end);
 
 const transcriptLabel = (transcript: Transcript): string => transcript.id;
 
@@ -41,11 +39,7 @@ const transcriptSegments = (
   );
 };
 
-const makeUrl = (
-  geneRecord: GeneRecord,
-  segments: SequenceSegment[],
-  strand?: Strand,
-): string =>
+const makeUrl = (geneRecord: GeneRecord, segments: SequenceSegment[], strand?: Strand): string =>
   sequenceSegmentsUrl({
     assemblyAccession: geneRecord.gene.assembly_accession,
     format: "fasta",
@@ -85,15 +79,12 @@ const buildDownloadLinks = (geneRecord: GeneRecord): DownloadLink[] => {
     {
       filename: `${gene.id}.genomic.fa`,
       label: "Gene span",
-      url: makeUrl(
-        geneRecord,
-        [
-          {
-            end: gene.region.end,
-            start: gene.region.start,
-          },
-        ],
-      ),
+      url: makeUrl(geneRecord, [
+        {
+          end: gene.region.end,
+          start: gene.region.start,
+        },
+      ]),
     },
   ];
 

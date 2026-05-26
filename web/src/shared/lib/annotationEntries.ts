@@ -10,7 +10,6 @@ type Entry = {
 type GroupedEntries = {
   go: Entry[];
   interPro: Entry[];
-  kegg: Entry[];
   kog: Entry[];
   ncbiFam: Entry[];
   pfam: Entry[];
@@ -29,11 +28,6 @@ const buildEntries = (gene: Gene): GroupedEntries => {
     interPro: grouped.interPro.map((annotation) => ({
       href: functionalAnnotation.externalLink(annotation),
       id: annotation.interpro_id,
-      name: safeName(annotation.name),
-    })),
-    kegg: grouped.kegg.map((annotation) => ({
-      href: functionalAnnotation.externalLink(annotation),
-      id: annotation.entry_id,
       name: safeName(annotation.name),
     })),
     kog: grouped.kog.map((annotation) => ({

@@ -50,10 +50,7 @@ const GeneSequenceMetadata = (props: {
     />
     <GeneSequenceDefinition label="refget service" value={renderRefget()} />
     {props.endpointUrl && (
-      <GeneSequenceDefinition
-        label="refget endpoint"
-        value={renderEndpoint(props.endpointUrl)}
-      />
+      <GeneSequenceDefinition label="refget endpoint" value={renderEndpoint(props.endpointUrl)} />
     )}
   </dl>
 );

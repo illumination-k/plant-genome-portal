@@ -1,7 +1,8 @@
 use crate::assembly::{Assembly, Sequence, Taxon};
 use crate::coord::HalfOpenRegion;
 use crate::feature::{Gene, GeneRecord};
-use crate::ids::{AssemblyAccession, GeneId, TaxId};
+use crate::ids::{AssemblyAccession, GeneId, KeggEntryId, TaxId};
+use crate::kegg::KeggCatalog;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GeneSearch {
@@ -25,4 +26,8 @@ pub trait GenomeRepository: Send + Sync + 'static {
         accession: &AssemblyAccession,
         region: &HalfOpenRegion,
     ) -> Vec<Gene>;
+    fn kegg_catalog(&self) -> &KeggCatalog;
+    /// Genes that carry the given KEGG orthology (KO) entry in their annotations.
+    /// `ko` is expected in bare form (e.g. `K00001`).
+    fn genes_with_kegg_ko(&self, ko: &KeggEntryId) -> Vec<Gene>;
 }

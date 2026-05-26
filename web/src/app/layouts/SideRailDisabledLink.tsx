@@ -7,9 +7,7 @@ const SideRailDisabledLink = (props: { label: string }): ReactElement => (
   <li>
     <span aria-disabled="true" className={className} title="Coming soon">
       {props.label}
-      <span className="ml-auto text-[10px] uppercase tracking-wider text-text-disabled">
-        Soon
-      </span>
+      <span className="ml-auto text-[10px] uppercase tracking-wider text-text-disabled">Soon</span>
     </span>
   </li>
 );

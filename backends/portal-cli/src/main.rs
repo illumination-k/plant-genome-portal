@@ -6,7 +6,10 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
-use storage::{GenomeSnapshotBuild, SnapshotManifest, build_genome_snapshot, write_snapshot};
+use storage::{
+    GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest, build_genome_snapshot,
+    write_snapshot,
+};
 use tracing_subscriber::EnvFilter;
 
 const MARPOLBASE_MPTAK1_V7_1_BASE_URL: &str = "https://marchantia.info/data/MpTak1_v7.1";
@@ -16,6 +19,14 @@ const MARPOLBASE_MPTAK1_V7_1_FUNC_ANNOTATION_FILE: &str = "MpTak1_v7.1.func_anno
 const MARPOLBASE_MPTAK1_V7_1_ACCESSION: &str = "GCA_037833805.1";
 const MARPOLBASE_NOMENCLATURE_URL: &str = "https://marchantia.info/nomenclature/nomenlatures.txt";
 const MARPOLBASE_NOMENCLATURE_FILE: &str = "nomenlatures.txt";
+
+const KEGG_REST_BASE_URL: &str = "https://rest.kegg.jp";
+const KEGG_LINK_KO_PATHWAY_FILE: &str = "kegg.link.ko-pathway.tsv";
+const KEGG_LINK_KO_MODULE_FILE: &str = "kegg.link.ko-module.tsv";
+const KEGG_LINK_KO_REACTION_FILE: &str = "kegg.link.ko-reaction.tsv";
+const KEGG_LIST_PATHWAY_FILE: &str = "kegg.list.pathway.tsv";
+const KEGG_LIST_MODULE_FILE: &str = "kegg.list.module.tsv";
+const KEGG_LIST_REACTION_FILE: &str = "kegg.list.reaction.tsv";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -206,6 +217,12 @@ enum ImportSource {
 struct MarpolbaseMptak1V7_1Import {
     #[arg(long, default_value = "data/marpolbase/MpTak1_v7.1")]
     out: PathBuf,
+    /// Directory to cache KEGG REST dumps shared across imports.
+    #[arg(long, default_value = "data/kegg")]
+    kegg_dir: PathBuf,
+    /// Skip downloading the KEGG cross-link catalog (useful for offline builds).
+    #[arg(long)]
+    skip_kegg: bool,
     #[arg(long)]
     rebuild_snapshot: bool,
     #[arg(long)]
@@ -244,6 +261,9 @@ impl MarpolbaseMptak1V7_1Import {
         if let Some(nomenclature_path) = &config.snapshot.nomenclature_path {
             download_if_needed(&config.nomenclature_url, nomenclature_path, self.force).await?;
         }
+        for download in &config.kegg_downloads {
+            download_if_needed(&download.url, &download.path, self.force).await?;
+        }
 
         tracing::info!("parsing MarpolBase Tak-1 v7.1 files");
         let snapshot = build_genome_snapshot(&config.snapshot)?;
@@ -270,6 +290,22 @@ impl MarpolbaseMptak1V7_1Import {
         let snapshot_path = self.out.join("snapshot.json");
         let tax_id = TaxId::new(3197);
 
+        let layout = if self.skip_kegg {
+            None
+        } else {
+            std::fs::create_dir_all(&self.kegg_dir)?;
+            Some(kegg_dump_layout(&self.kegg_dir)?)
+        };
+        let kegg_catalog_paths = layout
+            .as_ref()
+            .map(|layout| layout.catalog_paths.clone())
+            .unwrap_or_default();
+        let kegg_downloads = layout
+            .as_ref()
+            .map(|layout| layout.downloads.clone())
+            .unwrap_or_default();
+        let kegg_manifest = layout.map(|layout| layout.manifest);
+
         Ok(ImportConfig {
             fasta_url: format!(
                 "{MARPOLBASE_MPTAK1_V7_1_BASE_URL}/{MARPOLBASE_MPTAK1_V7_1_FASTA_FILE}"
@@ -280,11 +316,13 @@ impl MarpolbaseMptak1V7_1Import {
             ),
             nomenclature_url: MARPOLBASE_NOMENCLATURE_URL.to_owned(),
             snapshot_path,
+            kegg_downloads,
             snapshot: GenomeSnapshotBuild {
                 fasta_path,
                 gff_path,
                 functional_annotation_path: Some(functional_annotation_path),
                 nomenclature_path: Some(nomenclature_path),
+                kegg_catalog_paths,
                 manifest: SnapshotManifest {
                     source_base_url: MARPOLBASE_MPTAK1_V7_1_BASE_URL.to_owned(),
                     fasta_file: MARPOLBASE_MPTAK1_V7_1_FASTA_FILE.to_owned(),
@@ -293,6 +331,7 @@ impl MarpolbaseMptak1V7_1Import {
                         MARPOLBASE_MPTAK1_V7_1_FUNC_ANNOTATION_FILE.to_owned(),
                     ),
                     nomenclature_file: Some(MARPOLBASE_NOMENCLATURE_FILE.to_owned()),
+                    kegg_files: kegg_manifest,
                 },
                 taxon: Taxon {
                     tax_id,
@@ -312,6 +351,78 @@ impl MarpolbaseMptak1V7_1Import {
     }
 }
 
+#[derive(Debug, Clone)]
+struct KeggDownload {
+    url: String,
+    path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct KeggDumpLayout {
+    catalog_paths: KeggCatalogPaths,
+    downloads: Vec<KeggDownload>,
+    manifest: KeggManifest,
+}
+
+fn kegg_dump_layout(dir: &Path) -> Result<KeggDumpLayout, Box<dyn std::error::Error>> {
+    let link_ko_pathway = dir.join(KEGG_LINK_KO_PATHWAY_FILE);
+    let link_ko_module = dir.join(KEGG_LINK_KO_MODULE_FILE);
+    let link_ko_reaction = dir.join(KEGG_LINK_KO_REACTION_FILE);
+    let list_pathway = dir.join(KEGG_LIST_PATHWAY_FILE);
+    let list_module = dir.join(KEGG_LIST_MODULE_FILE);
+    let list_reaction = dir.join(KEGG_LIST_REACTION_FILE);
+
+    let downloads = vec![
+        KeggDownload {
+            url: format!("{KEGG_REST_BASE_URL}/link/pathway/ko"),
+            path: link_ko_pathway.clone(),
+        },
+        KeggDownload {
+            url: format!("{KEGG_REST_BASE_URL}/link/module/ko"),
+            path: link_ko_module.clone(),
+        },
+        KeggDownload {
+            url: format!("{KEGG_REST_BASE_URL}/link/reaction/ko"),
+            path: link_ko_reaction.clone(),
+        },
+        KeggDownload {
+            url: format!("{KEGG_REST_BASE_URL}/list/pathway"),
+            path: list_pathway.clone(),
+        },
+        KeggDownload {
+            url: format!("{KEGG_REST_BASE_URL}/list/module"),
+            path: list_module.clone(),
+        },
+        KeggDownload {
+            url: format!("{KEGG_REST_BASE_URL}/list/reaction"),
+            path: list_reaction.clone(),
+        },
+    ];
+
+    let manifest = KeggManifest {
+        source_base_url: KEGG_REST_BASE_URL.to_owned(),
+        link_ko_pathway: Some(KEGG_LINK_KO_PATHWAY_FILE.to_owned()),
+        link_ko_module: Some(KEGG_LINK_KO_MODULE_FILE.to_owned()),
+        link_ko_reaction: Some(KEGG_LINK_KO_REACTION_FILE.to_owned()),
+        list_pathway: Some(KEGG_LIST_PATHWAY_FILE.to_owned()),
+        list_module: Some(KEGG_LIST_MODULE_FILE.to_owned()),
+        list_reaction: Some(KEGG_LIST_REACTION_FILE.to_owned()),
+    };
+
+    Ok(KeggDumpLayout {
+        catalog_paths: KeggCatalogPaths {
+            link_ko_pathway: Some(link_ko_pathway),
+            link_ko_module: Some(link_ko_module),
+            link_ko_reaction: Some(link_ko_reaction),
+            list_pathway: Some(list_pathway),
+            list_module: Some(list_module),
+            list_reaction: Some(list_reaction),
+        },
+        downloads,
+        manifest,
+    })
+}
+
 #[derive(Debug)]
 struct ImportConfig {
     fasta_url: String,
@@ -319,6 +430,7 @@ struct ImportConfig {
     functional_annotation_url: String,
     nomenclature_url: String,
     snapshot_path: PathBuf,
+    kegg_downloads: Vec<KeggDownload>,
     snapshot: GenomeSnapshotBuild,
 }
 
@@ -336,6 +448,10 @@ impl ImportConfig {
                 .nomenclature_path
                 .as_ref()
                 .is_none_or(|path| path.exists())
+            && self
+                .kegg_downloads
+                .iter()
+                .all(|download| download.path.exists())
     }
 }
 
