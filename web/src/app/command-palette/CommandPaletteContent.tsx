@@ -6,10 +6,7 @@ import CommandPaletteFooter from "@/app/command-palette/CommandPaletteFooter";
 import CommandPaletteInput from "@/app/command-palette/CommandPaletteInput";
 import useCommandPaletteSearch from "@/app/command-palette/useCommandPaletteSearch";
 
-const CommandPaletteContent = (props: {
-  onClose: () => void;
-  open: boolean;
-}): ReactElement => {
+const CommandPaletteContent = (props: { onClose: () => void; open: boolean }): ReactElement => {
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
 

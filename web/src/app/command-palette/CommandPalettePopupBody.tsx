@@ -8,10 +8,7 @@ const renderPopup = (
 
 const renderTitle = <h2 className="sr-only">Command palette</h2>;
 
-const CommandPalettePopupBody = (props: {
-  onClose: () => void;
-  open: boolean;
-}): ReactElement => (
+const CommandPalettePopupBody = (props: { onClose: () => void; open: boolean }): ReactElement => (
   <Dialog.Popup render={renderPopup}>
     <Dialog.Title render={renderTitle} />
     <CommandPaletteContent onClose={props.onClose} open={props.open} />

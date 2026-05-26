@@ -1,7 +1,4 @@
-import {
-  blastnJobOptions,
-  createBlastnJobMutation,
-} from "@/api/client/@tanstack/react-query.gen";
+import { blastnJobOptions, createBlastnJobMutation } from "@/api/client/@tanstack/react-query.gen";
 import type {
   AnnotatedHomologyHitResponse,
   BlastnJobResponse,
@@ -183,9 +180,7 @@ const BlastPage = (): ReactElement => {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold">BLASTN</h2>
-            <p className="mt-2 text-sm text-text-muted">
-              Marchantia reference homology search
-            </p>
+            <p className="mt-2 text-sm text-text-muted">Marchantia reference homology search</p>
           </div>
           {job && <JobStatusPill job={job} />}
         </div>

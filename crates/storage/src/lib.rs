@@ -2,6 +2,7 @@ mod annotation;
 mod error;
 mod fasta;
 mod gff;
+mod kegg;
 mod nomenclature;
 mod repository;
 mod snapshot;
@@ -9,10 +10,11 @@ mod util;
 
 pub use crate::error::StorageError;
 pub use crate::fasta::{FastaReference, refget_checksum};
+pub use crate::kegg::KeggCatalogInput;
 pub use crate::repository::FileGenomeRepository;
 pub use crate::snapshot::{
-    GenomeSnapshot, GenomeSnapshotBuild, SnapshotManifest, build_genome_snapshot, read_snapshot,
-    write_snapshot,
+    GenomeSnapshot, GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest,
+    build_genome_snapshot, read_snapshot, write_snapshot,
 };
 
 #[cfg(test)]
@@ -67,9 +69,11 @@ mod tests {
                 gff_file: "test.gff".to_owned(),
                 functional_annotation_file: None,
                 nomenclature_file: None,
+                kegg_files: None,
             },
             functional_annotation_path: None,
             nomenclature_path: None,
+            kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
                 scientific_name: "Marchantia polymorpha".to_owned(),
@@ -158,9 +162,11 @@ mod tests {
                 gff_file: "test.gff".to_owned(),
                 functional_annotation_file: Some("func.tsv".to_owned()),
                 nomenclature_file: Some("nomenclature.tsv".to_owned()),
+                kegg_files: None,
             },
             functional_annotation_path: Some(functional_annotation_path),
             nomenclature_path: Some(nomenclature_path),
+            kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
                 scientific_name: "Marchantia polymorpha".to_owned(),

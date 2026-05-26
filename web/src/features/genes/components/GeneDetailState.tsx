@@ -14,9 +14,7 @@ const GeneDetailState = (props: {
   geneQuery: UseQueryResult<GeneRecord, unknown>;
 }): ReactElement => {
   if (props.geneId === "") {
-    return (
-      <EmptyState description="Open a gene from the genes page." title="Missing gene ID" />
-    );
+    return <EmptyState description="Open a gene from the genes page." title="Missing gene ID" />;
   }
 
   if (props.geneQuery.isLoading) {

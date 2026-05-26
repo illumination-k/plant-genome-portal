@@ -13,14 +13,7 @@ const CommandPaletteGeneItem = (props: {
 
   const detail = props.gene.symbol ?? props.gene.sequence_name;
 
-  return (
-    <CommandPaletteItem
-      detail={detail}
-      label={props.gene.id}
-      mono
-      onSelect={onSelect}
-    />
-  );
+  return <CommandPaletteItem detail={detail} label={props.gene.id} mono onSelect={onSelect} />;
 };
 
 export default CommandPaletteGeneItem;

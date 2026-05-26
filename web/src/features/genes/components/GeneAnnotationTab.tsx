@@ -2,6 +2,7 @@ import type { Gene } from "@/api/client/types.gen";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 import GeneAnnotationGroupCard from "@/features/genes/components/GeneAnnotationGroupCard";
+import GeneKeggCard from "@/features/genes/components/GeneKeggCard";
 import annotationEntries from "@/shared/lib/annotationEntries";
 
 const GeneAnnotationTab = (props: { gene: Gene }): ReactElement => {
@@ -18,8 +19,8 @@ const GeneAnnotationTab = (props: { gene: Gene }): ReactElement => {
       <div className="col-span-12 lg:col-span-6">
         <GeneAnnotationGroupCard entries={entries.interPro} label="InterPro" />
       </div>
-      <div className="col-span-12 lg:col-span-6">
-        <GeneAnnotationGroupCard entries={entries.kegg} label="KEGG" />
+      <div className="col-span-12">
+        <GeneKeggCard geneId={props.gene.id} />
       </div>
       <div className="col-span-12 lg:col-span-6">
         <GeneAnnotationGroupCard entries={entries.ncbiFam} label="NCBIfam" />

@@ -10,10 +10,7 @@ const wrapSequence = (sequence: string): string => {
   return lines.join("\n");
 };
 
-const GeneSequenceBody = (props: {
-  isLoading: boolean;
-  sequence: string;
-}): ReactElement => {
+const GeneSequenceBody = (props: { isLoading: boolean; sequence: string }): ReactElement => {
   if (props.isLoading) {
     return <p className="mt-6 text-sm text-text-muted">Loading sequence.</p>;
   }

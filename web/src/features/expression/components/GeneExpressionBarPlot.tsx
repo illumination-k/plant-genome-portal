@@ -50,8 +50,7 @@ const sampleSd = (values: number[], avg: number): number => {
     return 0;
   }
 
-  const variance =
-    values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1);
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1);
   return Math.sqrt(variance);
 };
 
@@ -78,8 +77,10 @@ const GeneExpressionBarPlot = (props: { points: GeneExpressionPoint[] }): ReactE
   const chart = useMemo(() => {
     const data = buildGroups(props.points);
     const labels = data.map((group) => group.label);
-    const maxValue = max(data, (group) => Math.max(group.mean + group.sd, ...group.points.map((point) => point.value)))
-      ?? minDomainMax;
+    const maxValue =
+      max(data, (group) =>
+        Math.max(group.mean + group.sd, ...group.points.map((point) => point.value)),
+      ) ?? minDomainMax;
     const yMax = Math.max(maxValue, minDomainMax);
     const x = scaleBand(labels, [margin.left, chartWidth - margin.right]).padding(0.34);
     const y = scaleLinear([0, yMax], [chartHeight - margin.bottom, margin.top]).nice();
@@ -165,15 +166,7 @@ const GeneExpressionBarPlot = (props: { points: GeneExpressionPoint[] }): ReactE
           const color = colorFor(group.label, chart.labels);
           return (
             <g key={group.label}>
-              <rect
-                fill={color}
-                height={height}
-                opacity="0.28"
-                rx="4"
-                width={width}
-                x={x}
-                y={y}
-              >
+              <rect fill={color} height={height} opacity="0.28" rx="4" width={width} x={x} y={y}>
                 <title>{`${group.label}: mean ${valueFormat(group.mean)} ${unitLabel(unit)}, SD ${valueFormat(group.sd)}`}</title>
               </rect>
               {group.sd > 0 && (

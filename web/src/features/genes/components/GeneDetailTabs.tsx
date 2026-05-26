@@ -43,11 +43,7 @@ const GeneDetailTabs = (props: { geneRecord: GeneRecord }): ReactElement => {
   );
 
   return (
-    <GeneDetailTabsView
-      geneRecord={props.geneRecord}
-      onValueChange={onValueChange}
-      value={value}
-    />
+    <GeneDetailTabsView geneRecord={props.geneRecord} onValueChange={onValueChange} value={value} />
   );
 };
 

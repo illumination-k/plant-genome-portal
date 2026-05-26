@@ -17,11 +17,7 @@ const refgetUrl = (checksum: string, start: number, end: number): string => {
   return `/sequence/${encodeURIComponent(checksum)}?${params.toString()}`;
 };
 
-const optionalRefgetUrl = (
-  checksum: string,
-  start: number,
-  end: number,
-): string | undefined => {
+const optionalRefgetUrl = (checksum: string, start: number, end: number): string | undefined => {
   if (checksum === "") {
     return undefined;
   }
@@ -48,10 +44,7 @@ const GeneSequenceCard = (props: {
 
   return (
     <div className="col-span-12 rounded-lg border border-border-subtle bg-surface p-6">
-      <GeneSequenceCardHeader
-        downloadUrl={endpointUrl}
-        geneId={props.geneId}
-      />
+      <GeneSequenceCardHeader downloadUrl={endpointUrl} geneId={props.geneId} />
       <GeneSequenceMetadata
         chr={props.chr}
         endpointUrl={endpointUrl}
@@ -59,10 +52,7 @@ const GeneSequenceCard = (props: {
         length={props.length}
         start={props.start}
       />
-      <GeneSequenceBody
-        isLoading={refget.isLoading}
-        sequence={refget.sequence}
-      />
+      <GeneSequenceBody isLoading={refget.isLoading} sequence={refget.sequence} />
       <GeneSequenceErrors
         hasRequestError={refget.hasRequestError}
         hasSequenceMetadata={refget.hasSequenceMetadata}

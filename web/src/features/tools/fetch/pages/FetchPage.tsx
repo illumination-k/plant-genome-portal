@@ -118,9 +118,7 @@ const RefgetFetchPanel = (): ReactElement => {
 
         <form className="mt-6 grid grid-cols-12 gap-4" onSubmit={onSubmit}>
           <label className="col-span-12 flex flex-col gap-1 md:col-span-6">
-            <span className="text-xs font-medium uppercase text-text-subtle">
-              Refget checksum
-            </span>
+            <span className="text-xs font-medium uppercase text-text-subtle">Refget checksum</span>
             <input
               aria-label="Refget checksum"
               className="min-h-10 rounded-md border border-border bg-surface px-3 font-mono text-sm text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"
@@ -266,9 +264,7 @@ const SegmentFetchPanel = (): ReactElement => {
             />
           </label>
           <label className="col-span-8 flex flex-col gap-1 md:col-span-3">
-            <span className="text-xs font-medium uppercase text-text-subtle">
-              Sequence name
-            </span>
+            <span className="text-xs font-medium uppercase text-text-subtle">Sequence name</span>
             <input
               aria-label="Sequence name"
               className="min-h-10 rounded-md border border-border bg-surface px-3 font-mono text-sm text-text outline-none transition placeholder:text-text-subtle focus:border-primary-700 focus:ring-2 focus:ring-primary-100"

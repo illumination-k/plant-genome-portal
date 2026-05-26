@@ -9,6 +9,7 @@ genome-core = { path = "../genome-core", version = "0.1.0" }
 serde.workspace = true
 storage = { path = "../storage", version = "0.1.0" }
 thiserror.workspace = true
+utoipa.workspace = true
 
 [lints]
 workspace = true

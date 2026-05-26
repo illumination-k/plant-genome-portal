@@ -7,7 +7,9 @@ const GeneAttributeList = (props: { attributes: Record<string, string> }): React
   const attributes = Object.entries(props.attributes);
 
   if (attributes.length === emptyCount) {
-    return <p className="mt-4 text-sm text-text-muted">No attributes were included for this gene.</p>;
+    return (
+      <p className="mt-4 text-sm text-text-muted">No attributes were included for this gene.</p>
+    );
   }
 
   return (

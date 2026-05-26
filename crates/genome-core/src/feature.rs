@@ -6,6 +6,7 @@ use crate::annotation::FunctionalAnnotation;
 use crate::assembly::{Assembly, Sequence, Taxon};
 use crate::coord::{HalfOpenRegion, Strand};
 use crate::ids::{AssemblyAccession, GeneId, SequenceName, TranscriptId};
+use crate::kegg::KeggCatalog;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Gene {
@@ -69,4 +70,6 @@ pub struct GenomeDataset {
     pub transcripts: Vec<Transcript>,
     pub exons: Vec<Exon>,
     pub cdss: Vec<Cds>,
+    #[serde(default)]
+    pub kegg_catalog: KeggCatalog,
 }
