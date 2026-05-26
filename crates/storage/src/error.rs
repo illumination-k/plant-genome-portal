@@ -21,4 +21,6 @@ pub enum StorageError {
     MissingFastaSequence(String),
     #[error("invalid FASTA record: {0}")]
     InvalidFastaRecord(PathBuf),
+    #[error("invalid obo document: {0}")]
+    InvalidObo(String),
 }

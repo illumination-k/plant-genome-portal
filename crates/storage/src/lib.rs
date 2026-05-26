@@ -3,12 +3,14 @@ mod error;
 mod fasta;
 mod gff;
 mod nomenclature;
+mod obo;
 mod repository;
 mod snapshot;
 mod util;
 
 pub use crate::error::StorageError;
 pub use crate::fasta::{FastaReference, refget_checksum};
+pub use crate::obo::{GoOntology, GoTerm, load_go_ontology};
 pub use crate::repository::FileGenomeRepository;
 pub use crate::snapshot::{
     GenomeSnapshot, GenomeSnapshotBuild, SnapshotManifest, build_genome_snapshot, read_snapshot,
