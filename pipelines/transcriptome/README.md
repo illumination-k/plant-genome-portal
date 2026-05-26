@@ -64,6 +64,41 @@ CSV with header `sample,sra,fastq_1,fastq_2,strandedness`.
 `auto` lets Salmon infer the library type and disables HISAT2 strand flags.
 For Qualimap RNA-seq QC, only explicit `forward`/`reverse` switch on strand mode.
 
+### Paired-end vs single-end
+
+Layout is detected per sample and propagated as `meta.single_end`:
+
+- **Local FASTQ**: `fastq_2` populated → paired-end; empty → single-end.
+- **SRA**: detected after `fasterq-dump --split-files` from the number of FASTQ
+  files emitted (`_1.fastq` + `_2.fastq` = paired; single `<accession>.fastq` =
+  single).
+
+The flag drives PE/SE branches in every downstream process:
+
+| Process         | Paired                              | Single                       |
+| --------------- | ----------------------------------- | ---------------------------- |
+| FASTP           | `--in1`/`--in2`, adapter PE detect  | `--in1` only                 |
+| SALMON_QUANT    | libType `ISF`/`ISR`/`IU`/`A`        | libType `SF`/`SR`/`U`/`A`    |
+| HISAT2_ALIGN    | `-1`/`-2`, `--rna-strandness FR/RF` | `-U`, `--rna-strandness F/R` |
+| QUALIMAP_RNASEQ | `-pe`                               | no `-pe`                     |
+
+A samplesheet may mix PE and SE rows freely; both are validated end-to-end
+against a synthetic fixture in `pipelines/transcriptome` development.
+
+### SRA fetching
+
+SRA rows are downloaded inside the `SRA_FETCH` process (`sra-tools` container):
+
+1. `prefetch --max-size 100g <accession>` — pulls the `.sra` blob to the work dir.
+2. `fasterq-dump --split-files --skip-technical --threads N <accession>` —
+   converts to FASTQ; produces `_1.fastq`/`_2.fastq` for paired libraries or
+   `<accession>.fastq` for single.
+3. Files are renamed to the `sample` ID from the samplesheet and `pigz`-ed.
+
+No NCBI credentials are required for public runs. For very large studies, mount
+`~/.ncbi/user-settings.mkfg` into the container to point `prefetch` at a shared
+SRA cache.
+
 ## Reusing prebuilt indices
 
 ```bash
