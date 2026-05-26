@@ -9,6 +9,8 @@ report_section_order:
     order: 800
   picard:
     order: 700
-  macs2:
+  macs3:
     order: 600
+  homer:
+    order: 500
 disable_version_detection: false

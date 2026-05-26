@@ -7,13 +7,15 @@ SRA accession) into:
 - `markduplicates/<sample>/` — duplicate-marked BAM + Picard metrics
 - `filtered/<sample>/*.filt.bam` — MAPQ + flag filtered BAM (input to peak callers)
 - `bigwig/<sample>.bw` — deepTools `bamCoverage` track (CPM by default)
-- `macs2/<sample>/` — MACS2 narrowPeak / broadPeak (for `assay=chipseq`)
+- `macs3/<sample>/` — MACS3 narrowPeak / broadPeak (for `assay=chipseq`)
 - `seacr/<sample>/` — SEACR peak BEDs + fragment bedgraph (for `assay=cutrun`)
+- `homer/<sample>/` — HOMER `findMotifsGenome.pl` known + de novo motif results
 - `picard/<sample>/` — `CollectMultipleMetrics` (insert size, alignment summary, ...)
 - `multiqc_report.html` — aggregated QC over fastp, Bowtie2, samtools, Picard
 
 The two assays share the same trimming + alignment + filtering stack and diverge
-only at peak calling, where the per-sample `assay` column picks MACS2 or SEACR.
+only at peak calling, where the per-sample `assay` column picks MACS3 or SEACR.
+HOMER motif analysis runs on whichever peak BED is produced.
 
 ## Layout
 
@@ -37,10 +39,11 @@ pipelines/chipseq/
     samtools_filter.nf          # flag / MAPQ filter
     picard_collectmultiplemetrics.nf
     deeptools_bamcoverage.nf    # bigWig track
-    macs2_callpeak.nf           # ChIP-seq peak calling
+    macs3_callpeak.nf           # ChIP-seq peak calling (MACS3)
     samtools_nsort.nf           # name-sort BAM (for SEACR)
     bedtools_fragbedgraph.nf    # PE fragments → bedgraph (for SEACR)
     seacr_callpeak.nf           # CUT&RUN peak calling
+    homer_findmotifs.nf         # motif analysis on peak BEDs
     multiqc.nf                  # aggregate QC report
   assets/
     multiqc_config.yml
@@ -99,7 +102,7 @@ The flag drives PE/SE branches in every downstream process:
 | FASTP                 | `--in1` / `--in2`, adapter PE detect                     | `--in1` only                    |
 | BOWTIE2_ALIGN         | `-1` / `-2`, `--no-mixed --no-discordant`, `-X 700/1000` | `-U`                            |
 | SAMTOOLS_FILTER       | `-f 0x002` (properly paired)                             | flag req omitted                |
-| MACS2_CALLPEAK        | `-f BAMPE`                                               | `-f BAM`                        |
+| MACS3_CALLPEAK        | `-f BAMPE`                                               | `-f BAM`                        |
 | DEEPTOOLS_BAMCOVERAGE | `--extendReads`                                          | no extension                    |
 | SEACR                 | required                                                 | **rejected** — SEACR is PE-only |
 
@@ -139,19 +142,23 @@ The directory must be the full Bowtie2 index folder with basename `genome`
 
 ## Tuning parameters
 
-| Param                | Default     | Notes                                                             |
-| -------------------- | ----------- | ----------------------------------------------------------------- |
-| `--min_mapq`         | `30`        | Minimum MAPQ kept by `SAMTOOLS_FILTER`                            |
-| `--keep_dups`        | `false`     | Set `true` to keep duplicate reads (common for CUT&RUN low-input) |
-| `--macs_broad`       | `false`     | Pass `--broad` to MACS2 (use for histone marks like H3K27me3)     |
-| `--macs_qvalue`      | `0.05`      | MACS2 `-q` threshold                                              |
-| `--seacr_threshold`  | `0.01`      | SEACR non-control threshold (fraction of peaks called)            |
-| `--seacr_stringency` | `stringent` | SEACR mode: `stringent` or `relaxed`                              |
-| `--bigwig_binsize`   | `50`        | deepTools `bamCoverage --binSize`                                 |
-| `--bigwig_normalize` | `CPM`       | One of `CPM`, `RPGC`, `BPM`, `RPKM`, `None`                       |
-| `--skip_bigwig`      | `false`     | Skip deepTools track generation                                   |
-| `--skip_peaks`       | `false`     | Skip MACS2 + SEACR (alignment + QC only)                          |
-| `--skip_multiqc`     | `false`     | Skip MultiQC aggregation                                          |
+| Param                | Default     | Notes                                                                                |
+| -------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `--min_mapq`         | `30`        | Minimum MAPQ kept by `SAMTOOLS_FILTER`                                               |
+| `--keep_dups`        | `false`     | Set `true` to keep duplicate reads (common for CUT&RUN low-input)                    |
+| `--macs_broad`       | `false`     | Pass `--broad` to MACS3 (use for histone marks like H3K27me3)                        |
+| `--macs_qvalue`      | `0.05`      | MACS3 `-q` threshold                                                                 |
+| `--seacr_threshold`  | `0.01`      | SEACR non-control threshold (fraction of peaks called)                               |
+| `--seacr_stringency` | `stringent` | SEACR mode: `stringent` or `relaxed`                                                 |
+| `--homer_size`       | `200`       | HOMER window around peak center (bp)                                                 |
+| `--homer_mset`       | `null`      | HOMER motif set: `plants` / `vertebrates` / ... (default: auto)                      |
+| `--homer_extra_args` | `-mask`     | Extra `findMotifsGenome.pl` flags (e.g. `-mask -nomotif`)                            |
+| `--bigwig_binsize`   | `50`        | deepTools `bamCoverage --binSize`                                                    |
+| `--bigwig_normalize` | `CPM`       | One of `CPM`, `RPGC`, `BPM`, `RPKM`, `None`                                          |
+| `--skip_bigwig`      | `false`     | Skip deepTools track generation                                                      |
+| `--skip_peaks`       | `false`     | Skip MACS3 + SEACR (alignment + QC only). Also suppresses HOMER (peaks → no motifs). |
+| `--skip_motifs`      | `false`     | Skip HOMER motif analysis (peaks still called)                                       |
+| `--skip_multiqc`     | `false`     | Skip MultiQC aggregation                                                             |
 
 ## Outputs
 
@@ -164,8 +171,9 @@ results/chipseq/
   filtered/<sample>/                    # filt.bam, filt.bam.bai, filt.flagstat
   picard/<sample>/                      # CollectMultipleMetrics outputs (insert size, etc.)
   bigwig/<sample>.bw                    # deepTools bigWig coverage
-  macs2/<sample>/                       # narrowPeak / broadPeak / xls / summits.bed
+  macs3/<sample>/                       # narrowPeak / broadPeak / xls / summits.bed
   seacr/<sample>/                       # *.fragments.bedgraph + *.seacr.*.bed
+  homer/<sample>/<sample>_homer/        # knownResults.html + homerResults.html (de novo)
   reference/                            # genome.fa, .fai, chrom.sizes
   multiqc/multiqc_report.html
   pipeline_info/                        # Nextflow execution report/timeline/trace/DAG
@@ -181,6 +189,24 @@ results/chipseq/
   `workflows/chipseq.nf` when needed.
 - A SEACR run without a matched control falls back to the non-control threshold
   mode (`params.seacr_threshold`, default `0.01`).
+- HOMER's `findMotifsGenome.pl` bundles plant motif sets — pass
+  `--homer_mset plants` to force the plant motif library. With `null` (default),
+  HOMER picks automatically based on genome heuristics.
 - `pre-commit` does not lint `.nf`/`.config` files; run `nextflow inspect`
   (`bash pipelines/chipseq/tests/inspect.sh`) locally to validate channel
   topology before pushing.
+
+### Motif analysis alternatives
+
+HOMER is the default because it's turn-key (BED + FASTA → known + de novo in one
+pass) and ships with plant motif DBs. If you need a different stack, swap in:
+
+- **MEME-ChIP / STREME** (Bailey 2021) — modern MEME suite combining STREME
+  (de novo, replaces DREME), AME (known motif enrichment), CentriMo, and
+  Tomtom. Requires extracting fixed-width peak sequences (`bedtools getfasta`)
+  and a `.meme` motif database (JASPAR plant collection is the usual choice).
+- **gimmemotifs** — Python toolkit that can ensemble multiple de novo finders
+  and compare against several motif DBs. Heavier dependency surface.
+- **TF-MoDISco / ChromBPNet** — neural-net-based motif discovery from a
+  pre-trained chromatin accessibility model. Out of scope for a peaks-only
+  pipeline since it needs a trained ChromBPNet checkpoint.

@@ -8,10 +8,11 @@ include { PICARD_MARKDUPLICATES        } from '../modules/local/picard_markdupli
 include { SAMTOOLS_FILTER              } from '../modules/local/samtools_filter.nf'
 include { PICARD_COLLECTMULTIPLEMETRICS } from '../modules/local/picard_collectmultiplemetrics.nf'
 include { DEEPTOOLS_BAMCOVERAGE        } from '../modules/local/deeptools_bamcoverage.nf'
-include { MACS2_CALLPEAK               } from '../modules/local/macs2_callpeak.nf'
+include { MACS3_CALLPEAK               } from '../modules/local/macs3_callpeak.nf'
 include { SAMTOOLS_NSORT               } from '../modules/local/samtools_nsort.nf'
 include { BEDTOOLS_FRAGBEDGRAPH        } from '../modules/local/bedtools_fragbedgraph.nf'
 include { SEACR_CALLPEAK               } from '../modules/local/seacr_callpeak.nf'
+include { HOMER_FINDMOTIFS             } from '../modules/local/homer_findmotifs.nf'
 include { MULTIQC                      } from '../modules/local/multiqc.nf'
 
 workflow CHIPSEQ {
@@ -130,9 +131,9 @@ workflow CHIPSEQ {
     // Peak calling
     //   - IP samples (control != null OR explicitly no-control IP) get peaks.
     //   - Pure control samples (where another row references them) get no peaks.
-    //   - chipseq → MACS2; cutrun → SEACR (PE only).
+    //   - chipseq → MACS3; cutrun → SEACR (PE only).
     // ------------------------------------------------------------------
-    ch_macs2_peaks = Channel.empty()
+    ch_macs3_peaks = Channel.empty()
     ch_seacr_peaks = Channel.empty()
 
     if (!params.skip_peaks) {
@@ -172,9 +173,9 @@ workflow CHIPSEQ {
             cutrun:  meta.assay == 'cutrun'
         }.set { ch_by_assay }
 
-        // ---- MACS2 for chipseq -----------------------------------------
-        MACS2_CALLPEAK(ch_by_assay.chipseq)
-        ch_macs2_peaks = MACS2_CALLPEAK.out.peaks
+        // ---- MACS3 for chipseq -----------------------------------------
+        MACS3_CALLPEAK(ch_by_assay.chipseq)
+        ch_macs3_peaks = MACS3_CALLPEAK.out.peaks
 
         // ---- SEACR for cutrun ------------------------------------------
         // SEACR requires PE data — fail loudly on SE rows tagged cutrun.
@@ -237,6 +238,27 @@ workflow CHIPSEQ {
 
         SEACR_CALLPEAK(ch_seacr_with_ctrl.mix(ch_seacr_no_ctrl))
         ch_seacr_peaks = SEACR_CALLPEAK.out.peaks
+    }
+
+    // ------------------------------------------------------------------
+    // Motif analysis (HOMER findMotifsGenome.pl)
+    //   - Runs on MACS3 narrowPeak/broadPeak and on SEACR peak BEDs.
+    //   - Produces both known motif enrichment and de novo discovery.
+    // ------------------------------------------------------------------
+    if (!params.skip_peaks && !params.skip_motifs) {
+        ch_macs3_bed = ch_macs3_peaks.map { meta, files ->
+            def file_list = (files instanceof List) ? files : [files]
+            def bed = file_list.find { it.name.endsWith('.narrowPeak') || it.name.endsWith('.broadPeak') }
+            return bed ? [meta, bed] : null
+        }.filter { it != null }
+
+        ch_seacr_bed = ch_seacr_peaks.map { meta, files ->
+            def file_list = (files instanceof List) ? files : [files]
+            def bed = file_list.find { it.name.endsWith('.bed') }
+            return bed ? [meta, bed] : null
+        }.filter { it != null }
+
+        HOMER_FINDMOTIFS(ch_macs3_bed.mix(ch_seacr_bed), ch_genome)
     }
 
     // ------------------------------------------------------------------
