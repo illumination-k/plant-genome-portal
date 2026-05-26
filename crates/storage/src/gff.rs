@@ -21,6 +21,27 @@ pub(crate) struct ParsedGff {
     pub cdss: Vec<Cds>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GffFeatureKind {
+    Gene,
+    Transcript,
+    Exon,
+    Cds,
+    Ignored,
+}
+
+impl GffFeatureKind {
+    fn from_type(feature_type: &str) -> Self {
+        match feature_type {
+            "gene" | "miRNA_gene" => Self::Gene,
+            "mRNA" | "transcript" | "miRNA" | "pre_miRNA" => Self::Transcript,
+            "exon" => Self::Exon,
+            "CDS" => Self::Cds,
+            _ => Self::Ignored,
+        }
+    }
+}
+
 pub(crate) fn parse_gff3(
     path: impl AsRef<Path>,
     assembly_accession: &AssemblyAccession,
@@ -39,23 +60,26 @@ pub(crate) fn parse_gff3(
         let line_number = index + 1;
         let feature_type = bytes_to_string(record.ty().as_ref());
 
-        if feature_type == "gene" || feature_type == "miRNA_gene" {
-            parsed
-                .genes
-                .push(parse_gene(&record, line_number, assembly_accession)?);
-        } else if matches!(
-            feature_type.as_str(),
-            "mRNA" | "transcript" | "miRNA" | "pre_miRNA"
-        ) {
-            let transcript = parse_transcript(&record, line_number)?;
-            transcript_parent.insert(transcript.id.clone(), transcript.gene_id.clone());
-            parsed.transcripts.push(transcript);
-        } else if feature_type == "exon" {
-            let exons = parse_exons(&record, line_number, &transcript_parent)?;
-            parsed.exons.extend(exons);
-        } else if feature_type == "CDS" {
-            let cdss = parse_cdss(&record, line_number, &transcript_parent)?;
-            parsed.cdss.extend(cdss);
+        match GffFeatureKind::from_type(&feature_type) {
+            GffFeatureKind::Gene => {
+                parsed
+                    .genes
+                    .push(parse_gene(&record, line_number, assembly_accession)?);
+            }
+            GffFeatureKind::Transcript => {
+                let transcript = parse_transcript(&record, line_number)?;
+                transcript_parent.insert(transcript.id.clone(), transcript.gene_id.clone());
+                parsed.transcripts.push(transcript);
+            }
+            GffFeatureKind::Exon => {
+                let exons = parse_exons(&record, line_number, &transcript_parent)?;
+                parsed.exons.extend(exons);
+            }
+            GffFeatureKind::Cds => {
+                let cdss = parse_cdss(&record, line_number, &transcript_parent)?;
+                parsed.cdss.extend(cdss);
+            }
+            GffFeatureKind::Ignored => {}
         }
     }
 

@@ -1,0 +1,19 @@
+[package]
+name = "co-expression"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+blas-src = { version = "0.10", features = ["accelerate"] }
+expression-core = { path = "../expression-core", version = "0.1.0" }
+genome-core = { path = "../genome-core", version = "0.1.0" }
+ndarray = { version = "0.17", features = ["blas", "rayon"] }
+ndarray-stats = "0.7"
+rayon = "1"
+serde.workspace = true
+thiserror.workspace = true
+utoipa.workspace = true
+
+[lints]
+workspace = true

@@ -73,6 +73,26 @@ export type ClosedRegion = {
     start: Position1;
 };
 
+/**
+ * A flat dendrogram representation suitable for JSON APIs.
+ */
+export type ClusterDendrogram = {
+    nodes: Array<ClusterDendrogramNode>;
+    root?: number | null;
+};
+
+/**
+ * One node in a flat dendrogram.
+ */
+export type ClusterDendrogramNode = {
+    distance: number;
+    id: number;
+    leafIndex?: number | null;
+    left?: number | null;
+    right?: number | null;
+    size: number;
+};
+
 export type ErrorResponse = {
     error: string;
 };
@@ -82,6 +102,38 @@ export type Exon = {
     sequence_name: SequenceName;
     strand: Strand;
     transcript_id: TranscriptId;
+};
+
+export type ExpressionClustergramQuery = {
+    assemblyAccession: string;
+    geneIds: string;
+    limit?: number | null;
+    runs?: string | null;
+    unit?: null | ExpressionUnit;
+};
+
+export type ExpressionClustergramResponse = {
+    assemblyAccession: string;
+    columnDendrogram: ClusterDendrogram;
+    columnOrder: Array<number>;
+    genes: Array<ExpressionGeneLabel>;
+    rowDendrogram: ClusterDendrogram;
+    rowOrder: Array<number>;
+    samples: Array<ExpressionSampleLabel>;
+    unit: ExpressionUnit;
+    values: Array<number>;
+    zScores: Array<number>;
+};
+
+export type ExpressionGeneLabel = {
+    geneId: string;
+    label: string;
+};
+
+export type ExpressionSampleLabel = {
+    label: string;
+    primaryGroup?: string | null;
+    run: string;
 };
 
 /**
@@ -607,6 +659,37 @@ export type RefgetSequenceResponses = {
 };
 
 export type RefgetSequenceResponse = RefgetSequenceResponses[keyof RefgetSequenceResponses];
+
+export type ExpressionClustergramData = {
+    body?: never;
+    path?: never;
+    query: {
+        assemblyAccession: string;
+        geneIds: string;
+        unit?: null | ExpressionUnit;
+        runs?: string | null;
+        limit?: number | null;
+    };
+    url: '/v2/expression/clustergram';
+};
+
+export type ExpressionClustergramErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+};
+
+export type ExpressionClustergramError = ExpressionClustergramErrors[keyof ExpressionClustergramErrors];
+
+export type ExpressionClustergramResponses = {
+    /**
+     * Expression matrix with Rust-computed cluster ordering
+     */
+    200: ExpressionClustergramResponse;
+};
+
+export type ExpressionClustergramResponse2 = ExpressionClustergramResponses[keyof ExpressionClustergramResponses];
 
 export type GeneData = {
     body?: never;
