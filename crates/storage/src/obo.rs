@@ -8,6 +8,7 @@ use std::path::Path;
 use fastobo::ast::{EntityFrame, OboDoc, TermClause, TermFrame};
 use flate2::read::MultiGzDecoder;
 use genome_core::{GoNamespace, GoTermId};
+use goterm_semsim::{GoDag, GoNode};
 
 use crate::error::StorageError;
 
@@ -16,7 +17,8 @@ pub struct GoTerm {
     pub id: GoTermId,
     pub name: Option<String>,
     pub namespace: Option<GoNamespace>,
-    pub parents: Vec<GoTermId>,
+    pub is_a: Vec<GoTermId>,
+    pub part_of: Vec<GoTermId>,
     pub alt_ids: Vec<GoTermId>,
     pub is_obsolete: bool,
 }
@@ -51,6 +53,28 @@ impl GoOntology {
 
     pub fn iter(&self) -> impl Iterator<Item = &GoTerm> {
         self.terms.values()
+    }
+
+    /// Project this ontology into a [`GoDag`] for semantic-similarity
+    /// computation. Obsolete terms are dropped (they don't contribute
+    /// useful structure and break IC normalisation).
+    pub fn to_dag(&self) -> GoDag {
+        let mut builder = GoDag::builder();
+        for term in self.terms.values() {
+            if term.is_obsolete {
+                continue;
+            }
+            builder.insert(GoNode {
+                id: term.id.clone(),
+                namespace: term.namespace,
+                is_a: term.is_a.clone(),
+                part_of: term.part_of.clone(),
+            });
+        }
+        for (alt, primary) in &self.alt_to_primary {
+            builder.alias(alt.clone(), primary.clone());
+        }
+        builder.build()
     }
 }
 
@@ -99,7 +123,8 @@ fn parse_term_frame(term_frame: &TermFrame) -> Option<GoTerm> {
         id,
         name: None,
         namespace: None,
-        parents: Vec::new(),
+        is_a: Vec::new(),
+        part_of: Vec::new(),
         alt_ids: Vec::new(),
         is_obsolete: false,
     };
@@ -114,7 +139,14 @@ fn parse_term_frame(term_frame: &TermFrame) -> Option<GoTerm> {
             }
             TermClause::IsA(parent) => {
                 if let Some(parent_id) = parse_go_term_id(&parent.to_string()) {
-                    go_term.parents.push(parent_id);
+                    go_term.is_a.push(parent_id);
+                }
+            }
+            TermClause::Relationship(rel, target) => {
+                if rel.to_string() == "part_of"
+                    && let Some(target_id) = parse_go_term_id(&target.to_string())
+                {
+                    go_term.part_of.push(target_id);
                 }
             }
             TermClause::AltId(alt) => {
@@ -178,6 +210,13 @@ mod tests {
         is_a: GO:0008150 ! biological_process\n\
         \n\
         [Term]\n\
+        id: GO:0044238\n\
+        name: primary metabolic process\n\
+        namespace: biological_process\n\
+        is_a: GO:0009987 ! cellular process\n\
+        relationship: part_of GO:0008150 ! biological_process\n\
+        \n\
+        [Term]\n\
         id: GO:0000000\n\
         name: obsolete example\n\
         namespace: biological_process\n\
@@ -194,14 +233,15 @@ mod tests {
         std::fs::write(&path, SAMPLE_OBO).unwrap();
 
         let ontology = load_go_ontology(&path).unwrap();
-        assert_eq!(ontology.len(), 4);
+        assert_eq!(ontology.len(), 5);
 
         let bp = ontology
             .get(&GoTermId::new("GO:0008150").unwrap())
             .expect("biological_process term");
         assert_eq!(bp.name.as_deref(), Some("biological_process"));
         assert_eq!(bp.namespace, Some(GoNamespace::BiologicalProcess));
-        assert!(bp.parents.is_empty());
+        assert!(bp.is_a.is_empty());
+        assert!(bp.part_of.is_empty());
 
         let mf = ontology
             .get(&GoTermId::new("GO:0003674").unwrap())
@@ -211,7 +251,24 @@ mod tests {
         let cellular = ontology
             .get(&GoTermId::new("GO:0009987").unwrap())
             .expect("cellular process term");
-        assert_eq!(cellular.parents, vec![GoTermId::new("GO:0008150").unwrap()]);
+        assert_eq!(cellular.is_a, vec![GoTermId::new("GO:0008150").unwrap()]);
+    }
+
+    #[test]
+    fn captures_part_of_relationships() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("go.obo");
+        std::fs::write(&path, SAMPLE_OBO).unwrap();
+
+        let ontology = load_go_ontology(&path).unwrap();
+        let metabolic = ontology
+            .get(&GoTermId::new("GO:0044238").unwrap())
+            .expect("primary metabolic process term");
+        assert_eq!(metabolic.is_a, vec![GoTermId::new("GO:0009987").unwrap()]);
+        assert_eq!(
+            metabolic.part_of,
+            vec![GoTermId::new("GO:0008150").unwrap()]
+        );
     }
 
     #[test]
@@ -264,7 +321,7 @@ mod tests {
         encoder.finish().unwrap();
 
         let ontology = load_go_ontology(&path).unwrap();
-        assert_eq!(ontology.len(), 4);
+        assert_eq!(ontology.len(), 5);
         assert!(
             ontology
                 .get(&GoTermId::new("GO:0008150").unwrap())
@@ -283,6 +340,39 @@ mod tests {
             Err(other) => panic!("unexpected error: {other:?}"),
             Ok(_) => panic!("expected parse failure"),
         }
+    }
+
+    #[test]
+    fn to_dag_drops_obsolete_terms_and_carries_relationships() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("go.obo");
+        std::fs::write(&path, SAMPLE_OBO).unwrap();
+
+        let ontology = load_go_ontology(&path).unwrap();
+        let dag = ontology.to_dag();
+
+        // 5 terms loaded, 1 obsolete dropped → 4 in the DAG.
+        assert_eq!(dag.len(), 4);
+        assert!(dag.get(&GoTermId::new("GO:0000000").unwrap()).is_none());
+
+        let cellular = dag
+            .get(&GoTermId::new("GO:0009987").unwrap())
+            .expect("cellular process in DAG");
+        assert_eq!(cellular.is_a, vec![GoTermId::new("GO:0008150").unwrap()]);
+
+        // part_of edges survive the projection.
+        let metabolic = dag
+            .get(&GoTermId::new("GO:0044238").unwrap())
+            .expect("primary metabolic process in DAG");
+        assert_eq!(
+            metabolic.part_of,
+            vec![GoTermId::new("GO:0008150").unwrap()]
+        );
+
+        // alt_id resolution carries over.
+        let primary = GoTermId::new("GO:0008150").unwrap();
+        let alt = GoTermId::new("GO:0000004").unwrap();
+        assert_eq!(dag.resolve(&alt), Some(&primary));
     }
 
     #[test]

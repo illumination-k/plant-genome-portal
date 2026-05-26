@@ -719,6 +719,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "goterm-semsim"
+version = "0.1.0"
+dependencies = [
+ "genome-core",
+ "serde",
+ "thiserror",
+ "utoipa",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2039,6 +2049,7 @@ dependencies = [
  "fastobo",
  "flate2",
  "genome-core",
+ "goterm-semsim",
  "noodles-fasta",
  "noodles-gff",
  "serde",

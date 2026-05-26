@@ -216,7 +216,12 @@ crates/
                             # GenomeRepository trait, GeneSearch
   storage/                  # noodles FASTA/GFF parsers, nomenclature/functional-annotation
                             # TSV parsers, refget checksum, FastaReference,
-                            # FileGenomeRepository (in-memory), GenomeSnapshot I/O
+                            # FileGenomeRepository (in-memory), GenomeSnapshot I/O,
+                            # GoOntology (OBO loader, `to_dag()` projects into goterm-semsim)
+  goterm-semsim/            # GO semantic similarity (pure lib, no IO):
+                            # GoDag (is_a + part_of), IntrinsicIc / CorpusIc,
+                            # Resnik / Lin / Jiang-Conrath / Wang pairwise,
+                            # set_similarity (BMA / Max / Average)
   service/                  # GenomeService: ユースケース層、薄い (lookup + region → half-open)
                             # WorkerJob<Input> / Worker trait live here as application contracts.
 ```
