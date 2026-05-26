@@ -523,37 +523,50 @@ mod tests {
     }
 
     #[test]
-    fn wang_keeps_maximum_when_multiple_paths_reach_an_ancestor() {
-        // Diamond DAG: X reaches R both via P1 (is_a) and P2 (part_of).
-        //   S_X(P1) = 0.8, S_X(P2) = 0.6
-        //   S_X(R)  = max(0.8·0.8, 0.6·0.6) = 0.64   ← `>=` guard matters here
-        //   SV(X)   = 1 + 0.8 + 0.6 + 0.64 = 3.04
-        // For R alone: SV(R) = 1.
-        // wang(X, R) common = {R}: numerator = 0.64 + 1
-        // wang = 1.64 / 4.04.
-        // If the guard accepted any update (taking the minimum path) the
-        // answer would change to (0.36 + 1) / (1 + 0.8 + 0.6 + 0.36 + 1).
+    fn wang_keeps_maximum_when_a_smaller_candidate_arrives_later() {
+        // Asymmetric DAG with two paths from X to R: a 2-step path via C
+        // and a 3-step path via A→B. The traversal pops C first (LIFO,
+        // part_of iterated after is_a), so R is set to the LARGER value
+        // first; the 3-step path then offers a SMALLER candidate later.
+        // The `*existing >= candidate` guard must drop that smaller
+        // update — replacing it with `false` would always overwrite and
+        // change the answer.
+        //
+        //   X (GO:0000023)
+        //     ├─ is_a    → A (GO:0000024) ─is_a→ B (GO:0000026) ─part_of→ R
+        //     │            contribution: 1 · 0.8 · 0.8 · 0.6 = 0.384
+        //     └─ part_of → C (GO:0000025) ─is_a→ R
+        //                  contribution: 1 · 0.6 · 0.8 = 0.48
+        //
+        // S(R) must be max(0.48, 0.384) = 0.48.
         let mut b = GoDag::builder();
-        b.insert(term("GO:0000020", GoNamespace::BiologicalProcess, &[], &[]))
+        b.insert(term("GO:0000020", GoNamespace::BiologicalProcess, &[], &[])) // R
             .insert(term(
-                "GO:0000021",
-                GoNamespace::BiologicalProcess,
-                &["GO:0000020"],
-                &[],
-            ))
-            .insert(term(
-                "GO:0000022",
+                "GO:0000026",
                 GoNamespace::BiologicalProcess,
                 &[],
                 &["GO:0000020"],
-            ))
+            )) // B part_of R
+            .insert(term(
+                "GO:0000024",
+                GoNamespace::BiologicalProcess,
+                &["GO:0000026"],
+                &[],
+            )) // A is_a B
+            .insert(term(
+                "GO:0000025",
+                GoNamespace::BiologicalProcess,
+                &["GO:0000020"],
+                &[],
+            )) // C is_a R
             .insert(term(
                 "GO:0000023",
                 GoNamespace::BiologicalProcess,
-                &["GO:0000021"],
-                &["GO:0000022"],
-            ));
+                &["GO:0000024"],
+                &["GO:0000025"],
+            )); // X is_a A, part_of C
         let dag = b.build();
+
         let v = wang(
             &dag,
             &id("GO:0000023"),
@@ -561,7 +574,12 @@ mod tests {
             WangOptions::default(),
         )
         .unwrap();
-        let expected = (0.64 + 1.0) / (3.04 + 1.0);
+
+        // Subgraph(X) = {X:1, A:0.8, B:0.64, C:0.6, R:0.48}.
+        let sv_x = 1.0 + 0.8 + 0.64 + 0.6 + 0.48;
+        let sv_r = 1.0;
+        let numerator = 0.48 + 1.0;
+        let expected = numerator / (sv_x + sv_r);
         assert!((v - expected).abs() < 1e-9, "expected {expected}, got {v}");
     }
 
@@ -643,14 +661,16 @@ mod tests {
 
     #[test]
     fn set_similarity_max_picks_highest_score_over_unequal_pairs() {
-        // Two-element set_a, singleton set_b. One pair scores 1.0 (self),
-        // the other scores 0.0 (root vs leaf via Lin → 0 since MICA = root,
-        // IC(MICA) = 0). Max must return 1.0 — replacing `>` with `<`,
-        // `==`, or `>=` would change the chosen winner.
+        // Two-element set_a, singleton set_b. The LOWER-scoring pair is
+        // visited first so the per-iteration `score > current` branch is
+        // exercised on an ascending pair — replacing `>` with `<` or `==`
+        // would lock the answer at the smaller score instead of updating
+        // to the larger one.
         let dag = bp_dag();
         let ic = IntrinsicIc::from_dag(&dag);
         let v = set_similarity(
-            &[id("GO:0000002"), id("GO:0008150")],
+            // root first → Lin(root, leaf) = 0; leaf second → Lin(leaf, leaf) = 1.
+            &[id("GO:0008150"), id("GO:0000002")],
             &[id("GO:0000002")],
             SetAggregator::Max,
             |a, b| similarity(&dag, &ic, a, b, SimilarityMethod::Lin),
@@ -681,6 +701,37 @@ mod tests {
         assert!((v - expected).abs() < 1e-12, "expected {expected}, got {v}");
         // Sanity: the two scores are different, so / vs * is detectable.
         assert!((self_score - sib_score).abs() > 1e-6);
+    }
+
+    #[test]
+    fn set_similarity_bma_updates_best_when_higher_score_comes_after_lower() {
+        // For a single query against a 2-target set, ensure the LOWER
+        // score is visited first so the `score > current` update branch
+        // in best_match_average actually fires on an ascending input —
+        // killing `>` → `==` mutations there.
+        let dag = bp_dag();
+        let ic = IntrinsicIc::from_dag(&dag);
+        let pairwise =
+            |a: &GoTermId, b: &GoTermId| similarity(&dag, &ic, a, b, SimilarityMethod::Lin);
+        // q = distant_sibling; targets ordered as [leaf1 (Lin=0), distant_self (Lin=1)].
+        let actual = set_similarity(
+            &[id("GO:0000010")],
+            &[id("GO:0000002"), id("GO:0000010")],
+            SetAggregator::BestMatchAverage,
+            pairwise,
+        )
+        .unwrap();
+        // a-side: best is Lin(distant, distant) = 1.0 → avg = 1.0.
+        // b-side:
+        //   q=leaf1, t=distant: 0.0 → best=0.0
+        //   q=distant, t=distant: 1.0 → best=1.0
+        //   avg = 0.5
+        // BMA = (1.0 + 0.5) / 2 = 0.75
+        let expected = 0.75;
+        assert!(
+            (actual - expected).abs() < 1e-12,
+            "expected {expected}, got {actual}"
+        );
     }
 
     #[test]
