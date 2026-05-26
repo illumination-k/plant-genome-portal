@@ -1,0 +1,14 @@
+[package]
+name = "enrichment-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+statrs = { version = "0.18", default-features = false }
+thiserror.workspace = true
+utoipa.workspace = true
+
+[lints]
+workspace = true
