@@ -119,9 +119,7 @@ impl CorpusIc {
             let Some(node) = dag.get(term) else { continue };
             let Some(ns) = node.namespace else { continue };
             let slot = max_per_namespace.entry(ns).or_default();
-            if *count > *slot {
-                *slot = *count;
-            }
+            *slot = (*slot).max(*count);
         }
 
         let mut values: HashMap<GoTermId, f64> = HashMap::new();

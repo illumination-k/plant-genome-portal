@@ -15,4 +15,15 @@ minimum_test_timeout = 60
 
 exclude_globs = []
 
-exclude_re = []
+exclude_re = [
+  # `GoDag::builder()` is the idiomatic accessor for `GoDagBuilder`'s
+  # `Default::default()`; the substitution is observably identical by
+  # construction.
+  'replace GoDag::builder -> GoDagBuilder with Default::default\(\)',
+  # The `set_a.is_empty() || set_b.is_empty()` guard in `set_similarity`
+  # is an early-return optimisation. Each aggregator's downstream branch
+  # already returns `None` when its iteration produces no pairs, so
+  # `|| → &&` is observably equivalent (one empty side still yields no
+  # work in either case).
+  'replace \|\| with && in set_similarity',
+]

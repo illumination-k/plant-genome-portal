@@ -112,11 +112,10 @@ pub fn wang(dag: &GoDag, t1: &GoTermId, t2: &GoTermId, opts: WangOptions) -> Opt
     let s_a = wang_s_values(dag, &primary_a, opts)?;
     let s_b = wang_s_values(dag, &primary_b, opts)?;
 
+    // `wang_s_values` always inserts (seed, 1.0) for valid terms, so both
+    // SVs are guaranteed ≥ 1.0 and the denominator below is non-zero.
     let sv_a: f64 = s_a.values().sum();
     let sv_b: f64 = s_b.values().sum();
-    if sv_a + sv_b <= 0.0 {
-        return None;
-    }
 
     let mut numerator = 0.0;
     for (term, value_a) in &s_a {
@@ -201,10 +200,8 @@ where
             let mut best: Option<f64> = None;
             for a in set_a {
                 for b in set_b {
-                    if let Some(score) = pairwise(a, b)
-                        && best.is_none_or(|current| score > current)
-                    {
-                        best = Some(score);
+                    if let Some(score) = pairwise(a, b) {
+                        best = Some(best.map_or(score, |current| current.max(score)));
                     }
                 }
             }
@@ -248,10 +245,8 @@ where
     for q in query {
         let mut best: Option<f64> = None;
         for t in target {
-            if let Some(score) = pairwise(q, t)
-                && best.is_none_or(|current| score > current)
-            {
-                best = Some(score);
+            if let Some(score) = pairwise(q, t) {
+                best = Some(best.map_or(score, |current| current.max(score)));
             }
         }
         if let Some(score) = best {
