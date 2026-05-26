@@ -106,6 +106,50 @@ export type ClusterDendrogramNode = {
   size: number;
 };
 
+export type EnrichmentAnalysisRequest = {
+  annotationKinds?: Array<EnrichmentAnnotationKind> | null;
+  assemblyAccession: string;
+  backgroundGeneIds?: Array<string> | null;
+  geneIds: Array<string>;
+  limit?: number | null;
+  minPopulationHits?: number | null;
+};
+
+export type EnrichmentAnalysisResponse = {
+  assemblyAccession: string;
+  populationSize: number;
+  results: Array<EnrichmentTermResult>;
+  studySize: number;
+  testedTerms: number;
+};
+
+export type EnrichmentAnnotationKind =
+  | "go_term"
+  | "pfam"
+  | "inter_pro"
+  | "kegg"
+  | "kog"
+  | "ncbi_fam";
+
+export type EnrichmentTerm = {
+  id: string;
+  kind: EnrichmentAnnotationKind;
+  name?: string | null;
+  namespace?: null | GoNamespace;
+};
+
+export type EnrichmentTermResult = {
+  foldEnrichment?: number | null;
+  pValue: number;
+  populationHits: number;
+  populationSize: number;
+  qValue: number;
+  studyGeneIds: Array<GeneId>;
+  studyHits: number;
+  studySize: number;
+  term: EnrichmentTerm;
+};
+
 export type ErrorResponse = {
   error: string;
 };
@@ -774,6 +818,36 @@ export type RefgetSequenceResponses = {
 };
 
 export type RefgetSequenceResponse = RefgetSequenceResponses[keyof RefgetSequenceResponses];
+
+export type EnrichmentAnalysisData = {
+  body: EnrichmentAnalysisRequest;
+  path?: never;
+  query?: never;
+  url: "/v2/analysis/enrichment";
+};
+
+export type EnrichmentAnalysisErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse;
+  /**
+   * Assembly or gene not found
+   */
+  404: ErrorResponse;
+};
+
+export type EnrichmentAnalysisError = EnrichmentAnalysisErrors[keyof EnrichmentAnalysisErrors];
+
+export type EnrichmentAnalysisResponses = {
+  /**
+   * Functional annotation over-representation analysis
+   */
+  200: EnrichmentAnalysisResponse;
+};
+
+export type EnrichmentAnalysisResponse2 =
+  EnrichmentAnalysisResponses[keyof EnrichmentAnalysisResponses];
 
 export type ExpressionClustergramData = {
   body?: never;

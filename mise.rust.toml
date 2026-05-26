@@ -45,6 +45,14 @@ pid_dir="target/dev/pids"
 pid_file="$pid_dir/api.pid"
 mkdir -p "$pid_dir"
 
+snapshot="data/marpolbase/MpTak1_v7.1/snapshot.json"
+protein_fasta="data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.protein.fa"
+if [ ! -f "$protein_fasta" ] || ! grep -q '"protein_checksum": "' "$snapshot" 2>/dev/null; then
+  cargo run -p portal-cli -- import marpolbase-mptak1-v7-1 \
+    --out data/marpolbase/MpTak1_v7.1 \
+    --rebuild-snapshot
+fi
+
 cleanup() {
   if [ -n "${child_pid:-}" ]; then
     kill "$child_pid" 2>/dev/null || true

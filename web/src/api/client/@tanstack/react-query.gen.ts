@@ -16,6 +16,7 @@ import {
   blastpJob,
   createBlastnJob,
   createBlastpJob,
+  enrichmentAnalysis,
   expressionClustergram,
   gene,
   geneExpression,
@@ -55,6 +56,9 @@ import type {
   CreateBlastpJobData,
   CreateBlastpJobError,
   CreateBlastpJobResponse,
+  EnrichmentAnalysisData,
+  EnrichmentAnalysisError,
+  EnrichmentAnalysisResponse2,
   ExpressionClustergramData,
   ExpressionClustergramError,
   ExpressionClustergramResponse2,
@@ -409,6 +413,30 @@ export const refgetSequenceInfiniteOptions = (options: Options<RefgetSequenceDat
       queryKey: refgetSequenceInfiniteQueryKey(options),
     },
   );
+
+export const enrichmentAnalysisMutation = (
+  options?: Partial<Options<EnrichmentAnalysisData>>,
+): UseMutationOptions<
+  EnrichmentAnalysisResponse2,
+  EnrichmentAnalysisError,
+  Options<EnrichmentAnalysisData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    EnrichmentAnalysisResponse2,
+    EnrichmentAnalysisError,
+    Options<EnrichmentAnalysisData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await enrichmentAnalysis({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const expressionClustergramQueryKey = (options: Options<ExpressionClustergramData>) =>
   createQueryKey("expressionClustergram", options);

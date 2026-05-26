@@ -65,6 +65,34 @@ export const vClusterDendrogram = v.object({
   root: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
 });
 
+export const vEnrichmentAnnotationKind = v.picklist([
+  "go_term",
+  "pfam",
+  "inter_pro",
+  "kegg",
+  "kog",
+  "ncbi_fam",
+]);
+
+export const vEnrichmentAnalysisRequest = v.object({
+  annotationKinds: v.nullish(v.array(vEnrichmentAnnotationKind)),
+  assemblyAccession: v.string(),
+  backgroundGeneIds: v.nullish(v.array(v.string())),
+  geneIds: v.array(v.string()),
+  limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+  minPopulationHits: v.nullish(
+    v.pipe(
+      v.union([v.number(), v.string(), v.bigint()]),
+      v.transform((x) => BigInt(x)),
+      v.minValue(BigInt(0)),
+      v.maxValue(
+        BigInt("9223372036854775807"),
+        "Invalid value: Expected int64 to be <= 9223372036854775807",
+      ),
+    ),
+  ),
+});
+
 export const vErrorResponse = v.object({
   error: v.string(),
 });
@@ -153,6 +181,81 @@ export const vGoNamespace = v.picklist([
   "molecular_function",
   "cellular_component",
 ]);
+
+export const vEnrichmentTerm = v.object({
+  id: v.string(),
+  kind: vEnrichmentAnnotationKind,
+  name: v.nullish(v.string()),
+  namespace: v.nullish(vGoNamespace),
+});
+
+export const vEnrichmentTermResult = v.object({
+  foldEnrichment: v.nullish(v.number()),
+  pValue: v.number(),
+  populationHits: v.pipe(
+    v.union([v.number(), v.string(), v.bigint()]),
+    v.transform((x) => BigInt(x)),
+    v.minValue(BigInt(0)),
+    v.maxValue(
+      BigInt("9223372036854775807"),
+      "Invalid value: Expected int64 to be <= 9223372036854775807",
+    ),
+  ),
+  populationSize: v.pipe(
+    v.union([v.number(), v.string(), v.bigint()]),
+    v.transform((x) => BigInt(x)),
+    v.minValue(BigInt(0)),
+    v.maxValue(
+      BigInt("9223372036854775807"),
+      "Invalid value: Expected int64 to be <= 9223372036854775807",
+    ),
+  ),
+  qValue: v.number(),
+  studyGeneIds: v.array(vGeneId),
+  studyHits: v.pipe(
+    v.union([v.number(), v.string(), v.bigint()]),
+    v.transform((x) => BigInt(x)),
+    v.minValue(BigInt(0)),
+    v.maxValue(
+      BigInt("9223372036854775807"),
+      "Invalid value: Expected int64 to be <= 9223372036854775807",
+    ),
+  ),
+  studySize: v.pipe(
+    v.union([v.number(), v.string(), v.bigint()]),
+    v.transform((x) => BigInt(x)),
+    v.minValue(BigInt(0)),
+    v.maxValue(
+      BigInt("9223372036854775807"),
+      "Invalid value: Expected int64 to be <= 9223372036854775807",
+    ),
+  ),
+  term: vEnrichmentTerm,
+});
+
+export const vEnrichmentAnalysisResponse = v.object({
+  assemblyAccession: v.string(),
+  populationSize: v.pipe(
+    v.union([v.number(), v.string(), v.bigint()]),
+    v.transform((x) => BigInt(x)),
+    v.minValue(BigInt(0)),
+    v.maxValue(
+      BigInt("9223372036854775807"),
+      "Invalid value: Expected int64 to be <= 9223372036854775807",
+    ),
+  ),
+  results: v.array(vEnrichmentTermResult),
+  studySize: v.pipe(
+    v.union([v.number(), v.string(), v.bigint()]),
+    v.transform((x) => BigInt(x)),
+    v.minValue(BigInt(0)),
+    v.maxValue(
+      BigInt("9223372036854775807"),
+      "Invalid value: Expected int64 to be <= 9223372036854775807",
+    ),
+  ),
+  testedTerms: v.pipe(v.number(), v.integer(), v.minValue(0)),
+});
 
 export const vGoTermId = v.string();
 
@@ -841,6 +944,13 @@ export const vRefgetSequenceQuery = v.object({
  * Reference sequence
  */
 export const vRefgetSequenceResponse = v.string();
+
+export const vEnrichmentAnalysisBody = vEnrichmentAnalysisRequest;
+
+/**
+ * Functional annotation over-representation analysis
+ */
+export const vEnrichmentAnalysisResponse2 = vEnrichmentAnalysisResponse;
 
 export const vExpressionClustergramQuery2 = v.object({
   assemblyAccession: v.string(),
