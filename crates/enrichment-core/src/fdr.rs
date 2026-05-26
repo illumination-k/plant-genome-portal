@@ -31,9 +31,7 @@ pub fn benjamini_hochberg(p_values: &[f64]) -> Vec<f64> {
     // Enforce monotonic non-decreasing q across ranks by taking the
     // running minimum from the largest p downward.
     for i in (0..scaled.len().saturating_sub(1)).rev() {
-        if scaled[i + 1] < scaled[i] {
-            scaled[i] = scaled[i + 1];
-        }
+        scaled[i] = scaled[i].min(scaled[i + 1]);
     }
 
     let mut q_values = vec![0.0; m];

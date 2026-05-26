@@ -23,25 +23,15 @@ pub fn hypergeometric_upper_tail(
     draws: u64,
     observed: u64,
 ) -> Result<f64, EnrichmentError> {
-    if successes > population || draws > population {
-        return Err(EnrichmentError::InvalidHypergeometric {
-            population,
-            successes,
-            draws,
-        });
-    }
-
     // P(X >= 0) is always 1 — short-circuit before constructing the
     // distribution so we never feed `sf(-1)` into statrs.
     if observed == 0 {
         return Ok(1.0);
     }
 
-    let max_observed = successes.min(draws);
-    if observed > max_observed {
-        return Ok(0.0);
-    }
-
+    // statrs validates `successes <= population` and `draws <= population`
+    // when constructing the distribution; surface that as our domain error
+    // rather than duplicating the check.
     let dist = Hypergeometric::new(population, successes, draws).map_err(|_| {
         EnrichmentError::InvalidHypergeometric {
             population,
@@ -51,6 +41,8 @@ pub fn hypergeometric_upper_tail(
     })?;
 
     // statrs::sf(x) = P(X > x), so P(X >= observed) = sf(observed - 1).
+    // For `observed` above `min(successes, draws)` statrs returns 0 (the
+    // value is past the support), which is exactly the answer we want.
     Ok(dist.sf(observed - 1).clamp(0.0, 1.0))
 }
 
@@ -75,6 +67,37 @@ mod tests {
         // possible observed is min(20, 10) = 10.
         let p = hypergeometric_upper_tail(100, 10, 20, 11).unwrap();
         assert_eq!(p, 0.0);
+    }
+
+    #[test]
+    fn observed_at_max_returns_small_positive_probability() {
+        // observed = min(successes, draws) is the largest feasible value,
+        // attainable with non-zero (but small) probability. P(X = 10) =
+        // C(10,10) * C(90,10) / C(100,20) ~= 1.07e-7. Anything that
+        // collapses this case to 0 (e.g. a `>` -> `>=` mutation on the
+        // out-of-support short-circuit) would fail this assertion.
+        let p = hypergeometric_upper_tail(100, 10, 20, 10).unwrap();
+        assert!(p > 0.0 && p < 1e-6, "got {p}");
+    }
+
+    #[test]
+    fn successes_equal_to_population_succeeds() {
+        // When every population item is a "success" and we draw any
+        // positive subset, we always see `draws` successes — p = 1 at
+        // observed = draws. This kills the `successes > population`
+        // -> `successes == population` and `>=` mutants on the validation
+        // line (which would otherwise reject this valid input).
+        let p = hypergeometric_upper_tail(10, 10, 3, 3).unwrap();
+        assert!((p - 1.0).abs() < 1e-12, "got {p}");
+    }
+
+    #[test]
+    fn draws_equal_to_population_succeeds() {
+        // Drawing the entire population: every success is observed.
+        // P(X >= successes) = 1. Kills the matching mutants on the
+        // `draws > population` side of the validation.
+        let p = hypergeometric_upper_tail(10, 3, 10, 3).unwrap();
+        assert!((p - 1.0).abs() < 1e-12, "got {p}");
     }
 
     #[test]
