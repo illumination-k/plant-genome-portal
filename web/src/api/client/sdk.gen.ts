@@ -46,6 +46,8 @@ import type {
   KeggPathwayData,
   KeggPathwayErrors,
   KeggPathwayResponses,
+  KeggPathwaysData,
+  KeggPathwaysResponses,
   RefgetSequenceData,
   RefgetSequenceErrors,
   RefgetSequenceResponses,
@@ -221,6 +223,14 @@ export const keggPathway = <ThrowOnError extends boolean = true>(
 ) =>
   (options.client ?? client).get<KeggPathwayResponses, KeggPathwayErrors, ThrowOnError>({
     url: "/v2/kegg/pathway/{pathway_id}",
+    ...options,
+  });
+
+export const keggPathways = <ThrowOnError extends boolean = true>(
+  options?: Options<KeggPathwaysData, ThrowOnError>,
+) =>
+  (options?.client ?? client).get<KeggPathwaysResponses, unknown, ThrowOnError>({
+    url: "/v2/kegg/pathways",
     ...options,
   });
 

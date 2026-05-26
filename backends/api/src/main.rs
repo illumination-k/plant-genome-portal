@@ -19,7 +19,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use service::{
     AnnotatedHomologySearchResult, GeneKeggOrthologyEntry, GeneKeggView, GenomeService,
     InMemoryJobManager, JobExecutor, JobManager, JobManagerError, JobRecord, JobStatus,
-    KeggGeneSummary, KeggPathwayDetail, KeggPathwayKoEntry, ServiceError, WorkerJob,
+    KeggGeneSummary, KeggPathwayDetail, KeggPathwayKoEntry, KeggPathwaySummary, ServiceError,
+    WorkerJob,
 };
 use std::collections::BTreeMap;
 use std::fs::{self, File};
@@ -155,6 +156,7 @@ fn router(
         .route("/v2/genome/taxon/{tax_id}", get(taxon))
         .route("/v2/gene/id/{gene_id}", get(gene))
         .route("/v2/gene/id/{gene_id}/kegg", get(gene_kegg))
+        .route("/v2/kegg/pathways", get(kegg_pathways))
         .route("/v2/kegg/pathway/{pathway_id}", get(kegg_pathway))
         .route("/v2/gene/id/{gene_id}/expression", get(gene_expression))
         .route("/v2/expression/clustergram", get(expression_clustergram))
@@ -380,6 +382,17 @@ async fn gene_kegg(
 
 #[utoipa::path(
     get,
+    path = "/v2/kegg/pathways",
+    responses(
+        (status = 200, description = "KEGG pathway catalog with dataset-level KO and gene counts", body = Vec<KeggPathwaySummary>),
+    )
+)]
+async fn kegg_pathways(State(state): State<AppState>) -> Json<Vec<KeggPathwaySummary>> {
+    Json(state.service.kegg_pathways())
+}
+
+#[utoipa::path(
+    get,
     path = "/v2/kegg/pathway/{pathway_id}",
     params(("pathway_id" = String, Path, description = "Canonical KEGG pathway id (e.g. map00010)")),
     responses(
@@ -502,12 +515,47 @@ async fn expression_clustergram(
         )));
     }
 
-    let Some(matrix) = expression_repository.expression_matrix(&accession, &gene_ids, &runs, unit)
-    else {
-        return Err(ServiceError::InvalidRequest(
-            "expression matrix is unavailable for the requested genes, runs, or unit".to_owned(),
-        )
-        .into());
+    let matrix = expression_repository.expression_matrix(&accession, &gene_ids, &runs, unit);
+    let (matrix, genes) = match matrix {
+        Some(matrix) => (matrix, genes),
+        None if query.drop_missing_genes.unwrap_or(false) => {
+            let mut available_gene_ids = Vec::new();
+            let mut available_genes = Vec::new();
+            for (gene_id, gene_record) in gene_ids.iter().zip(genes) {
+                if expression_repository
+                    .expression_matrix(&accession, std::slice::from_ref(gene_id), &runs, unit)
+                    .is_some()
+                {
+                    available_gene_ids.push(gene_id.clone());
+                    available_genes.push(gene_record);
+                }
+            }
+            if available_gene_ids.is_empty() {
+                return Ok(Json(ExpressionClustergramResponse::empty(
+                    query.assembly_accession,
+                    unit,
+                )));
+            }
+            let Some(matrix) = expression_repository.expression_matrix(
+                &accession,
+                &available_gene_ids,
+                &runs,
+                unit,
+            ) else {
+                return Ok(Json(ExpressionClustergramResponse::empty(
+                    query.assembly_accession,
+                    unit,
+                )));
+            };
+            (matrix, available_genes)
+        }
+        None => {
+            return Err(ServiceError::InvalidRequest(
+                "expression matrix is unavailable for the requested genes, runs, or unit"
+                    .to_owned(),
+            )
+            .into());
+        }
     };
 
     let values = matrix
@@ -683,6 +731,7 @@ enum Command {
         taxon,
         gene,
         gene_kegg,
+        kegg_pathways,
         kegg_pathway,
         gene_expression,
         expression_clustergram,
@@ -767,6 +816,7 @@ enum Command {
         KeggGeneSummary,
         KeggPathwayDetail,
         KeggPathwayKoEntry,
+        KeggPathwaySummary,
         genome_core::KogAnnotation,
         genome_core::KogEntryId,
         genome_core::NcbiFamAccession,
@@ -823,6 +873,7 @@ struct ExpressionClustergramQuery {
     unit: Option<ExpressionUnit>,
     runs: Option<String>,
     limit: Option<usize>,
+    drop_missing_genes: Option<bool>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

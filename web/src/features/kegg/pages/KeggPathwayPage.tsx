@@ -1,9 +1,9 @@
 import { keggPathwayOptions } from "@/api/client/@tanstack/react-query.gen";
-import type { KeggPathwayDetail, KeggPathwayKoEntry } from "@/api/client/types.gen";
+import type { KeggPathwayDetail } from "@/api/client/types.gen";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { minLength, pipe, string } from "valibot";
-import KeggPathwayKoCard from "@/features/kegg/components/KeggPathwayKoCard";
+import KeggPathwayBody from "@/features/kegg/components/KeggPathwayBody";
 import EmptyState from "@/shared/ui/EmptyState";
 import ErrorState from "@/shared/ui/ErrorState";
 import Skeleton from "@/shared/ui/Skeleton";
@@ -31,24 +31,6 @@ const renderLoading = (): ReactElement => (
     <Skeleton size="panel" />
   </section>
 );
-
-const renderEntries = (kos: KeggPathwayKoEntry[]): ReactElement => {
-  if (kos.length === ZERO) {
-    return (
-      <EmptyState
-        description="The catalog has no KO links registered against this pathway."
-        title="No KOs in this dataset"
-      />
-    );
-  }
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {kos.map((entry) => (
-        <KeggPathwayKoCard entry={entry} key={entry.ko} />
-      ))}
-    </div>
-  );
-};
 
 const PathwayHeader = (props: { data: KeggPathwayDetail }): ReactElement => {
   const totalGenes = props.data.kos.reduce((sum, ko) => sum + ko.genes.length, ZERO);
@@ -97,11 +79,11 @@ const KeggPathwayPage = (): ReactElement => {
 
   return (
     <section className="flex flex-col gap-6">
-      <a className="text-[12px] text-text-subtle hover:underline" href="/genes">
-        ← Back
+      <a className="text-[12px] text-text-subtle hover:underline" href="/pathways">
+        ← Pathways
       </a>
       <PathwayHeader data={data} />
-      {renderEntries(data.kos)}
+      <KeggPathwayBody data={data} />
     </section>
   );
 };

@@ -4,6 +4,7 @@ import SideRailGroup from "@/app/layouts/SideRailGroup";
 const exploreItems = [
   { label: "Search", to: "/" },
   { label: "Genes", to: "/genes" },
+  { label: "Pathways", to: "/pathways" },
   { label: "Genome browser", to: "/browser" },
 ];
 

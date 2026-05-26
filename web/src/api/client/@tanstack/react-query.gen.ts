@@ -25,6 +25,7 @@ import {
   jbrowseDefaultConfig,
   jbrowseFeatures,
   keggPathway,
+  keggPathways,
   type Options,
   refgetSequence,
   refgetServiceInfo,
@@ -76,6 +77,8 @@ import type {
   KeggPathwayData,
   KeggPathwayError,
   KeggPathwayResponse,
+  KeggPathwaysData,
+  KeggPathwaysResponse,
   RefgetSequenceData,
   RefgetSequenceError,
   RefgetSequenceResponse,
@@ -664,6 +667,28 @@ export const keggPathwayOptions = (options: Options<KeggPathwayData>) =>
       return data;
     },
     queryKey: keggPathwayQueryKey(options),
+  });
+
+export const keggPathwaysQueryKey = (options?: Options<KeggPathwaysData>) =>
+  createQueryKey("keggPathways", options);
+
+export const keggPathwaysOptions = (options?: Options<KeggPathwaysData>) =>
+  queryOptions<
+    KeggPathwaysResponse,
+    DefaultError,
+    KeggPathwaysResponse,
+    ReturnType<typeof keggPathwaysQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await keggPathways({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: keggPathwaysQueryKey(options),
   });
 
 export const createBlastnJobMutation = (

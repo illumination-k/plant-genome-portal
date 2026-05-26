@@ -11,6 +11,7 @@ const BrowserPage = lazy(() => import("@/features/genome-browser/pages/BrowserPa
 const FetchPage = lazy(() => import("@/features/tools/fetch/pages/FetchPage"));
 const GeneDetailPage = lazy(() => import("@/features/genes/pages/GeneDetailPage"));
 const KeggPathwayPage = lazy(() => import("@/features/kegg/pages/KeggPathwayPage"));
+const PathwaysPage = lazy(() => import("@/features/kegg/pages/PathwaysPage"));
 
 const lazyPage = (page: ReactElement): ReactElement => (
   <Suspense fallback={undefined}>{page}</Suspense>
@@ -24,6 +25,7 @@ const routes = createBrowserRouter([
       { element: <DatasetsPage />, path: "datasets" },
       { element: <GenesPage />, path: "genes" },
       { element: lazyPage(<GeneDetailPage />), path: "genes/:geneId" },
+      { element: lazyPage(<PathwaysPage />), path: "pathways" },
       { element: lazyPage(<KeggPathwayPage />), path: "kegg/pathway/:pathwayId" },
       { element: lazyPage(<FetchPage />), path: "tools/fetch" },
       { element: lazyPage(<BlastPage />), path: "tools/blast" },
