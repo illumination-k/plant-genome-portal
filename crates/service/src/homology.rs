@@ -1,5 +1,6 @@
 use genome_core::{
-    AssemblyAccession, GeneId, GenomeRepository, HalfOpenRegion, HomologyHit, HomologySearchResult,
+    AssemblyAccession, GeneId, GenomeRepository, HalfOpenRegion, HomologyHit, HomologySearchMethod,
+    HomologySearchResult, TranscriptId,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -10,6 +11,10 @@ pub trait HomologyAnnotationRepository: Send + Sync + 'static {
         accession: &AssemblyAccession,
         region: &HalfOpenRegion,
     ) -> Vec<GeneId>;
+
+    /// Resolve a transcript subject id to its parent gene id (used to annotate
+    /// blastp hits, whose subject is a protein not a genomic region).
+    fn gene_id_for_transcript(&self, transcript_id: &TranscriptId) -> Option<GeneId>;
 }
 
 impl<T> HomologyAnnotationRepository for T
@@ -25,6 +30,11 @@ where
             .into_iter()
             .map(|gene| gene.id)
             .collect()
+    }
+
+    fn gene_id_for_transcript(&self, transcript_id: &TranscriptId) -> Option<GeneId> {
+        self.transcript(transcript_id)
+            .map(|transcript| transcript.gene_id)
     }
 }
 
@@ -44,31 +54,50 @@ where
     }
 
     pub fn annotate_result(&self, result: HomologySearchResult) -> AnnotatedHomologySearchResult {
+        let method = result.method.clone();
         AnnotatedHomologySearchResult {
             method: result.method,
             task: result.task,
             hits: result
                 .hits
                 .into_iter()
-                .map(|hit| self.annotate_hit(hit))
+                .map(|hit| self.annotate_hit(hit, &method))
                 .collect(),
         }
     }
 
-    fn annotate_hit(&self, hit: HomologyHit) -> AnnotatedHomologyHit {
-        let overlapping_gene_ids = hit
-            .subject_region
+    fn annotate_hit(
+        &self,
+        hit: HomologyHit,
+        method: &HomologySearchMethod,
+    ) -> AnnotatedHomologyHit {
+        let overlapping_gene_ids = match method {
+            HomologySearchMethod::Blastp => self.annotate_blastp_hit(&hit),
+            HomologySearchMethod::Blastn => self.annotate_blastn_hit(&hit),
+        };
+        AnnotatedHomologyHit {
+            hit,
+            overlapping_gene_ids,
+        }
+    }
+
+    fn annotate_blastn_hit(&self, hit: &HomologyHit) -> Vec<GeneId> {
+        hit.subject_region
+            .clone()
             .to_half_open()
             .map(|region| {
                 self.repository
                     .overlapping_gene_ids(&hit.assembly_accession, &region)
             })
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
 
-        AnnotatedHomologyHit {
-            hit,
-            overlapping_gene_ids,
-        }
+    fn annotate_blastp_hit(&self, hit: &HomologyHit) -> Vec<GeneId> {
+        TranscriptId::new(hit.sequence_name.as_str())
+            .ok()
+            .and_then(|transcript_id| self.repository.gene_id_for_transcript(&transcript_id))
+            .map(|gene_id| vec![gene_id])
+            .unwrap_or_default()
     }
 }
 
@@ -166,10 +195,91 @@ mod tests {
                 annotations: Vec::new(),
                 attributes: BTreeMap::new(),
             }],
-            transcripts: Vec::new(),
+            transcripts: vec![genome_core::Transcript {
+                id: genome_core::TranscriptId::new("Mp1g00010.1").unwrap(),
+                gene_id: GeneId::new("Mp1g00010").unwrap(),
+                sequence_name: SequenceName::new("chr1").unwrap(),
+                region: HalfOpenRegion::new(
+                    SequenceName::new("chr1").unwrap(),
+                    Position0::new(0),
+                    Position0::new(10),
+                )
+                .unwrap(),
+                strand: Strand::Forward,
+                feature_type: "mRNA".to_owned(),
+                annotations: Vec::new(),
+                attributes: BTreeMap::new(),
+                protein_checksum: None,
+                protein_length: None,
+            }],
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: genome_core::KeggCatalog::default(),
         })
+    }
+
+    #[test]
+    fn annotate_result_resolves_blastp_subject_transcript_to_gene_id() {
+        let service = HomologyService::new(make_repository());
+        let hit = HomologyHit::from_blastp_alignment(
+            AssemblyAccession::new("GCA_test").unwrap(),
+            "query".to_owned(),
+            genome_core::TranscriptId::new("Mp1g00010.1").unwrap(),
+            100.0,
+            120,
+            0,
+            0,
+            Position1::new(1).unwrap(),
+            Position1::new(120).unwrap(),
+            Position1::new(1).unwrap(),
+            Position1::new(120).unwrap(),
+            1e-50,
+            240.0,
+            "MVTAGSMMHL".to_owned(),
+            "MVTAGSMMHL".to_owned(),
+        )
+        .unwrap();
+
+        let result = service.annotate_result(HomologySearchResult {
+            method: HomologySearchMethod::Blastp,
+            task: "blastp".to_owned(),
+            hits: vec![hit],
+        });
+
+        assert_eq!(
+            result.hits[0].overlapping_gene_ids,
+            vec![GeneId::new("Mp1g00010").unwrap()]
+        );
+    }
+
+    #[test]
+    fn annotate_result_returns_no_genes_for_blastp_hit_against_unknown_transcript() {
+        let service = HomologyService::new(make_repository());
+        let hit = HomologyHit::from_blastp_alignment(
+            AssemblyAccession::new("GCA_test").unwrap(),
+            "query".to_owned(),
+            genome_core::TranscriptId::new("Mp_unknown.1").unwrap(),
+            100.0,
+            50,
+            0,
+            0,
+            Position1::new(1).unwrap(),
+            Position1::new(50).unwrap(),
+            Position1::new(1).unwrap(),
+            Position1::new(50).unwrap(),
+            1e-20,
+            100.0,
+            "MVTAG".to_owned(),
+            "MVTAG".to_owned(),
+        )
+        .unwrap();
+
+        let result = service.annotate_result(HomologySearchResult {
+            method: HomologySearchMethod::Blastp,
+            task: "blastp".to_owned(),
+            hits: vec![hit],
+        });
+
+        assert!(result.hits[0].overlapping_gene_ids.is_empty());
     }
 }

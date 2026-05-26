@@ -1,4 +1,6 @@
-use genome_core::{AssemblyAccession, HomologyHit, HomologySearchMethod, Position1, SequenceName};
+use genome_core::{
+    AssemblyAccession, HomologyHit, HomologySearchMethod, Position1, SequenceName, TranscriptId,
+};
 use serde::{Deserialize, Serialize};
 use service::{
     AnnotatedHomologyHit, AnnotatedHomologySearchResult, HomologyService, Worker, WorkerJob,
@@ -13,22 +15,41 @@ use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct BlastRunner {
-    blastn: PathBuf,
+    program: PathBuf,
     db_prefix: PathBuf,
     work_dir: PathBuf,
+    method: HomologySearchMethod,
 }
 
 impl BlastRunner {
-    pub fn from_prepared(
+    pub fn blastn(
         db_prefix: PathBuf,
         work_dir: PathBuf,
-        blastn: PathBuf,
+        program: PathBuf,
+    ) -> Result<Self, BlastWorkerError> {
+        Self::new(db_prefix, work_dir, program, HomologySearchMethod::Blastn)
+    }
+
+    pub fn blastp(
+        db_prefix: PathBuf,
+        work_dir: PathBuf,
+        program: PathBuf,
+    ) -> Result<Self, BlastWorkerError> {
+        Self::new(db_prefix, work_dir, program, HomologySearchMethod::Blastp)
+    }
+
+    fn new(
+        db_prefix: PathBuf,
+        work_dir: PathBuf,
+        program: PathBuf,
+        method: HomologySearchMethod,
     ) -> Result<Self, BlastWorkerError> {
         fs::create_dir_all(&work_dir)?;
         Ok(Self {
-            blastn,
+            program,
             db_prefix,
             work_dir,
+            method,
         })
     }
 
@@ -36,15 +57,15 @@ impl BlastRunner {
         &self,
         input: BlastHomologySearchInput,
     ) -> Result<AnnotatedHomologySearchResult, BlastWorkerError> {
-        input.validate()?;
+        input.validate(&self.method)?;
         let query_path = self.write_query_file(&input.query)?;
-        let result = self.run_blastn(&query_path, &input);
+        let result = self.run_blast(&query_path, &input);
         let _ = fs::remove_file(&query_path);
         result
     }
 
     fn write_query_file(&self, query: &str) -> Result<PathBuf, BlastWorkerError> {
-        let normalized = normalize_query(query)?;
+        let normalized = normalize_query(query, &self.method)?;
         let path = self.work_dir.join(format!("query-{}.fa", unique_suffix()));
         let mut file = OpenOptions::new()
             .write(true)
@@ -54,12 +75,12 @@ impl BlastRunner {
         Ok(path)
     }
 
-    fn run_blastn(
+    fn run_blast(
         &self,
         query_path: &Path,
         input: &BlastHomologySearchInput,
     ) -> Result<AnnotatedHomologySearchResult, BlastWorkerError> {
-        let output = Command::new(&self.blastn)
+        let output = Command::new(&self.program)
             .arg("-query")
             .arg(query_path)
             .arg("-db")
@@ -76,22 +97,22 @@ impl BlastRunner {
             .stderr(Stdio::piped())
             .output()
             .map_err(|source| BlastWorkerError::CommandStart {
-                program: self.blastn.clone(),
+                program: self.program.clone(),
                 source,
             })?;
 
         if !output.status.success() {
             return Err(BlastWorkerError::CommandFailed {
-                program: self.blastn.clone(),
+                program: self.program.clone(),
                 status: output.status.code(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             });
         }
 
         let stdout = String::from_utf8(output.stdout)?;
-        let hits = parse_tabular_hits(&stdout, &input.assembly_accession)?;
+        let hits = parse_tabular_hits(&stdout, &input.assembly_accession, &self.method)?;
         let result = genome_core::HomologySearchResult {
-            method: HomologySearchMethod::Blastn,
+            method: self.method.clone(),
             task: input.task.clone(),
             hits,
         };
@@ -138,9 +159,9 @@ pub struct BlastHomologySearchInput {
 }
 
 impl BlastHomologySearchInput {
-    fn validate(&self) -> Result<(), BlastWorkerError> {
-        normalize_query(&self.query)?;
-        validate_task(&self.task)?;
+    fn validate(&self, method: &HomologySearchMethod) -> Result<(), BlastWorkerError> {
+        normalize_query(&self.query, method)?;
+        validate_task(&self.task, method)?;
         if self.evalue <= 0.0 {
             return Err(BlastWorkerError::InvalidRequest(
                 "evalue must be greater than zero".to_owned(),
@@ -177,7 +198,7 @@ pub enum BlastWorkerError {
     Utf8(#[from] std::string::FromUtf8Error),
 }
 
-fn normalize_query(query: &str) -> Result<String, BlastWorkerError> {
+fn normalize_query(query: &str, method: &HomologySearchMethod) -> Result<String, BlastWorkerError> {
     let query = query.trim();
     if query.is_empty() {
         return Err(BlastWorkerError::InvalidRequest(
@@ -189,20 +210,29 @@ fn normalize_query(query: &str) -> Result<String, BlastWorkerError> {
         return Ok(format!("{query}\n"));
     }
 
+    let kind_label = match method {
+        HomologySearchMethod::Blastn => "nucleotide",
+        HomologySearchMethod::Blastp => "amino acid",
+    };
+    let is_valid = match method {
+        HomologySearchMethod::Blastn => is_iupac_nucleotide,
+        HomologySearchMethod::Blastp => is_iupac_amino_acid,
+    };
+
     let mut sequence = String::with_capacity(query.len());
     for ch in query.chars().filter(|ch| !ch.is_whitespace()) {
-        if !is_iupac_nucleotide(ch) {
+        if !is_valid(ch) {
             return Err(BlastWorkerError::InvalidRequest(format!(
-                "query contains a non-nucleotide character: {ch}"
+                "query contains a non-{kind_label} character: {ch}"
             )));
         }
         sequence.push(ch.to_ascii_uppercase());
     }
 
     if sequence.is_empty() {
-        return Err(BlastWorkerError::InvalidRequest(
-            "query sequence must contain nucleotides".to_owned(),
-        ));
+        return Err(BlastWorkerError::InvalidRequest(format!(
+            "query sequence must contain {kind_label}s"
+        )));
     }
 
     Ok(format!(">query\n{sequence}\n"))
@@ -229,15 +259,57 @@ fn is_iupac_nucleotide(ch: char) -> bool {
     )
 }
 
-fn validate_task(task: &str) -> Result<(), BlastWorkerError> {
-    if matches!(
-        task,
-        "blastn" | "blastn-short" | "megablast" | "dc-megablast"
-    ) {
+fn is_iupac_amino_acid(ch: char) -> bool {
+    matches!(
+        ch.to_ascii_uppercase(),
+        'A' | 'B'
+            | 'C'
+            | 'D'
+            | 'E'
+            | 'F'
+            | 'G'
+            | 'H'
+            | 'I'
+            | 'J'
+            | 'K'
+            | 'L'
+            | 'M'
+            | 'N'
+            | 'O'
+            | 'P'
+            | 'Q'
+            | 'R'
+            | 'S'
+            | 'T'
+            | 'U'
+            | 'V'
+            | 'W'
+            | 'Y'
+            | 'X'
+            | 'Z'
+            | '*'
+    )
+}
+
+fn validate_task(task: &str, method: &HomologySearchMethod) -> Result<(), BlastWorkerError> {
+    let supported = match method {
+        HomologySearchMethod::Blastn => matches!(
+            task,
+            "blastn" | "blastn-short" | "megablast" | "dc-megablast"
+        ),
+        HomologySearchMethod::Blastp => {
+            matches!(task, "blastp" | "blastp-short" | "blastp-fast")
+        }
+    };
+    if supported {
         Ok(())
     } else {
+        let label = match method {
+            HomologySearchMethod::Blastn => "BLASTN",
+            HomologySearchMethod::Blastp => "BLASTP",
+        };
         Err(BlastWorkerError::InvalidRequest(format!(
-            "unsupported BLASTN task: {task}"
+            "unsupported {label} task: {task}"
         )))
     }
 }
@@ -245,17 +317,19 @@ fn validate_task(task: &str) -> Result<(), BlastWorkerError> {
 fn parse_tabular_hits(
     output: &str,
     assembly_accession: &AssemblyAccession,
+    method: &HomologySearchMethod,
 ) -> Result<Vec<HomologyHit>, BlastWorkerError> {
     output
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| parse_tabular_hit(line, assembly_accession))
+        .map(|line| parse_tabular_hit(line, assembly_accession, method))
         .collect()
 }
 
 fn parse_tabular_hit(
     line: &str,
     assembly_accession: &AssemblyAccession,
+    method: &HomologySearchMethod,
 ) -> Result<HomologyHit, BlastWorkerError> {
     let fields = line.split('\t').collect::<Vec<_>>();
     if fields.len() != 14 {
@@ -265,24 +339,58 @@ fn parse_tabular_hit(
         )));
     }
 
-    HomologyHit::from_blastn_alignment(
-        assembly_accession.clone(),
-        fields[0].to_owned(),
-        SequenceName::new(fields[1]).map_err(invalid_domain_output)?,
-        parse_f64(fields[2], "pident")?,
-        parse_u64(fields[3], "length")?,
-        parse_u64(fields[4], "mismatch")?,
-        parse_u64(fields[5], "gapopen")?,
-        Position1::new(parse_u64(fields[6], "qstart")?).map_err(invalid_domain_output)?,
-        Position1::new(parse_u64(fields[7], "qend")?).map_err(invalid_domain_output)?,
-        Position1::new(parse_u64(fields[8], "sstart")?).map_err(invalid_domain_output)?,
-        Position1::new(parse_u64(fields[9], "send")?).map_err(invalid_domain_output)?,
-        parse_f64(fields[10], "evalue")?,
-        parse_f64(fields[11], "bitscore")?,
-        fields[12].to_owned(),
-        fields[13].to_owned(),
-    )
-    .map_err(invalid_domain_output)
+    let percent_identity = parse_f64(fields[2], "pident")?;
+    let alignment_length = parse_u64(fields[3], "length")?;
+    let mismatches = parse_u64(fields[4], "mismatch")?;
+    let gap_opens = parse_u64(fields[5], "gapopen")?;
+    let query_start =
+        Position1::new(parse_u64(fields[6], "qstart")?).map_err(invalid_domain_output)?;
+    let query_end = Position1::new(parse_u64(fields[7], "qend")?).map_err(invalid_domain_output)?;
+    let subject_start =
+        Position1::new(parse_u64(fields[8], "sstart")?).map_err(invalid_domain_output)?;
+    let subject_end =
+        Position1::new(parse_u64(fields[9], "send")?).map_err(invalid_domain_output)?;
+    let evalue = parse_f64(fields[10], "evalue")?;
+    let bit_score = parse_f64(fields[11], "bitscore")?;
+
+    match method {
+        HomologySearchMethod::Blastn => HomologyHit::from_blastn_alignment(
+            assembly_accession.clone(),
+            fields[0].to_owned(),
+            SequenceName::new(fields[1]).map_err(invalid_domain_output)?,
+            percent_identity,
+            alignment_length,
+            mismatches,
+            gap_opens,
+            query_start,
+            query_end,
+            subject_start,
+            subject_end,
+            evalue,
+            bit_score,
+            fields[12].to_owned(),
+            fields[13].to_owned(),
+        )
+        .map_err(invalid_domain_output),
+        HomologySearchMethod::Blastp => HomologyHit::from_blastp_alignment(
+            assembly_accession.clone(),
+            fields[0].to_owned(),
+            TranscriptId::new(fields[1]).map_err(invalid_domain_output)?,
+            percent_identity,
+            alignment_length,
+            mismatches,
+            gap_opens,
+            query_start,
+            query_end,
+            subject_start,
+            subject_end,
+            evalue,
+            bit_score,
+            fields[12].to_owned(),
+            fields[13].to_owned(),
+        )
+        .map_err(invalid_domain_output),
+    }
 }
 
 fn parse_u64(value: &str, field: &str) -> Result<u64, BlastWorkerError> {
@@ -315,15 +423,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_query_wraps_raw_sequence_as_fasta() {
-        assert_eq!(normalize_query(" acgt\nnn ").unwrap(), ">query\nACGTNN\n");
+    fn normalize_query_wraps_raw_nucleotide_sequence_as_fasta() {
+        assert_eq!(
+            normalize_query(" acgt\nnn ", &HomologySearchMethod::Blastn).unwrap(),
+            ">query\nACGTNN\n"
+        );
     }
 
     #[test]
-    fn parse_tabular_hit_uses_domain_region_and_strand() {
+    fn normalize_query_accepts_amino_acid_chars_only_for_blastp() {
+        assert_eq!(
+            normalize_query("MVTAG", &HomologySearchMethod::Blastp).unwrap(),
+            ">query\nMVTAG\n"
+        );
+        assert!(normalize_query("MVTAG-stop", &HomologySearchMethod::Blastp).is_err());
+    }
+
+    #[test]
+    fn normalize_query_rejects_amino_acids_under_blastn() {
+        // 'P' is an amino acid letter that is not a nucleotide IUPAC code.
+        assert!(normalize_query("ACGPT", &HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn parse_tabular_hit_uses_domain_region_and_strand_for_blastn() {
         let hit = parse_tabular_hit(
             "query\tchr1\t99.5\t100\t1\t0\t1\t100\t500\t401\t1e-20\t80.0\tACGT\tACGT",
             &AssemblyAccession::new("GCA_test").unwrap(),
+            &HomologySearchMethod::Blastn,
         )
         .unwrap();
 
@@ -334,7 +461,103 @@ mod tests {
     }
 
     #[test]
-    fn validate_task_rejects_arbitrary_arguments() {
-        assert!(validate_task("blastn -remote").is_err());
+    fn parse_tabular_hit_treats_subject_as_transcript_id_for_blastp() {
+        let hit = parse_tabular_hit(
+            "query\tMp1g00010.1\t99.5\t100\t1\t0\t1\t100\t1\t100\t1e-50\t200.0\tMVTAG\tMVTAG",
+            &AssemblyAccession::new("GCA_test").unwrap(),
+            &HomologySearchMethod::Blastp,
+        )
+        .unwrap();
+
+        assert_eq!(hit.sequence_name.as_str(), "Mp1g00010.1");
+        assert_eq!(hit.subject_region.start.get(), 1);
+        assert_eq!(hit.subject_region.end.get(), 100);
+    }
+
+    #[test]
+    fn validate_task_distinguishes_blastn_and_blastp_tasks() {
+        assert!(validate_task("blastn", &HomologySearchMethod::Blastn).is_ok());
+        assert!(validate_task("blastp", &HomologySearchMethod::Blastn).is_err());
+        assert!(validate_task("blastp", &HomologySearchMethod::Blastp).is_ok());
+        assert!(validate_task("blastn", &HomologySearchMethod::Blastp).is_err());
+        assert!(validate_task("blastn -remote", &HomologySearchMethod::Blastn).is_err());
+    }
+
+    fn valid_input() -> BlastHomologySearchInput {
+        BlastHomologySearchInput {
+            assembly_accession: AssemblyAccession::new("GCA_test").unwrap(),
+            query: "ACGT".to_owned(),
+            task: "blastn".to_owned(),
+            evalue: 10.0,
+            max_target_seqs: 50,
+            snapshot: None,
+        }
+    }
+
+    #[test]
+    fn input_validate_accepts_well_formed_request() {
+        assert!(
+            valid_input()
+                .validate(&HomologySearchMethod::Blastn)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn input_validate_rejects_non_positive_evalue() {
+        let mut input = valid_input();
+        input.evalue = 0.0;
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+        input.evalue = -1.0;
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn input_validate_rejects_zero_max_target_seqs() {
+        let mut input = valid_input();
+        input.max_target_seqs = 0;
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn input_validate_propagates_query_and_task_errors_per_method() {
+        // 'P' is an amino-acid letter that is not a valid nucleotide IUPAC code.
+        let mut input = valid_input();
+        input.query = "ACGP".to_owned();
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+
+        let mut input = valid_input();
+        input.task = "blastp".to_owned();
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn parse_tabular_hits_parses_multiple_lines_and_skips_blanks() {
+        let output = concat!(
+            "query\tchr1\t99.5\t100\t1\t0\t1\t100\t500\t401\t1e-20\t80.0\tACGT\tACGT\n",
+            "\n",
+            "  \n",
+            "query\tchr2\t95.0\t80\t2\t0\t1\t80\t1\t80\t1e-15\t60.0\tACGT\tACGT\n",
+        );
+        let hits = parse_tabular_hits(
+            output,
+            &AssemblyAccession::new("GCA_test").unwrap(),
+            &HomologySearchMethod::Blastn,
+        )
+        .unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].sequence_name.as_str(), "chr1");
+        assert_eq!(hits[1].sequence_name.as_str(), "chr2");
+    }
+
+    #[test]
+    fn parse_tabular_hits_returns_empty_for_empty_output() {
+        let hits = parse_tabular_hits(
+            "",
+            &AssemblyAccession::new("GCA_test").unwrap(),
+            &HomologySearchMethod::Blastn,
+        )
+        .unwrap();
+        assert!(hits.is_empty());
     }
 }

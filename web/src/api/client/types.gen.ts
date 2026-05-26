@@ -60,6 +60,14 @@ export type BlastnJobResponse = {
   status: JobStatusResponse;
 };
 
+export type BlastpJobRequest = {
+  assemblyAccession: string;
+  evalue?: number | null;
+  maxTargetSeqs?: number | null;
+  query: string;
+  task?: string | null;
+};
+
 export type Cds = {
   /**
    * GFF phase: 0, 1, or 2. Number of bases to remove from the 5' end of
@@ -270,7 +278,7 @@ export type HomologyHit = {
   subjectStart: Position1;
 };
 
-export type HomologySearchMethod = "blastn";
+export type HomologySearchMethod = "blastn" | "blastp";
 
 export type InterProAnnotation = {
   evidence: AnnotationEvidence;
@@ -474,6 +482,10 @@ export type Position0 = number;
 
 export type Position1 = number;
 
+export type ProteinQuery = {
+  format?: null | SequenceOutputFormat;
+};
+
 export type RefgetQuery = {
   end?: number | null;
   start?: number | null;
@@ -534,6 +546,16 @@ export type Transcript = {
   feature_type: string;
   gene_id: GeneId;
   id: TranscriptId;
+  /**
+   * refget checksum of the translated protein sequence (24-byte SHA-512
+   * truncated, URL-safe base64), when a protein FASTA was supplied at
+   * snapshot build time. `None` for non-coding or pre-protein imports.
+   */
+  protein_checksum?: string | null;
+  /**
+   * Length of the protein in amino acids (excluding any stop symbol).
+   */
+  protein_length?: number | null;
   region: HalfOpenRegion;
   sequence_name: SequenceName;
   strand: Strand;
@@ -1218,3 +1240,106 @@ export type BlastnJobResponses = {
 };
 
 export type BlastnJobResponse2 = BlastnJobResponses[keyof BlastnJobResponses];
+
+export type CreateBlastpJobData = {
+  body: BlastpJobRequest;
+  path?: never;
+  query?: never;
+  url: "/v2/tools/blastp/jobs";
+};
+
+export type CreateBlastpJobErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse;
+  /**
+   * BLASTP worker is not configured
+   */
+  503: ErrorResponse;
+};
+
+export type CreateBlastpJobError = CreateBlastpJobErrors[keyof CreateBlastpJobErrors];
+
+export type CreateBlastpJobResponses = {
+  /**
+   * BLASTP job accepted
+   */
+  202: BlastnJobResponse;
+};
+
+export type CreateBlastpJobResponse = CreateBlastpJobResponses[keyof CreateBlastpJobResponses];
+
+export type BlastpJobData = {
+  body?: never;
+  path: {
+    /**
+     * BLASTP job identifier
+     */
+    job_id: string;
+  };
+  query?: never;
+  url: "/v2/tools/blastp/jobs/{job_id}";
+};
+
+export type BlastpJobErrors = {
+  /**
+   * Job not found
+   */
+  404: ErrorResponse;
+  /**
+   * BLASTP worker is not configured
+   */
+  503: ErrorResponse;
+};
+
+export type BlastpJobError = BlastpJobErrors[keyof BlastpJobErrors];
+
+export type BlastpJobResponses = {
+  /**
+   * BLASTP job status
+   */
+  200: BlastnJobResponse;
+};
+
+export type BlastpJobResponse = BlastpJobResponses[keyof BlastpJobResponses];
+
+export type TranscriptProteinData = {
+  body?: never;
+  path: {
+    /**
+     * Transcript identifier (e.g. Mp1g00010.1)
+     */
+    transcript_id: string;
+  };
+  query?: {
+    /**
+     * Response format. Use `fasta` for sequence downloads (default `plain`).
+     */
+    format?: null | SequenceOutputFormat;
+  };
+  url: "/v2/transcript/id/{transcript_id}/protein";
+};
+
+export type TranscriptProteinErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse;
+  /**
+   * Transcript or protein sequence not available
+   */
+  404: ErrorResponse;
+};
+
+export type TranscriptProteinError = TranscriptProteinErrors[keyof TranscriptProteinErrors];
+
+export type TranscriptProteinResponses = {
+  /**
+   * Translated protein sequence
+   */
+  200: string;
+};
+
+export type TranscriptProteinResponse =
+  TranscriptProteinResponses[keyof TranscriptProteinResponses];

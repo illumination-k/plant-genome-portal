@@ -12,9 +12,15 @@ import type {
   BlastnJobData,
   BlastnJobErrors,
   BlastnJobResponses,
+  BlastpJobData,
+  BlastpJobErrors,
+  BlastpJobResponses,
   CreateBlastnJobData,
   CreateBlastnJobErrors,
   CreateBlastnJobResponses,
+  CreateBlastpJobData,
+  CreateBlastpJobErrors,
+  CreateBlastpJobResponses,
   ExpressionClustergramData,
   ExpressionClustergramErrors,
   ExpressionClustergramResponses,
@@ -62,6 +68,9 @@ import type {
   TaxonData,
   TaxonErrors,
   TaxonResponses,
+  TranscriptProteinData,
+  TranscriptProteinErrors,
+  TranscriptProteinResponses,
 } from "./types.gen";
 
 export type Options<
@@ -253,3 +262,30 @@ export const blastnJob = <ThrowOnError extends boolean = true>(
     url: "/v2/tools/blastn/jobs/{job_id}",
     ...options,
   });
+
+export const createBlastpJob = <ThrowOnError extends boolean = true>(
+  options: Options<CreateBlastpJobData, ThrowOnError>,
+) =>
+  (options.client ?? client).post<CreateBlastpJobResponses, CreateBlastpJobErrors, ThrowOnError>({
+    url: "/v2/tools/blastp/jobs",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+export const blastpJob = <ThrowOnError extends boolean = true>(
+  options: Options<BlastpJobData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<BlastpJobResponses, BlastpJobErrors, ThrowOnError>({
+    url: "/v2/tools/blastp/jobs/{job_id}",
+    ...options,
+  });
+
+export const transcriptProtein = <ThrowOnError extends boolean = true>(
+  options: Options<TranscriptProteinData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<TranscriptProteinResponses, TranscriptProteinErrors, ThrowOnError>(
+    { url: "/v2/transcript/id/{transcript_id}/protein", ...options },
+  );

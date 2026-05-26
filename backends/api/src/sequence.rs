@@ -72,7 +72,7 @@ struct ParsedSequenceSegmentsQuery {
     strand: Strand,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SequenceOutputFormat {
     Plain,

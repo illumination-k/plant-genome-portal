@@ -14,6 +14,7 @@ use crate::snapshot::read_snapshot;
 pub struct FileGenomeRepository {
     dataset: GenomeDataset,
     genes_by_id: HashMap<GeneId, Gene>,
+    transcripts_by_id: HashMap<TranscriptId, Transcript>,
     transcripts_by_gene: HashMap<GeneId, Vec<Transcript>>,
     exons_by_transcript: HashMap<TranscriptId, Vec<Exon>>,
     cdss_by_transcript: HashMap<TranscriptId, Vec<Cds>>,
@@ -30,11 +31,13 @@ impl FileGenomeRepository {
             .collect::<HashMap<_, _>>();
 
         let mut transcripts_by_gene: HashMap<GeneId, Vec<Transcript>> = HashMap::new();
+        let mut transcripts_by_id: HashMap<TranscriptId, Transcript> = HashMap::new();
         for transcript in &dataset.transcripts {
             transcripts_by_gene
                 .entry(transcript.gene_id.clone())
                 .or_default()
                 .push(transcript.clone());
+            transcripts_by_id.insert(transcript.id.clone(), transcript.clone());
         }
 
         let mut exons_by_transcript: HashMap<TranscriptId, Vec<Exon>> = HashMap::new();
@@ -64,6 +67,7 @@ impl FileGenomeRepository {
         Self {
             dataset,
             genes_by_id,
+            transcripts_by_id,
             transcripts_by_gene,
             exons_by_transcript,
             cdss_by_transcript,
@@ -143,6 +147,10 @@ impl GenomeRepository for FileGenomeRepository {
             exons,
             cdss,
         })
+    }
+
+    fn transcript(&self, transcript_id: &TranscriptId) -> Option<Transcript> {
+        self.transcripts_by_id.get(transcript_id).cloned()
     }
 
     fn search_genes(&self, search: &GeneSearch) -> Vec<Gene> {
@@ -317,6 +325,8 @@ mod tests {
             feature_type: "mRNA".to_owned(),
             annotations: Vec::new(),
             attributes: BTreeMap::new(),
+            protein_checksum: None,
+            protein_length: None,
         };
         let exon = Exon {
             transcript_id: TranscriptId::new("Mp1g00010.1").unwrap(),
@@ -410,6 +420,18 @@ mod tests {
         assert_eq!(record.cdss[0].phase, Some(0));
 
         assert!(repo.gene(&GeneId::new("Mp9g99999").unwrap()).is_none());
+    }
+
+    #[test]
+    fn transcript_returns_some_for_known_id_and_none_otherwise() {
+        let repo = make_repository();
+        let known = TranscriptId::new("Mp1g00010.1").unwrap();
+        let transcript = repo.transcript(&known).unwrap();
+        assert_eq!(transcript.id.as_str(), "Mp1g00010.1");
+        assert_eq!(transcript.gene_id.as_str(), "Mp1g00010");
+
+        let unknown = TranscriptId::new("Mp9g99999.1").unwrap();
+        assert!(repo.transcript(&unknown).is_none());
     }
 
     #[test]

@@ -64,11 +64,23 @@ pub struct FastaReference {
 
 impl FastaReference {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, StorageError> {
-        let by_checksum = read_fasta_sequences(path)?
-            .into_values()
-            .map(|sequence| (refget_checksum(sequence.bases.as_bytes()), sequence.bases))
-            .collect::<HashMap<_, _>>();
-        Ok(Self { by_checksum })
+        let mut reference = Self {
+            by_checksum: HashMap::new(),
+        };
+        reference.extend_from_path(path)?;
+        Ok(reference)
+    }
+
+    /// Load an additional FASTA file (e.g. a protein FASTA) into the same
+    /// checksum-keyed index. Records that share a refget checksum with an
+    /// already-loaded sequence are silently de-duplicated.
+    pub fn extend_from_path(&mut self, path: impl AsRef<Path>) -> Result<(), StorageError> {
+        for sequence in read_fasta_sequences(path)?.into_values() {
+            self.by_checksum
+                .entry(refget_checksum(sequence.bases.as_bytes()))
+                .or_insert(sequence.bases);
+        }
+        Ok(())
     }
 
     pub fn get(&self, checksum: &str, start: Option<u64>, end: Option<u64>) -> Option<String> {
@@ -189,6 +201,30 @@ mod tests {
         let checksum = refget_checksum(b"ACGTACGT");
         assert_eq!(
             reference.get(&checksum, Some(4), Some(100)).as_deref(),
+            Some("ACGT")
+        );
+    }
+
+    #[test]
+    fn extend_from_path_adds_new_sequences_by_checksum() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = dir.path().join("primary.fa");
+        std::fs::write(&primary, b">chrA\nACGT\n").unwrap();
+        let secondary = dir.path().join("secondary.fa");
+        std::fs::write(&secondary, b">protA\nMVTAG\n").unwrap();
+
+        let mut reference = FastaReference::from_path(&primary).unwrap();
+        let checksum_protein = refget_checksum(b"MVTAG");
+        assert!(reference.get(&checksum_protein, None, None).is_none());
+
+        reference.extend_from_path(&secondary).unwrap();
+        assert_eq!(
+            reference.get(&checksum_protein, None, None).as_deref(),
+            Some("MVTAG")
+        );
+        let checksum_dna = refget_checksum(b"ACGT");
+        assert_eq!(
+            reference.get(&checksum_dna, None, None).as_deref(),
             Some("ACGT")
         );
     }

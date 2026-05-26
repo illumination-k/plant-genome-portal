@@ -5,6 +5,7 @@ mod gff;
 mod kegg;
 mod nomenclature;
 mod obo;
+mod protein;
 mod repository;
 mod snapshot;
 mod util;
@@ -72,9 +73,11 @@ mod tests {
                 functional_annotation_file: None,
                 nomenclature_file: None,
                 kegg_files: None,
+                protein_fasta_file: None,
             },
             functional_annotation_path: None,
             nomenclature_path: None,
+            protein_fasta_path: None,
             kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
@@ -165,9 +168,11 @@ mod tests {
                 functional_annotation_file: Some("func.tsv".to_owned()),
                 nomenclature_file: Some("nomenclature.tsv".to_owned()),
                 kegg_files: None,
+                protein_fasta_file: None,
             },
             functional_annotation_path: Some(functional_annotation_path),
             nomenclature_path: Some(nomenclature_path),
+            protein_fasta_path: None,
             kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
@@ -235,5 +240,73 @@ mod tests {
             1
         );
         assert_eq!(transcript.annotations.len(), 6);
+    }
+
+    #[test]
+    fn snapshot_builder_attaches_protein_checksum_to_transcripts() {
+        let dir = tempfile::tempdir().unwrap();
+        let fasta_path = dir.path().join("test.fa");
+        let gff_path = dir.path().join("test.gff");
+        let protein_path = dir.path().join("proteins.fa");
+
+        let mut fasta = File::create(&fasta_path).unwrap();
+        writeln!(fasta, ">chr1").unwrap();
+        writeln!(fasta, "ACGTACGTACGT").unwrap();
+
+        let mut gff = File::create(&gff_path).unwrap();
+        writeln!(gff, "##gff-version 3").unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=TEST"
+        )
+        .unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tmRNA\t1\t8\t.\t+\t.\tID=Mp1g00010.1;Parent=Mp1g00010"
+        )
+        .unwrap();
+
+        let mut proteins = File::create(&protein_path).unwrap();
+        writeln!(proteins, ">Mp1g00010.1").unwrap();
+        writeln!(proteins, "MVTAGSMM").unwrap();
+
+        let snapshot = build_genome_snapshot(&GenomeSnapshotBuild {
+            fasta_path,
+            gff_path,
+            manifest: SnapshotManifest {
+                source_base_url: "https://example.test".to_owned(),
+                fasta_file: "test.fa".to_owned(),
+                gff_file: "test.gff".to_owned(),
+                functional_annotation_file: None,
+                nomenclature_file: None,
+                kegg_files: None,
+                protein_fasta_file: Some("proteins.fa".to_owned()),
+            },
+            functional_annotation_path: None,
+            nomenclature_path: None,
+            protein_fasta_path: Some(protein_path),
+            kegg_catalog_paths: Default::default(),
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: AssemblyAccession::new("GCA_test").unwrap(),
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: genome_core::AssemblySource::Local,
+                refget_checksum: None,
+            },
+        })
+        .unwrap();
+
+        let transcript = &snapshot.dataset.transcripts[0];
+        assert_eq!(transcript.protein_length, Some(8));
+        assert_eq!(
+            transcript.protein_checksum.as_deref(),
+            Some(refget_checksum(b"MVTAGSMM").as_str()),
+        );
     }
 }

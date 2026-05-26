@@ -13,7 +13,9 @@ import {
   assembly,
   assemblySequences,
   blastnJob,
+  blastpJob,
   createBlastnJob,
+  createBlastpJob,
   expressionClustergram,
   gene,
   geneExpression,
@@ -32,6 +34,7 @@ import {
   regionFeatures,
   sequenceSegments,
   taxon,
+  transcriptProtein,
 } from "../sdk.gen";
 import type {
   AssemblyData,
@@ -43,9 +46,15 @@ import type {
   BlastnJobData,
   BlastnJobError,
   BlastnJobResponse2,
+  BlastpJobData,
+  BlastpJobError,
+  BlastpJobResponse,
   CreateBlastnJobData,
   CreateBlastnJobError,
   CreateBlastnJobResponse,
+  CreateBlastpJobData,
+  CreateBlastpJobError,
+  CreateBlastpJobResponse,
   ExpressionClustergramData,
   ExpressionClustergramError,
   ExpressionClustergramResponse2,
@@ -93,6 +102,9 @@ import type {
   TaxonData,
   TaxonError,
   TaxonResponse2,
+  TranscriptProteinData,
+  TranscriptProteinError,
+  TranscriptProteinResponse,
 } from "../types.gen";
 
 export type QueryKey<TOptions extends Options> = [
@@ -735,4 +747,72 @@ export const blastnJobOptions = (options: Options<BlastnJobData>) =>
       return data;
     },
     queryKey: blastnJobQueryKey(options),
+  });
+
+export const createBlastpJobMutation = (
+  options?: Partial<Options<CreateBlastpJobData>>,
+): UseMutationOptions<
+  CreateBlastpJobResponse,
+  CreateBlastpJobError,
+  Options<CreateBlastpJobData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CreateBlastpJobResponse,
+    CreateBlastpJobError,
+    Options<CreateBlastpJobData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await createBlastpJob({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const blastpJobQueryKey = (options: Options<BlastpJobData>) =>
+  createQueryKey("blastpJob", options);
+
+export const blastpJobOptions = (options: Options<BlastpJobData>) =>
+  queryOptions<
+    BlastpJobResponse,
+    BlastpJobError,
+    BlastpJobResponse,
+    ReturnType<typeof blastpJobQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await blastpJob({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: blastpJobQueryKey(options),
+  });
+
+export const transcriptProteinQueryKey = (options: Options<TranscriptProteinData>) =>
+  createQueryKey("transcriptProtein", options);
+
+export const transcriptProteinOptions = (options: Options<TranscriptProteinData>) =>
+  queryOptions<
+    TranscriptProteinResponse,
+    TranscriptProteinError,
+    TranscriptProteinResponse,
+    ReturnType<typeof transcriptProteinQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await transcriptProtein({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: transcriptProteinQueryKey(options),
   });

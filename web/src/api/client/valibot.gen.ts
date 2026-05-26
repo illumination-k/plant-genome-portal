@@ -37,6 +37,14 @@ export const vBlastnJobRequest = v.object({
   task: v.nullish(v.string()),
 });
 
+export const vBlastpJobRequest = v.object({
+  assemblyAccession: v.string(),
+  evalue: v.nullish(v.number()),
+  maxTargetSeqs: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+  query: v.string(),
+  task: v.nullish(v.string()),
+});
+
 /**
  * One node in a flat dendrogram.
  */
@@ -159,7 +167,7 @@ export const vHealthResponse = v.object({
   ok: v.boolean(),
 });
 
-export const vHomologySearchMethod = v.picklist(["blastn"]);
+export const vHomologySearchMethod = v.picklist(["blastn", "blastp"]);
 
 export const vInterProId = v.string();
 
@@ -538,6 +546,10 @@ export const vSequence = v.object({
 
 export const vSequenceOutputFormat = v.picklist(["plain", "fasta"]);
 
+export const vProteinQuery = v.object({
+  format: v.nullish(vSequenceOutputFormat),
+});
+
 export const vStrand = v.picklist(["forward", "reverse", "unknown"]);
 
 export const vGene = v.object({
@@ -700,6 +712,18 @@ export const vTranscript = v.object({
   feature_type: v.string(),
   gene_id: vGeneId,
   id: vTranscriptId,
+  protein_checksum: v.nullish(v.string()),
+  protein_length: v.nullish(
+    v.pipe(
+      v.union([v.number(), v.string(), v.bigint()]),
+      v.transform((x) => BigInt(x)),
+      v.minValue(BigInt(0)),
+      v.maxValue(
+        BigInt("9223372036854775807"),
+        "Invalid value: Expected int64 to be <= 9223372036854775807",
+      ),
+    ),
+  ),
   region: vHalfOpenRegion,
   sequence_name: vSequenceName,
   strand: vStrand,
@@ -992,3 +1016,32 @@ export const vBlastnJobPath = v.object({
  * BLASTN job status
  */
 export const vBlastnJobResponse2 = vBlastnJobResponse;
+
+export const vCreateBlastpJobBody = vBlastpJobRequest;
+
+/**
+ * BLASTP job accepted
+ */
+export const vCreateBlastpJobResponse = vBlastnJobResponse;
+
+export const vBlastpJobPath = v.object({
+  job_id: v.string(),
+});
+
+/**
+ * BLASTP job status
+ */
+export const vBlastpJobResponse = vBlastnJobResponse;
+
+export const vTranscriptProteinPath = v.object({
+  transcript_id: v.string(),
+});
+
+export const vTranscriptProteinQuery = v.object({
+  format: v.nullish(vSequenceOutputFormat),
+});
+
+/**
+ * Translated protein sequence
+ */
+export const vTranscriptProteinResponse = v.string();

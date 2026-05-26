@@ -137,6 +137,8 @@ fn parse_transcript(
         feature_type,
         annotations: Vec::new(),
         attributes: attrs,
+        protein_checksum: None,
+        protein_length: None,
     })
 }
 
