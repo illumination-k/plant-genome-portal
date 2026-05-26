@@ -1,0 +1,4 @@
+sample,sra,fastq_1,fastq_2,strandedness
+MpTak1_thallus_rep1,SRR12345678,,,auto
+MpTak1_thallus_rep2,,/path/to/sample2_R1.fastq.gz,/path/to/sample2_R2.fastq.gz,reverse
+MpTak1_gemma_rep1,,/path/to/gemma_se.fastq.gz,,unstranded
