@@ -1,0 +1,16 @@
+report_comment: >
+  Plant Genome Portal — ChIP-seq / CUT&RUN pipeline report.
+report_section_order:
+  fastp:
+    order: 1000
+  bowtie2:
+    order: 900
+  samtools:
+    order: 800
+  picard:
+    order: 700
+  macs3:
+    order: 600
+  homer:
+    order: 500
+disable_version_detection: false
