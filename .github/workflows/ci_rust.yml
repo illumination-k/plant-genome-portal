@@ -22,6 +22,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libopenblas-dev pkg-config
+          pkg-config --modversion openblas
+          pkg-config --libs openblas
 
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         env:
@@ -31,7 +33,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Build
-        run: cargo build --locked --workspace --all-features
+        run: cargo build --locked --workspace --all-features --verbose
 
       - name: CI
-        run: mise run ci:rust
+        run: mise run ci:rust --verbose
