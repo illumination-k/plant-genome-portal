@@ -205,6 +205,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn extend_from_path_adds_new_sequences_by_checksum() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = dir.path().join("primary.fa");
+        std::fs::write(&primary, b">chrA\nACGT\n").unwrap();
+        let secondary = dir.path().join("secondary.fa");
+        std::fs::write(&secondary, b">protA\nMVTAG\n").unwrap();
+
+        let mut reference = FastaReference::from_path(&primary).unwrap();
+        let checksum_protein = refget_checksum(b"MVTAG");
+        assert!(reference.get(&checksum_protein, None, None).is_none());
+
+        reference.extend_from_path(&secondary).unwrap();
+        assert_eq!(
+            reference.get(&checksum_protein, None, None).as_deref(),
+            Some("MVTAG")
+        );
+        let checksum_dna = refget_checksum(b"ACGT");
+        assert_eq!(
+            reference.get(&checksum_dna, None, None).as_deref(),
+            Some("ACGT")
+        );
+    }
+
     fn make_sequence(name: &str, checksum: &str) -> genome_core::Sequence {
         genome_core::Sequence {
             name: SequenceName::new(name).unwrap(),

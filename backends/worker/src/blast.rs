@@ -482,4 +482,82 @@ mod tests {
         assert!(validate_task("blastn", &HomologySearchMethod::Blastp).is_err());
         assert!(validate_task("blastn -remote", &HomologySearchMethod::Blastn).is_err());
     }
+
+    fn valid_input() -> BlastHomologySearchInput {
+        BlastHomologySearchInput {
+            assembly_accession: AssemblyAccession::new("GCA_test").unwrap(),
+            query: "ACGT".to_owned(),
+            task: "blastn".to_owned(),
+            evalue: 10.0,
+            max_target_seqs: 50,
+            snapshot: None,
+        }
+    }
+
+    #[test]
+    fn input_validate_accepts_well_formed_request() {
+        assert!(
+            valid_input()
+                .validate(&HomologySearchMethod::Blastn)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn input_validate_rejects_non_positive_evalue() {
+        let mut input = valid_input();
+        input.evalue = 0.0;
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+        input.evalue = -1.0;
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn input_validate_rejects_zero_max_target_seqs() {
+        let mut input = valid_input();
+        input.max_target_seqs = 0;
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn input_validate_propagates_query_and_task_errors_per_method() {
+        // 'P' is an amino-acid letter that is not a valid nucleotide IUPAC code.
+        let mut input = valid_input();
+        input.query = "ACGP".to_owned();
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+
+        let mut input = valid_input();
+        input.task = "blastp".to_owned();
+        assert!(input.validate(&HomologySearchMethod::Blastn).is_err());
+    }
+
+    #[test]
+    fn parse_tabular_hits_parses_multiple_lines_and_skips_blanks() {
+        let output = concat!(
+            "query\tchr1\t99.5\t100\t1\t0\t1\t100\t500\t401\t1e-20\t80.0\tACGT\tACGT\n",
+            "\n",
+            "  \n",
+            "query\tchr2\t95.0\t80\t2\t0\t1\t80\t1\t80\t1e-15\t60.0\tACGT\tACGT\n",
+        );
+        let hits = parse_tabular_hits(
+            output,
+            &AssemblyAccession::new("GCA_test").unwrap(),
+            &HomologySearchMethod::Blastn,
+        )
+        .unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].sequence_name.as_str(), "chr1");
+        assert_eq!(hits[1].sequence_name.as_str(), "chr2");
+    }
+
+    #[test]
+    fn parse_tabular_hits_returns_empty_for_empty_output() {
+        let hits = parse_tabular_hits(
+            "",
+            &AssemblyAccession::new("GCA_test").unwrap(),
+            &HomologySearchMethod::Blastn,
+        )
+        .unwrap();
+        assert!(hits.is_empty());
+    }
 }

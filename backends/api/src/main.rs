@@ -1853,4 +1853,96 @@ mod tests {
         assert_eq!(feature.end, 20);
         assert_eq!(feature.strand, -1);
     }
+
+    #[test]
+    fn validate_blastp_task_accepts_supported_tasks_and_rejects_others() {
+        assert!(validate_blastp_task("blastp").is_ok());
+        assert!(validate_blastp_task("blastp-short").is_ok());
+        assert!(validate_blastp_task("blastp-fast").is_ok());
+        assert!(matches!(
+            validate_blastp_task("blastn"),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+        assert!(matches!(
+            validate_blastp_task(""),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    fn valid_blastp_request() -> BlastpJobRequest {
+        BlastpJobRequest {
+            assembly_accession: "GCA_test".to_owned(),
+            query: "MVTAG".to_owned(),
+            task: None,
+            evalue: None,
+            max_target_seqs: None,
+        }
+    }
+
+    #[test]
+    fn blastp_request_defaults_task_to_blastp_and_uses_default_thresholds() {
+        let input = valid_blastp_request().into_job_input().unwrap();
+        assert_eq!(input.task, "blastp");
+        assert_eq!(input.evalue, 10.0);
+        assert_eq!(input.max_target_seqs, 50);
+        assert_eq!(input.assembly_accession.as_str(), "GCA_test");
+    }
+
+    #[test]
+    fn blastp_request_rejects_non_positive_evalue() {
+        let mut request = valid_blastp_request();
+        request.evalue = Some(0.0);
+        assert!(matches!(
+            request.into_job_input(),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+        let mut request = valid_blastp_request();
+        request.evalue = Some(-1.0);
+        assert!(matches!(
+            request.into_job_input(),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    #[test]
+    fn blastp_request_rejects_zero_max_target_seqs() {
+        let mut request = valid_blastp_request();
+        request.max_target_seqs = Some(0);
+        assert!(matches!(
+            request.into_job_input(),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    #[test]
+    fn blastp_request_rejects_empty_query() {
+        let mut request = valid_blastp_request();
+        request.query = "   ".to_owned();
+        assert!(matches!(
+            request.into_job_input(),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    #[test]
+    fn blastp_request_rejects_unsupported_task() {
+        let mut request = valid_blastp_request();
+        request.task = Some("blastn".to_owned());
+        assert!(matches!(
+            request.into_job_input(),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    #[test]
+    fn blast_method_subcommand_matches_worker_cli_names() {
+        assert_eq!(BlastMethod::Blastn.subcommand(), "blastn-job");
+        assert_eq!(BlastMethod::Blastp.subcommand(), "blastp-job");
+    }
+
+    #[test]
+    fn blast_method_program_flag_matches_worker_cli_flags() {
+        assert_eq!(BlastMethod::Blastn.program_flag(), "--blastn");
+        assert_eq!(BlastMethod::Blastp.program_flag(), "--blastp");
+    }
 }

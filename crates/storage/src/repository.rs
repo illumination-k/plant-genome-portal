@@ -423,6 +423,18 @@ mod tests {
     }
 
     #[test]
+    fn transcript_returns_some_for_known_id_and_none_otherwise() {
+        let repo = make_repository();
+        let known = TranscriptId::new("Mp1g00010.1").unwrap();
+        let transcript = repo.transcript(&known).unwrap();
+        assert_eq!(transcript.id.as_str(), "Mp1g00010.1");
+        assert_eq!(transcript.gene_id.as_str(), "Mp1g00010");
+
+        let unknown = TranscriptId::new("Mp9g99999.1").unwrap();
+        assert!(repo.transcript(&unknown).is_none());
+    }
+
+    #[test]
     fn search_genes_returns_all_when_no_filters() {
         let repo = make_repository();
         let result = repo.search_genes(&GeneSearch::default());

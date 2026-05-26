@@ -135,9 +135,7 @@ const blastHitColumns: Array<ColumnDef<BlastHitRowData>> = [
   },
   {
     accessorFn: regionText,
-    cell: (info) => (
-      <BlastRegionCell hit={info.row.original} method={info.row.original.method} />
-    ),
+    cell: (info) => <BlastRegionCell hit={info.row.original} method={info.row.original.method} />,
     header: "Region",
     id: "region",
   },
