@@ -73,7 +73,7 @@ export default defineConfig({
       },
     },
     {
-      files: ["src/pages/**/*.tsx"],
+      files: ["src/pages/**/*.tsx", "src/features/**/pages/**/*.tsx"],
       rules: {
         "max-lines": "off",
         "max-lines-per-function": "off",

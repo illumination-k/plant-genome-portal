@@ -140,6 +140,54 @@ impl FileExpressionRepository {
         }
         true
     }
+
+    fn units_for_query(&self, query: &ExpressionQuery) -> Vec<ExpressionUnit> {
+        let mut units: Vec<ExpressionUnit> = match query.unit {
+            Some(unit) => vec![unit],
+            None => self.matrix_by_unit.keys().copied().collect(),
+        };
+        // Stable order so callers (and tests) see deterministic output.
+        units.sort();
+        units
+    }
+
+    fn append_gene_expression_for_unit(
+        &self,
+        out: &mut Vec<ExpressionMeasurement>,
+        gene_id: &GeneId,
+        query: &ExpressionQuery,
+        unit: ExpressionUnit,
+        limit: usize,
+    ) -> bool {
+        let Some(index) = self.matrix_by_unit.get(&unit) else {
+            return false;
+        };
+        let Some(&gene_idx) = index.gene_index.get(gene_id) else {
+            return false;
+        };
+        let Some(row) = index.matrix.gene_row(gene_idx) else {
+            return false;
+        };
+
+        for (run, &value) in index.matrix.runs.iter().zip(row.iter()) {
+            if value.is_finite()
+                && self.passes_run_filter(run, query)
+                && self.passes_sample_filter(run, query)
+            {
+                out.push(ExpressionMeasurement {
+                    gene_id: gene_id.clone(),
+                    run: run.clone(),
+                    value,
+                    unit,
+                });
+                if out.len() >= limit {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
 }
 
 impl ExpressionRepository for FileExpressionRepository {
@@ -184,43 +232,9 @@ impl ExpressionRepository for FileExpressionRepository {
         let limit = query.limit.unwrap_or(usize::MAX);
         let mut out = Vec::new();
 
-        let mut units: Vec<ExpressionUnit> = match query.unit {
-            Some(unit) => vec![unit],
-            None => self.matrix_by_unit.keys().copied().collect(),
-        };
-        // Stable order so callers (and tests) see deterministic output.
-        units.sort();
-
-        for unit in units {
-            let Some(index) = self.matrix_by_unit.get(&unit) else {
-                continue;
-            };
-            let Some(&gene_idx) = index.gene_index.get(gene_id) else {
-                continue;
-            };
-            let Some(row) = index.matrix.gene_row(gene_idx) else {
-                continue;
-            };
-
-            for (run, &value) in index.matrix.runs.iter().zip(row.iter()) {
-                if !value.is_finite() {
-                    continue;
-                }
-                if !self.passes_run_filter(run, query) {
-                    continue;
-                }
-                if !self.passes_sample_filter(run, query) {
-                    continue;
-                }
-                out.push(ExpressionMeasurement {
-                    gene_id: gene_id.clone(),
-                    run: run.clone(),
-                    value,
-                    unit,
-                });
-                if out.len() >= limit {
-                    return out;
-                }
+        for unit in self.units_for_query(query) {
+            if self.append_gene_expression_for_unit(&mut out, gene_id, query, unit, limit) {
+                break;
             }
         }
 

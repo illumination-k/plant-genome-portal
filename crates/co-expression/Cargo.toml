@@ -1,0 +1,29 @@
+[package]
+name = "co-expression"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+expression-core = { path = "../expression-core", version = "0.1.0" }
+genome-core = { path = "../genome-core", version = "0.1.0" }
+ndarray = { version = "0.17", features = ["blas", "rayon"] }
+ndarray-stats = "0.7"
+rayon = "1"
+serde.workspace = true
+thiserror.workspace = true
+utoipa.workspace = true
+
+# `blas-src` is the link-time BLAS backend that `ndarray`'s `blas` feature
+# delegates to. The right backend depends on the OS — Apple's Accelerate
+# framework on macOS, system OpenBLAS on Linux. CI installs
+# `libopenblas-dev` (see `.github/workflows/ci_rust.yml`).
+[target.'cfg(target_os = "macos")'.dependencies]
+blas-src = { version = "0.10", features = ["accelerate"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+blas-src = { version = "0.10", features = ["openblas"] }
+openblas-src = { version = "0.10", default-features = false, features = ["cblas", "system"] }
+
+[lints]
+workspace = true
