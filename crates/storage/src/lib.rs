@@ -4,6 +4,7 @@ mod fasta;
 mod gff;
 mod kegg;
 mod nomenclature;
+mod obo;
 mod repository;
 mod snapshot;
 mod util;
@@ -11,6 +12,7 @@ mod util;
 pub use crate::error::StorageError;
 pub use crate::fasta::{FastaReference, refget_checksum};
 pub use crate::kegg::KeggCatalogInput;
+pub use crate::obo::{GoOntology, GoTerm, load_go_ontology};
 pub use crate::repository::FileGenomeRepository;
 pub use crate::snapshot::{
     GenomeSnapshot, GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest,
