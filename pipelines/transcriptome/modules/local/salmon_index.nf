@@ -18,10 +18,21 @@ process SALMON_INDEX {
     """
     set -euo pipefail
 
-    # decoy IDs = primary sequence headers in the genome FASTA
-    zcat -f ${genome} | grep '^>' | cut -d ' ' -f 1 | sed 's/^>//' > decoys.txt
+    if [[ "${genome}" == *.gz ]]; then
+        gunzip -c ${genome} > _genome.fa
+    else
+        cat ${genome} > _genome.fa
+    fi
+    if [[ "${transcripts}" == *.gz ]]; then
+        gunzip -c ${transcripts} > _tx.fa
+    else
+        cat ${transcripts} > _tx.fa
+    fi
 
-    zcat -f ${transcripts} ${genome} | gzip > gentrome.fa.gz
+    # decoy IDs = primary sequence headers in the genome FASTA
+    grep '^>' _genome.fa | cut -d ' ' -f 1 | sed 's/^>//' > decoys.txt
+
+    cat _tx.fa _genome.fa | gzip > gentrome.fa.gz
 
     salmon index \\
         --threads ${task.cpus} \\
