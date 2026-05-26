@@ -6,8 +6,10 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
+fastobo = "0.15"
 flate2.workspace = true
 genome-core = { path = "../genome-core", version = "0.1.0" }
+goterm-semsim = { path = "../goterm-semsim", version = "0.1.0" }
 noodles-fasta = "0.61"
 noodles-gff = "0.57"
 serde.workspace = true
