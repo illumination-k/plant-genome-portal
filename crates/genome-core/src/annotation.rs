@@ -81,7 +81,7 @@ pub struct GoTermAnnotation {
     pub evidence: AnnotationEvidence,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GoNamespace {
     BiologicalProcess,
