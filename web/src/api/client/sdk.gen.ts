@@ -21,6 +21,9 @@ import type {
   CreateBlastpJobData,
   CreateBlastpJobErrors,
   CreateBlastpJobResponses,
+  EnrichmentAnalysisData,
+  EnrichmentAnalysisErrors,
+  EnrichmentAnalysisResponses,
   ExpressionClustergramData,
   ExpressionClustergramErrors,
   ExpressionClustergramResponses,
@@ -145,6 +148,22 @@ export const refgetSequence = <ThrowOnError extends boolean = true>(
   (options.client ?? client).get<RefgetSequenceResponses, RefgetSequenceErrors, ThrowOnError>({
     url: "/sequence/{checksum}",
     ...options,
+  });
+
+export const enrichmentAnalysis = <ThrowOnError extends boolean = true>(
+  options: Options<EnrichmentAnalysisData, ThrowOnError>,
+) =>
+  (options.client ?? client).post<
+    EnrichmentAnalysisResponses,
+    EnrichmentAnalysisErrors,
+    ThrowOnError
+  >({
+    url: "/v2/analysis/enrichment",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 export const expressionClustergram = <ThrowOnError extends boolean = true>(

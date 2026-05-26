@@ -25,6 +25,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 
+[workspace.lints.rust]
+unused = "deny"
+
 [workspace.lints.clippy]
 print_stdout = "deny"
 print_stderr = "deny"
