@@ -14,7 +14,7 @@ const margin = {
   bottom: 116,
   left: 188,
   right: 28,
-  top: 96,
+  top: 116,
 };
 const rowLabelWidth = 96;
 const dendrogramGap = 12;
@@ -82,7 +82,12 @@ const zColor = (value: number, zMax: number): string => {
 };
 
 const nodeChildren = (node: ClusterDendrogramNode): [number, number] | undefined => {
-  if (node.left === undefined || node.left === null || node.right === undefined || node.right === null) {
+  if (
+    node.left === undefined ||
+    node.left === null ||
+    node.right === undefined ||
+    node.right === null
+  ) {
     return undefined;
   }
   return [node.left, node.right];
@@ -196,9 +201,7 @@ const columnLinks = (
   });
 };
 
-const ExpressionClustergram = (props: {
-  matrix: ExpressionClustergramResponse;
-}): ReactElement => {
+const ExpressionClustergram = (props: { matrix: ExpressionClustergramResponse }): ReactElement => {
   const chart = useMemo(() => {
     const orderedGenes = props.matrix.rowOrder.map((index) => props.matrix.genes[index]);
     const orderedSamples = props.matrix.columnOrder.map((index) => props.matrix.samples[index]);
@@ -249,10 +252,27 @@ const ExpressionClustergram = (props: {
     <div className="w-full overflow-x-auto">
       <svg
         aria-label={`Expression clustergram in ${unitLabel(props.matrix.unit)}`}
-        className="h-auto"
+        className="mx-auto block"
+        height={chart.chartHeight}
         role="img"
         viewBox={`0 0 ${chart.chartWidth} ${chart.chartHeight}`}
+        width={chart.chartWidth}
       >
+        <g transform={`translate(${margin.left} 24)`}>
+          <text fill="var(--text-muted)" fontSize="11" x="0" y="-8">
+            Row z-score
+          </text>
+          {[-1, 0, 1].map((value, index) => (
+            <rect
+              fill={zColor(value * chart.zMax, chart.zMax)}
+              height="10"
+              key={value}
+              width="34"
+              x={index * 34}
+              y="0"
+            />
+          ))}
+        </g>
         <g fill="none" stroke="var(--border-strong)" strokeLinecap="round" strokeWidth="1.25">
           {chart.columnLinks.map((link) => (
             <path
@@ -320,21 +340,6 @@ const ExpressionClustergram = (props: {
             );
           }),
         )}
-        <g transform={`translate(${chart.chartWidth - margin.right - 128} ${margin.top})`}>
-          <text fill="var(--text-muted)" fontSize="11" x="0" y="-8">
-            Row z-score
-          </text>
-          {[-1, 0, 1].map((value, index) => (
-            <rect
-              fill={zColor(value * chart.zMax, chart.zMax)}
-              height="10"
-              key={value}
-              width="34"
-              x={index * 34}
-              y="0"
-            />
-          ))}
-        </g>
       </svg>
     </div>
   );

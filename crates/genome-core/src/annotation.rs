@@ -123,45 +123,39 @@ pub enum KeggEntryKind {
 
 impl KeggEntryKind {
     pub fn from_entry_id(entry_id: &str) -> Self {
-        let normalized = entry_id
-            .strip_prefix("ko:")
-            .or_else(|| entry_id.strip_prefix("path:"))
-            .unwrap_or(entry_id);
+        let normalized = normalize_kegg_entry_id(entry_id);
 
-        if normalized.len() == 6
-            && normalized.starts_with('K')
-            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
-        {
-            Self::Orthology
-        } else if normalized.starts_with("map")
-            || normalized.starts_with("ko")
-            || normalized.starts_with("ec")
-        {
-            Self::Pathway
-        } else if normalized.len() == 6
-            && normalized.starts_with('M')
-            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
-        {
-            Self::Module
-        } else if normalized.len() == 6
-            && normalized.starts_with('R')
-            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
-        {
-            Self::Reaction
-        } else if normalized.len() == 6
-            && normalized.starts_with('C')
-            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
-        {
-            Self::Compound
-        } else if normalized.len() == 6
-            && normalized.starts_with('G')
-            && normalized[1..].bytes().all(|byte| byte.is_ascii_digit())
-        {
-            Self::Glycan
-        } else {
-            Self::Other
+        if is_kegg_pathway_id(normalized) {
+            return Self::Pathway;
+        }
+
+        match fixed_width_kegg_code(normalized) {
+            Some(b'K') => Self::Orthology,
+            Some(b'M') => Self::Module,
+            Some(b'R') => Self::Reaction,
+            Some(b'C') => Self::Compound,
+            Some(b'G') => Self::Glycan,
+            _ => Self::Other,
         }
     }
+}
+
+fn normalize_kegg_entry_id(entry_id: &str) -> &str {
+    entry_id
+        .strip_prefix("ko:")
+        .or_else(|| entry_id.strip_prefix("path:"))
+        .unwrap_or(entry_id)
+}
+
+fn is_kegg_pathway_id(entry_id: &str) -> bool {
+    ["map", "ko", "ec"]
+        .iter()
+        .any(|prefix| entry_id.starts_with(prefix))
+}
+
+fn fixed_width_kegg_code(entry_id: &str) -> Option<u8> {
+    let bytes = entry_id.as_bytes();
+    (bytes.len() == 6 && bytes[1..].iter().all(u8::is_ascii_digit)).then_some(bytes[0])
 }
 
 #[cfg(test)]

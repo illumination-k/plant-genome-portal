@@ -113,43 +113,34 @@ impl CoexpressionIndex {
         &self.logit_scores
     }
 
+    fn pair_offset(&self, source: usize, target: usize) -> Option<usize> {
+        let gene_count = self.gene_count();
+        (source != target && source < gene_count && target < gene_count)
+            .then_some(source * gene_count + target)
+    }
+
     pub fn correlation_by_index(&self, source: usize, target: usize) -> Option<f64> {
-        if source == target || source >= self.gene_count() || target >= self.gene_count() {
-            return None;
-        }
-        let correlation = f64::from(self.correlations[source * self.gene_count() + target]);
+        let correlation = f64::from(self.correlations[self.pair_offset(source, target)?]);
         correlation.is_finite().then_some(correlation)
     }
 
     pub fn rank_by_index(&self, source: usize, target: usize) -> Option<usize> {
-        if source == target || source >= self.gene_count() || target >= self.gene_count() {
-            return None;
-        }
-        let rank = self.ranks[source * self.gene_count() + target];
+        let rank = self.ranks[self.pair_offset(source, target)?];
         (rank > 0).then_some(rank as usize)
     }
 
     pub fn mutual_rank_by_index(&self, source: usize, target: usize) -> Option<f64> {
-        if source == target || source >= self.gene_count() || target >= self.gene_count() {
-            return None;
-        }
-        let value = f64::from(self.mutual_ranks[source * self.gene_count() + target]);
+        let value = f64::from(self.mutual_ranks[self.pair_offset(source, target)?]);
         value.is_finite().then_some(value)
     }
 
     pub fn highest_reciprocal_rank_by_index(&self, source: usize, target: usize) -> Option<usize> {
-        if source == target || source >= self.gene_count() || target >= self.gene_count() {
-            return None;
-        }
-        let value = self.highest_reciprocal_ranks[source * self.gene_count() + target];
+        let value = self.highest_reciprocal_ranks[self.pair_offset(source, target)?];
         (value > 0).then_some(value as usize)
     }
 
     pub fn logit_score_by_index(&self, source: usize, target: usize) -> Option<f64> {
-        if source == target || source >= self.gene_count() || target >= self.gene_count() {
-            return None;
-        }
-        let value = f64::from(self.logit_scores[source * self.gene_count() + target]);
+        let value = f64::from(self.logit_scores[self.pair_offset(source, target)?]);
         value.is_finite().then_some(value)
     }
 
