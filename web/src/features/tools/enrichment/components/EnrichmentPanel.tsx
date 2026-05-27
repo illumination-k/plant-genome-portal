@@ -1,8 +1,8 @@
 /* oxlint-disable no-magic-numbers, jsx-max-depth, jsx-no-new-function-as-prop, max-lines-per-function, no-ternary */
 import { enrichmentAnalysisMutation } from "@/api/client/@tanstack/react-query.gen";
 import type { EnrichmentAnnotationKind } from "@/api/client/types.gen";
-import EnrichmentDownloadLinks from "@/features/analysis/components/EnrichmentDownloadLinks";
-import EnrichmentResultsTable from "@/features/analysis/components/EnrichmentResultsTable";
+import EnrichmentDownloadLinks from "@/features/tools/enrichment/components/EnrichmentDownloadLinks";
+import EnrichmentResultsTable from "@/features/tools/enrichment/components/EnrichmentResultsTable";
 import geneRecordUtils from "@/shared/lib/geneRecordUtils";
 import EmptyState from "@/shared/ui/EmptyState";
 import ErrorState from "@/shared/ui/ErrorState";
@@ -44,7 +44,7 @@ const splitGeneIds = (value: string): string[] =>
     .map((geneId) => geneId.trim())
     .filter(Boolean);
 
-const EnrichmentAnalysisPanel = (): ReactElement => {
+const EnrichmentPanel = (): ReactElement => {
   const [form, setForm] = useState<EnrichmentForm>(initialForm);
   const [annotationKinds, setAnnotationKinds] = useState<EnrichmentAnnotationKind[]>([
     "go_term",
@@ -217,4 +217,4 @@ const EnrichmentAnalysisPanel = (): ReactElement => {
   );
 };
 
-export default EnrichmentAnalysisPanel;
+export default EnrichmentPanel;
