@@ -775,8 +775,8 @@ mod tests {
     fn fill_rank_score_cell_uses_symmetric_dense_rank_offsets() {
         let gene_count = 10;
         let mut ranks = vec![0; gene_count * gene_count];
-        ranks[1] = 2;
-        ranks[10] = 8;
+        ranks[23] = 2;
+        ranks[32] = 8;
         let mut mutual_rank_row = vec![0.0; gene_count];
         let mut hrr_row = vec![0; gene_count];
         let mut logit_score_row = vec![0.0; gene_count];
@@ -784,16 +784,16 @@ mod tests {
         fill_rank_score_cell(
             &ranks,
             gene_count,
-            0,
-            1,
+            2,
+            3,
             &mut mutual_rank_row,
             &mut hrr_row,
             &mut logit_score_row,
         );
 
-        assert!((mutual_rank_row[1] - 4.0).abs() < 1e-6);
-        assert_eq!(hrr_row[1], 8);
-        assert!((logit_score_row[1] - logit_score(4.0, gene_count) as f32).abs() < 1e-6);
+        assert!((mutual_rank_row[3] - 4.0).abs() < 1e-6);
+        assert_eq!(hrr_row[3], 8);
+        assert!((logit_score_row[3] - logit_score(4.0, gene_count) as f32).abs() < 1e-6);
     }
 
     #[test]
