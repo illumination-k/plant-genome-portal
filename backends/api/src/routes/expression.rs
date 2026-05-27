@@ -181,15 +181,7 @@ pub(crate) async fn clustergram(
         .iter()
         .map(|gene_id| state.service.gene(gene_id.as_str()))
         .collect::<Result<Vec<_>, _>>()?;
-    if genes
-        .iter()
-        .any(|gene_record| gene_record.gene.assembly_accession != accession)
-    {
-        return Err(ServiceError::InvalidRequest(
-            "all genes must belong to assemblyAccession".to_owned(),
-        )
-        .into());
-    }
+    ensure_clustergram_genes_belong_to_assembly(&genes, &accession)?;
 
     let samples = expression_samples_for_query(expression_repository, &accession, &query)?;
     let runs = samples
@@ -306,6 +298,22 @@ fn parse_csv_runs(value: &str) -> Result<Vec<SraRunAccession>, ApiError> {
         .collect()
 }
 
+fn ensure_clustergram_genes_belong_to_assembly(
+    genes: &[genome_core::GeneRecord],
+    accession: &AssemblyAccession,
+) -> Result<(), ApiError> {
+    if genes
+        .iter()
+        .any(|gene_record| gene_record.gene.assembly_accession != *accession)
+    {
+        return Err(ServiceError::InvalidRequest(
+            "all genes must belong to assemblyAccession".to_owned(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
 fn expression_samples_for_query(
     repository: &AppExpressionRepository,
     accession: &AssemblyAccession,
@@ -394,4 +402,179 @@ fn sample_sort_key(sample: &expression_core::Sample) -> (String, String, String)
 
 fn finite_or_zero(value: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use expression_core::{Sample, SampleIdentity, SampleMetadata};
+    use expression_store::ExpressionDataset;
+    use genome_core::{
+        AssemblyAccession, Gene, GeneRecord, HalfOpenRegion, Position0, SequenceName, Strand,
+    };
+    use std::collections::BTreeMap;
+
+    const ASSEMBLY: &str = "GCA_test";
+    const OTHER_ASSEMBLY: &str = "GCA_other";
+
+    fn accession(value: &str) -> AssemblyAccession {
+        AssemblyAccession::new(value).unwrap()
+    }
+
+    fn gene_id(value: &str) -> GeneId {
+        GeneId::new(value).unwrap()
+    }
+
+    fn run(value: &str) -> SraRunAccession {
+        SraRunAccession::new(value).unwrap()
+    }
+
+    fn sample(run_id: &str) -> Sample {
+        Sample {
+            identity: SampleIdentity {
+                run: run(run_id),
+                experiment: None,
+                study: None,
+                biosample: None,
+                bioproject: None,
+                assembly_accession: accession(ASSEMBLY),
+                title: None,
+                description: None,
+                library_strategy: None,
+                library_layout: None,
+                platform: None,
+                instrument_model: None,
+            },
+            metadata: SampleMetadata::default(),
+        }
+    }
+
+    fn repository(matrices: Vec<ExpressionMatrix>) -> AppExpressionRepository {
+        AppExpressionRepository::new(ExpressionDataset {
+            assembly_accession: accession(ASSEMBLY),
+            bioprojects: Vec::new(),
+            samples: vec![sample("SRR000001"), sample("SRR000002")],
+            matrices,
+        })
+        .unwrap()
+    }
+
+    fn gene_record(id: &str, assembly_accession: &str) -> GeneRecord {
+        GeneRecord {
+            gene: Gene {
+                id: gene_id(id),
+                assembly_accession: accession(assembly_accession),
+                symbol: None,
+                locus_tag: None,
+                sequence_name: SequenceName::new("chr1").unwrap(),
+                region: HalfOpenRegion::new(
+                    SequenceName::new("chr1").unwrap(),
+                    Position0::new(0),
+                    Position0::new(10),
+                )
+                .unwrap(),
+                strand: Strand::Forward,
+                feature_type: "gene".to_owned(),
+                annotations: Vec::new(),
+                attributes: BTreeMap::new(),
+            },
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+        }
+    }
+
+    fn query_with_runs(runs: Option<&str>) -> ExpressionClustergramQuery {
+        ExpressionClustergramQuery {
+            assembly_accession: ASSEMBLY.to_owned(),
+            gene_ids: "Mp1g00010".to_owned(),
+            unit: Some(ExpressionUnit::Tpm),
+            runs: runs.map(ToOwned::to_owned),
+            limit: None,
+            drop_missing_genes: None,
+        }
+    }
+
+    #[test]
+    fn csv_parsers_ignore_empty_items_after_trimming() {
+        assert_eq!(
+            parse_csv_gene_ids(" Mp1g00010, ,Mp1g00020, ").unwrap(),
+            vec![gene_id("Mp1g00010"), gene_id("Mp1g00020")]
+        );
+        assert_eq!(
+            parse_csv_runs(" SRR000001, ,SRR000002, ").unwrap(),
+            vec![run("SRR000001"), run("SRR000002")]
+        );
+    }
+
+    #[test]
+    fn clustergram_gene_assembly_validation_rejects_mismatches() {
+        let matching = vec![gene_record("Mp1g00010", ASSEMBLY)];
+        assert!(
+            ensure_clustergram_genes_belong_to_assembly(&matching, &accession(ASSEMBLY)).is_ok()
+        );
+
+        let mixed = vec![
+            gene_record("Mp1g00010", ASSEMBLY),
+            gene_record("Mp9g00010", OTHER_ASSEMBLY),
+        ];
+        assert!(matches!(
+            ensure_clustergram_genes_belong_to_assembly(&mixed, &accession(ASSEMBLY)),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    #[test]
+    fn expression_samples_for_query_selects_requested_runs_in_order() {
+        let repository = repository(Vec::new());
+        let samples = expression_samples_for_query(
+            &repository,
+            &accession(ASSEMBLY),
+            &query_with_runs(Some("SRR000002,SRR000001")),
+        )
+        .unwrap();
+
+        assert_eq!(
+            samples
+                .iter()
+                .map(|sample| sample.run())
+                .collect::<Vec<_>>(),
+            vec![&run("SRR000002"), &run("SRR000001")]
+        );
+    }
+
+    #[test]
+    fn expression_clustergram_matrix_requires_drop_missing_for_missing_matrix() {
+        let repository = repository(Vec::new());
+        let genes = vec![gene_record("Mp1g00010", ASSEMBLY)];
+        let gene_ids = vec![gene_id("Mp1g00010")];
+        let runs = vec![run("SRR000001")];
+
+        assert!(matches!(
+            expression_clustergram_matrix(
+                &repository,
+                &accession(ASSEMBLY),
+                gene_ids.clone(),
+                genes.clone(),
+                &runs,
+                ExpressionUnit::Tpm,
+                false,
+            ),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+        assert!(
+            expression_clustergram_matrix(
+                &repository,
+                &accession(ASSEMBLY),
+                gene_ids,
+                genes,
+                &runs,
+                ExpressionUnit::Tpm,
+                true,
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
 }

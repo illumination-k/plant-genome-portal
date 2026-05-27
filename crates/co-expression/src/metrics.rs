@@ -770,4 +770,53 @@ mod tests {
         assert_eq!(matrices.correlations().len(), 1);
         assert_eq!(matrices.edge_by_index(0, 0), None);
     }
+
+    #[test]
+    fn fill_rank_score_cell_uses_symmetric_dense_rank_offsets() {
+        let gene_count = 10;
+        let mut ranks = vec![0; gene_count * gene_count];
+        ranks[1] = 2;
+        ranks[10] = 8;
+        let mut mutual_rank_row = vec![0.0; gene_count];
+        let mut hrr_row = vec![0; gene_count];
+        let mut logit_score_row = vec![0.0; gene_count];
+
+        fill_rank_score_cell(
+            &ranks,
+            gene_count,
+            0,
+            1,
+            &mut mutual_rank_row,
+            &mut hrr_row,
+            &mut logit_score_row,
+        );
+
+        assert!((mutual_rank_row[1] - 4.0).abs() < 1e-6);
+        assert_eq!(hrr_row[1], 8);
+        assert!((logit_score_row[1] - logit_score(4.0, gene_count) as f32).abs() < 1e-6);
+    }
+
+    #[test]
+    fn fill_rank_score_cell_leaves_missing_direction_unscored() {
+        let gene_count = 10;
+        let mut ranks = vec![0; gene_count * gene_count];
+        ranks[1] = 2;
+        let mut mutual_rank_row = vec![99.0; gene_count];
+        let mut hrr_row = vec![99; gene_count];
+        let mut logit_score_row = vec![99.0; gene_count];
+
+        fill_rank_score_cell(
+            &ranks,
+            gene_count,
+            0,
+            1,
+            &mut mutual_rank_row,
+            &mut hrr_row,
+            &mut logit_score_row,
+        );
+
+        assert_eq!(mutual_rank_row[1], 99.0);
+        assert_eq!(hrr_row[1], 99);
+        assert_eq!(logit_score_row[1], 99.0);
+    }
 }

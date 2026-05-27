@@ -615,4 +615,55 @@ mod tests {
         assert_eq!(BlastMethod::Blastn.program_flag(), "--blastn");
         assert_eq!(BlastMethod::Blastp.program_flag(), "--blastp");
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn worker_dispatch_reports_non_zero_worker_status() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "plant-genome-portal-blast-worker-test-{}-{suffix}",
+            std::process::id()
+        ));
+        let work_dir = root.join("work");
+        fs::create_dir_all(&work_dir).unwrap();
+        let worker_bin = root.join("worker.sh");
+        fs::write(&worker_bin, "#!/bin/sh\necho worker failed >&2\nexit 7\n").unwrap();
+        let mut permissions = fs::metadata(&worker_bin).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&worker_bin, permissions).unwrap();
+
+        let command = BlastWorkerCommand {
+            worker_bin,
+            blast_db_prefix: root.join("blastdb"),
+            work_dir,
+            program: root.join("blastp"),
+            snapshot: None,
+            method: BlastMethod::Blastp,
+        };
+
+        let error = command
+            .dispatch(
+                "job1".to_owned(),
+                "homology.blastp".to_owned(),
+                BlastWorkerInput {
+                    assembly_accession: AssemblyAccession::new("GCA_test").unwrap(),
+                    query: "MVTAG".to_owned(),
+                    task: "blastp".to_owned(),
+                    evalue: 10.0,
+                    max_target_seqs: 50,
+                    snapshot: None,
+                },
+            )
+            .unwrap_err();
+
+        assert!(error.contains("worker exited with status Some(7)"));
+        assert!(error.contains("worker failed"));
+        fs::remove_dir_all(root).unwrap();
+    }
 }

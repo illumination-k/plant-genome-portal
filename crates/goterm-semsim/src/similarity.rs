@@ -214,10 +214,8 @@ where
     let mut best: Option<f64> = None;
     for a in set_a {
         for b in set_b {
-            if let Some(score) = pairwise(a, b)
-                && best.is_none_or(|current| score > current)
-            {
-                best = Some(score);
+            if let Some(score) = pairwise(a, b) {
+                best = Some(best.map_or(score, |current| current.max(score)));
             }
         }
     }
@@ -483,6 +481,25 @@ mod tests {
             SimilarityMethod::Resnik,
         );
         assert!(value.is_none());
+    }
+
+    #[test]
+    fn max_set_similarity_returns_highest_pairwise_score() {
+        let value = set_similarity(
+            &[id("GO:0000001"), id("GO:0000002")],
+            &[id("GO:0000003")],
+            SetAggregator::Max,
+            |left, _| {
+                if left == &id("GO:0000001") {
+                    Some(0.25)
+                } else {
+                    Some(0.75)
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(value, 0.75);
     }
 
     #[test]

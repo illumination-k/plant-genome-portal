@@ -90,9 +90,7 @@ pub(crate) async fn features(
     Path(accession): Path<String>,
     Query(query): Query<JBrowseFeaturesQuery>,
 ) -> Result<Json<Vec<JBrowseFeature>>, ApiError> {
-    if query.start >= query.end {
-        return Err(ServiceError::InvalidRequest("start must be less than end".to_owned()).into());
-    }
+    validate_feature_range(query.start, query.end)?;
 
     let region = format!("{}:{}-{}", query.ref_name, query.start + 1, query.end);
     let features = state
@@ -102,6 +100,13 @@ pub(crate) async fn features(
         .map(JBrowseFeature::from)
         .collect();
     Ok(Json(features))
+}
+
+fn validate_feature_range(start: u64, end: u64) -> Result<(), ApiError> {
+    if start >= end {
+        return Err(ServiceError::InvalidRequest("start must be less than end".to_owned()).into());
+    }
+    Ok(())
 }
 
 fn config_for_accession(
@@ -443,5 +448,18 @@ mod tests {
         assert_eq!(feature.start, 9);
         assert_eq!(feature.end, 20);
         assert_eq!(feature.strand, -1);
+    }
+
+    #[test]
+    fn feature_range_requires_start_before_end() {
+        assert!(validate_feature_range(0, 1).is_ok());
+        assert!(matches!(
+            validate_feature_range(1, 1),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+        assert!(matches!(
+            validate_feature_range(2, 1),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
     }
 }

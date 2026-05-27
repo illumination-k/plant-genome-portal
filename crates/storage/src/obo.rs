@@ -270,6 +270,32 @@ mod tests {
     }
 
     #[test]
+    fn ignores_non_part_of_relationships() {
+        let obo = "format-version: 1.2\n\
+            ontology: go\n\
+            \n\
+            [Term]\n\
+            id: GO:0008150\n\
+            name: biological_process\n\
+            namespace: biological_process\n\
+            \n\
+            [Term]\n\
+            id: GO:0009987\n\
+            name: cellular process\n\
+            namespace: biological_process\n\
+            relationship: regulates GO:0008150 ! biological_process\n";
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("go.obo");
+        std::fs::write(&path, obo).unwrap();
+
+        let ontology = load_go_ontology(&path).unwrap();
+        let cellular = ontology
+            .get(&GoTermId::new("GO:0009987").unwrap())
+            .expect("cellular process term");
+        assert!(cellular.part_of.is_empty());
+    }
+
+    #[test]
     fn is_empty_and_iter_reflect_loaded_terms() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("go.obo");

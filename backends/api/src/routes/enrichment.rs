@@ -408,3 +408,232 @@ fn enrichment_kind_rank(kind: EnrichmentAnnotationKind) -> u8 {
         EnrichmentAnnotationKind::NcbiFam => 5,
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use genome_core::{
+        AnnotationEvidence, AnnotationSource, Assembly, AssemblySource, GoTermAnnotation,
+        HalfOpenRegion, InterProAnnotation, InterProId, KeggAnnotation, KeggEntryId, KogAnnotation,
+        KogEntryId, NcbiFamAccession, NcbiFamAnnotation, PfamAccession, PfamAnnotation, Position0,
+        SequenceName, Strand, TaxId, Taxon,
+    };
+    use std::collections::BTreeMap;
+    use storage::FileGenomeRepository;
+
+    const ASSEMBLY: &str = "GCA_test";
+    const OTHER_ASSEMBLY: &str = "GCA_other";
+
+    fn accession(value: &str) -> AssemblyAccession {
+        AssemblyAccession::new(value).unwrap()
+    }
+
+    fn gene_id(value: &str) -> GeneId {
+        GeneId::new(value).unwrap()
+    }
+
+    fn evidence() -> AnnotationEvidence {
+        AnnotationEvidence::new(AnnotationSource::Manual)
+    }
+
+    fn gene(id: &str, assembly_accession: &str, annotations: Vec<FunctionalAnnotation>) -> Gene {
+        Gene {
+            id: gene_id(id),
+            assembly_accession: accession(assembly_accession),
+            symbol: Some(id.to_owned()),
+            locus_tag: None,
+            sequence_name: SequenceName::new("chr1").unwrap(),
+            region: HalfOpenRegion::new(
+                SequenceName::new("chr1").unwrap(),
+                Position0::new(0),
+                Position0::new(10),
+            )
+            .unwrap(),
+            strand: Strand::Forward,
+            feature_type: "gene".to_owned(),
+            annotations,
+            attributes: BTreeMap::new(),
+        }
+    }
+
+    fn service_with_genes(genes: Vec<Gene>) -> AppService {
+        let accession = accession(ASSEMBLY);
+        let dataset = genome_core::GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession,
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: Vec::new(),
+            genes,
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
+        };
+        service::GenomeService::new(FileGenomeRepository::new(dataset), None)
+    }
+
+    fn go_annotation(id: &str) -> FunctionalAnnotation {
+        FunctionalAnnotation::GoTerm(GoTermAnnotation {
+            term_id: genome_core::GoTermId::new(id).unwrap(),
+            name: Some(id.to_owned()),
+            namespace: Some(GoNamespace::BiologicalProcess),
+            evidence: evidence(),
+        })
+    }
+
+    fn all_annotation_kinds() -> Vec<(FunctionalAnnotation, EnrichmentAnnotationKind, &'static str)>
+    {
+        vec![
+            (
+                go_annotation("GO:0000001"),
+                EnrichmentAnnotationKind::GoTerm,
+                "GO:0000001",
+            ),
+            (
+                FunctionalAnnotation::Pfam(PfamAnnotation {
+                    accession: PfamAccession::new("PF00001").unwrap(),
+                    name: Some("pfam".to_owned()),
+                    interpro_id: None,
+                    evidence: evidence(),
+                }),
+                EnrichmentAnnotationKind::Pfam,
+                "PF00001",
+            ),
+            (
+                FunctionalAnnotation::InterPro(InterProAnnotation {
+                    interpro_id: InterProId::new("IPR000001").unwrap(),
+                    name: Some("interpro".to_owned()),
+                    evidence: evidence(),
+                }),
+                EnrichmentAnnotationKind::InterPro,
+                "IPR000001",
+            ),
+            (
+                FunctionalAnnotation::Kegg(KeggAnnotation::new(
+                    KeggEntryId::new("K00001").unwrap(),
+                    Some("kegg".to_owned()),
+                    evidence(),
+                )),
+                EnrichmentAnnotationKind::Kegg,
+                "K00001",
+            ),
+            (
+                FunctionalAnnotation::Kog(KogAnnotation {
+                    entry_id: KogEntryId::new("KOG0001").unwrap(),
+                    name: Some("kog".to_owned()),
+                    interpro_id: None,
+                    evidence: evidence(),
+                }),
+                EnrichmentAnnotationKind::Kog,
+                "KOG0001",
+            ),
+            (
+                FunctionalAnnotation::NcbiFam(NcbiFamAnnotation {
+                    accession: NcbiFamAccession::new("NF000001").unwrap(),
+                    name: Some("ncbifam".to_owned()),
+                    interpro_id: None,
+                    evidence: evidence(),
+                }),
+                EnrichmentAnnotationKind::NcbiFam,
+                "NF000001",
+            ),
+        ]
+    }
+
+    #[test]
+    fn default_annotation_kinds_includes_every_supported_kind() {
+        assert_eq!(
+            default_enrichment_annotation_kinds(),
+            vec![
+                EnrichmentAnnotationKind::GoTerm,
+                EnrichmentAnnotationKind::Pfam,
+                EnrichmentAnnotationKind::InterPro,
+                EnrichmentAnnotationKind::Kegg,
+                EnrichmentAnnotationKind::Kog,
+                EnrichmentAnnotationKind::NcbiFam,
+            ]
+        );
+    }
+
+    #[test]
+    fn valid_enrichment_request_accepts_non_zero_limits() {
+        let genes = vec![
+            gene("Mp1g00010", ASSEMBLY, vec![go_annotation("GO:0000001")]),
+            gene("Mp1g00020", ASSEMBLY, vec![go_annotation("GO:0000001")]),
+        ];
+        let service = service_with_genes(genes);
+        let response = run_functional_enrichment(
+            &service,
+            EnrichmentAnalysisRequest {
+                assembly_accession: ASSEMBLY.to_owned(),
+                gene_ids: vec!["Mp1g00010".to_owned()],
+                background_gene_ids: Some(vec!["Mp1g00010".to_owned(), "Mp1g00020".to_owned()]),
+                annotation_kinds: Some(vec![EnrichmentAnnotationKind::GoTerm]),
+                min_population_hits: Some(1),
+                limit: Some(1),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.study_size, 1);
+        assert_eq!(response.population_size, 2);
+        assert_eq!(response.tested_terms, 1);
+        assert!(response.results.len() <= 1);
+    }
+
+    #[test]
+    fn ensure_genes_belong_to_assembly_rejects_mixed_assemblies() {
+        let genes = vec![
+            gene("Mp1g00010", ASSEMBLY, Vec::new()),
+            gene("Mp9g00010", OTHER_ASSEMBLY, Vec::new()),
+        ];
+
+        assert!(ensure_genes_belong_to_assembly(&genes[..1], ASSEMBLY, "geneIds").is_ok());
+        assert!(matches!(
+            ensure_genes_belong_to_assembly(&genes, ASSEMBLY, "geneIds"),
+            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
+        ));
+    }
+
+    #[test]
+    fn genes_for_assembly_uses_unbounded_search_and_filters_assembly() {
+        let mut genes = (0..55)
+            .map(|index| gene(&format!("Mp1g{index:05}"), ASSEMBLY, Vec::new()))
+            .collect::<Vec<_>>();
+        genes.push(gene("Mp9g00001", OTHER_ASSEMBLY, Vec::new()));
+        let service = service_with_genes(genes);
+
+        let result = genes_for_assembly(&service, ASSEMBLY);
+
+        assert_eq!(result.len(), 55);
+        assert!(
+            result
+                .iter()
+                .all(|gene| gene.assembly_accession.as_str() == ASSEMBLY)
+        );
+    }
+
+    #[test]
+    fn enrichment_terms_respect_selected_annotation_kinds() {
+        for (annotation, kind, expected_id) in all_annotation_kinds() {
+            let selected = HashSet::from([kind]);
+            let term = enrichment_term_for_annotation(&annotation, &selected).unwrap();
+            assert_eq!(term.kind, kind);
+            assert_eq!(term.id, expected_id);
+
+            let unselected = enrichment_term_for_annotation(&annotation, &HashSet::new());
+            assert!(unselected.is_none());
+        }
+    }
+}
