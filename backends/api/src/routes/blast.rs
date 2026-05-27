@@ -16,9 +16,8 @@ use utoipa::ToSchema;
 
 use crate::{ApiError, AppState};
 
-pub(crate) type BlastJobManager = InMemoryJobManager<BlastnJobInput, AnnotatedHomologySearchResult>;
-pub(crate) type BlastpJobManager =
-    InMemoryJobManager<BlastpJobInput, AnnotatedHomologySearchResult>;
+pub(crate) type BlastJobManager = InMemoryJobManager<BlastJobInput, AnnotatedHomologySearchResult>;
+pub(crate) type BlastpJobManager = InMemoryJobManager<BlastJobInput, AnnotatedHomologySearchResult>;
 
 #[utoipa::path(
     post,
@@ -117,9 +116,9 @@ pub(crate) struct BlastnJobRequest {
 }
 
 impl BlastnJobRequest {
-    fn into_job_input(self) -> Result<BlastnJobInput, ApiError> {
+    fn into_job_input(self) -> Result<BlastJobInput, ApiError> {
         let request = ValidatedBlastJobRequest::new(self.into(), "blastn", validate_blastn_task)?;
-        Ok(BlastnJobInput::from(request))
+        Ok(BlastJobInput::from(request))
     }
 }
 
@@ -134,9 +133,9 @@ pub(crate) struct BlastpJobRequest {
 }
 
 impl BlastpJobRequest {
-    fn into_job_input(self) -> Result<BlastpJobInput, ApiError> {
+    fn into_job_input(self) -> Result<BlastJobInput, ApiError> {
         let request = ValidatedBlastJobRequest::new(self.into(), "blastp", validate_blastp_task)?;
-        Ok(BlastpJobInput::from(request))
+        Ok(BlastJobInput::from(request))
     }
 }
 
@@ -148,27 +147,45 @@ struct RawBlastJobRequest {
     max_target_seqs: Option<usize>,
 }
 
+impl RawBlastJobRequest {
+    fn new(
+        assembly_accession: String,
+        query: String,
+        task: Option<String>,
+        evalue: Option<f64>,
+        max_target_seqs: Option<usize>,
+    ) -> Self {
+        Self {
+            assembly_accession,
+            query,
+            task,
+            evalue,
+            max_target_seqs,
+        }
+    }
+}
+
 impl From<BlastnJobRequest> for RawBlastJobRequest {
     fn from(request: BlastnJobRequest) -> Self {
-        Self {
-            assembly_accession: request.assembly_accession,
-            query: request.query,
-            task: request.task,
-            evalue: request.evalue,
-            max_target_seqs: request.max_target_seqs,
-        }
+        Self::new(
+            request.assembly_accession,
+            request.query,
+            request.task,
+            request.evalue,
+            request.max_target_seqs,
+        )
     }
 }
 
 impl From<BlastpJobRequest> for RawBlastJobRequest {
     fn from(request: BlastpJobRequest) -> Self {
-        Self {
-            assembly_accession: request.assembly_accession,
-            query: request.query,
-            task: request.task,
-            evalue: request.evalue,
-            max_target_seqs: request.max_target_seqs,
-        }
+        Self::new(
+            request.assembly_accession,
+            request.query,
+            request.task,
+            request.evalue,
+            request.max_target_seqs,
+        )
     }
 }
 
@@ -276,7 +293,7 @@ fn validate_blastp_task(task: &str) -> Result<(), ApiError> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BlastnJobInput {
+pub(crate) struct BlastJobInput {
     assembly_accession: AssemblyAccession,
     query: String,
     task: String,
@@ -284,29 +301,7 @@ pub(crate) struct BlastnJobInput {
     max_target_seqs: usize,
 }
 
-impl From<ValidatedBlastJobRequest> for BlastnJobInput {
-    fn from(request: ValidatedBlastJobRequest) -> Self {
-        Self {
-            assembly_accession: request.assembly_accession,
-            query: request.query,
-            task: request.task,
-            evalue: request.evalue,
-            max_target_seqs: request.max_target_seqs,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct BlastpJobInput {
-    assembly_accession: AssemblyAccession,
-    query: String,
-    task: String,
-    evalue: f64,
-    max_target_seqs: usize,
-}
-
-impl From<ValidatedBlastJobRequest> for BlastpJobInput {
+impl From<ValidatedBlastJobRequest> for BlastJobInput {
     fn from(request: ValidatedBlastJobRequest) -> Self {
         Self {
             assembly_accession: request.assembly_accession,
@@ -403,30 +398,10 @@ impl BlastWorkerCommand {
     }
 }
 
-impl JobExecutor<BlastnJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
+impl JobExecutor<BlastJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
     fn execute(
         &self,
-        job: WorkerJob<BlastnJobInput>,
-    ) -> Result<AnnotatedHomologySearchResult, String> {
-        self.dispatch(
-            job.id,
-            job.kind,
-            BlastWorkerInput {
-                assembly_accession: job.payload.assembly_accession,
-                query: job.payload.query,
-                task: job.payload.task,
-                evalue: job.payload.evalue,
-                max_target_seqs: job.payload.max_target_seqs,
-                snapshot: self.snapshot.clone(),
-            },
-        )
-    }
-}
-
-impl JobExecutor<BlastpJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
-    fn execute(
-        &self,
-        job: WorkerJob<BlastpJobInput>,
+        job: WorkerJob<BlastJobInput>,
     ) -> Result<AnnotatedHomologySearchResult, String> {
         self.dispatch(
             job.id,
