@@ -16,6 +16,7 @@ use service::ServiceError;
 #[utoipa::path(
     get,
     path = "/jbrowse/config",
+    operation_id = "jbrowse_default_config",
     params(JBrowseConfigQuery),
     responses(
         (status = 200, description = "Default JBrowse launch config", body = JBrowseRootConfig),
@@ -41,6 +42,7 @@ pub(crate) async fn default_config(
 #[utoipa::path(
     get,
     path = "/jbrowse/config/{accession}",
+    operation_id = "jbrowse_config",
     params(
         ("accession" = String, Path, description = "Assembly accession"),
         JBrowseConfigQuery,
@@ -69,6 +71,7 @@ pub(crate) async fn config(
 #[utoipa::path(
     get,
     path = "/jbrowse/assemblies/{accession}/chrom.sizes",
+    operation_id = "jbrowse_chrom_sizes",
     params(("accession" = String, Path, description = "Assembly accession")),
     responses(
         (status = 200, description = "UCSC chrom.sizes compatible sequence sizes", content_type = "text/plain", body = String),
@@ -90,6 +93,7 @@ pub(crate) async fn chrom_sizes(
 #[utoipa::path(
     get,
     path = "/jbrowse/assemblies/{accession}/features",
+    operation_id = "jbrowse_features",
     params(
         ("accession" = String, Path, description = "Assembly accession"),
         JBrowseFeaturesQuery,

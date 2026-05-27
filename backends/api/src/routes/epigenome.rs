@@ -151,6 +151,7 @@ pub(crate) struct PublicRegion {
 #[utoipa::path(
     get,
     path = "/v2/epigenome/experiments",
+    operation_id = "epigenome_experiments",
     params(ExperimentListQuery),
     responses(
         (status = 200, description = "Epigenome experiments matching the filters", body = Vec<EpigenomeExperimentSummary>),
@@ -192,6 +193,7 @@ pub(crate) async fn experiments(
 #[utoipa::path(
     get,
     path = "/v2/epigenome/experiment/{experiment_id}",
+    operation_id = "epigenome_experiment",
     params(("experiment_id" = String, Path, description = "Portal-local experiment id")),
     responses(
         (status = 200, description = "Experiment metadata + QC + signal URL", body = EpigenomeExperimentDetail),
@@ -226,6 +228,7 @@ pub(crate) async fn experiment(
 #[utoipa::path(
     get,
     path = "/v2/epigenome/peaks",
+    operation_id = "epigenome_peaks",
     params(EpigenomePeaksQuery),
     responses(
         (status = 200, description = "Peaks overlapping the region", body = Vec<EpigenomePeakHit>),
@@ -264,6 +267,7 @@ pub(crate) async fn peaks(
 #[utoipa::path(
     get,
     path = "/v2/gene/id/{gene_id}/epigenome",
+    operation_id = "gene_epigenome",
     params(
         ("gene_id" = String, Path, description = "Gene identifier"),
         GeneEpigenomeQuery,

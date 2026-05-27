@@ -11,6 +11,7 @@ use crate::{ApiError, AppService, AppState};
 #[utoipa::path(
     post,
     path = "/v2/analysis/enrichment",
+    operation_id = "enrichment_analysis",
     request_body = EnrichmentAnalysisRequest,
     responses(
         (status = 200, description = "Functional annotation over-representation analysis", body = EnrichmentAnalysisResponse),
