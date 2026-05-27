@@ -130,38 +130,36 @@ fn parse_term_frame(term_frame: &TermFrame) -> Option<GoTerm> {
     };
 
     for clause in term_frame.iter() {
-        match clause.as_inner() {
-            TermClause::Name(name) => {
-                go_term.name = Some(name.as_str().to_owned());
-            }
-            TermClause::Namespace(namespace) => {
-                go_term.namespace = parse_go_namespace(&namespace.to_string());
-            }
-            TermClause::IsA(parent) => {
-                if let Some(parent_id) = parse_go_term_id(&parent.to_string()) {
-                    go_term.is_a.push(parent_id);
-                }
-            }
-            TermClause::Relationship(rel, target) => {
-                if rel.to_string() == "part_of"
-                    && let Some(target_id) = parse_go_term_id(&target.to_string())
-                {
-                    go_term.part_of.push(target_id);
-                }
-            }
-            TermClause::AltId(alt) => {
-                if let Some(alt_id) = parse_go_term_id(&alt.to_string()) {
-                    go_term.alt_ids.push(alt_id);
-                }
-            }
-            TermClause::IsObsolete(flag) => {
-                go_term.is_obsolete = *flag;
-            }
-            _ => {}
-        }
+        apply_term_clause(&mut go_term, clause.as_inner());
     }
 
     Some(go_term)
+}
+
+fn apply_term_clause(go_term: &mut GoTerm, clause: &TermClause) {
+    match clause {
+        TermClause::Name(name) => {
+            go_term.name = Some(name.as_str().to_owned());
+        }
+        TermClause::Namespace(namespace) => {
+            go_term.namespace = parse_go_namespace(&namespace.to_string());
+        }
+        TermClause::IsA(parent) => push_go_id(&mut go_term.is_a, &parent.to_string()),
+        TermClause::Relationship(rel, target) if rel.to_string() == "part_of" => {
+            push_go_id(&mut go_term.part_of, &target.to_string());
+        }
+        TermClause::AltId(alt) => push_go_id(&mut go_term.alt_ids, &alt.to_string()),
+        TermClause::IsObsolete(flag) => {
+            go_term.is_obsolete = *flag;
+        }
+        _ => {}
+    }
+}
+
+fn push_go_id(values: &mut Vec<GoTermId>, value: &str) {
+    if let Some(id) = parse_go_term_id(value) {
+        values.push(id);
+    }
 }
 
 fn parse_go_term_id(value: &str) -> Option<GoTermId> {
@@ -269,6 +267,32 @@ mod tests {
             metabolic.part_of,
             vec![GoTermId::new("GO:0008150").unwrap()]
         );
+    }
+
+    #[test]
+    fn ignores_non_part_of_relationships() {
+        let obo = "format-version: 1.2\n\
+            ontology: go\n\
+            \n\
+            [Term]\n\
+            id: GO:0008150\n\
+            name: biological_process\n\
+            namespace: biological_process\n\
+            \n\
+            [Term]\n\
+            id: GO:0009987\n\
+            name: cellular process\n\
+            namespace: biological_process\n\
+            relationship: regulates GO:0008150 ! biological_process\n";
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("go.obo");
+        std::fs::write(&path, obo).unwrap();
+
+        let ontology = load_go_ontology(&path).unwrap();
+        let cellular = ontology
+            .get(&GoTermId::new("GO:0009987").unwrap())
+            .expect("cellular process term");
+        assert!(cellular.part_of.is_empty());
     }
 
     #[test]

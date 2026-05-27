@@ -61,18 +61,9 @@ pub(crate) fn build_kegg_catalog(
         })?;
     }
 
-    let referenced_pathways: BTreeSet<KeggPathwayId> = ko_pathways
-        .values()
-        .flat_map(|set| set.iter().cloned())
-        .collect();
-    let referenced_modules: BTreeSet<KeggModuleId> = ko_modules
-        .values()
-        .flat_map(|set| set.iter().cloned())
-        .collect();
-    let referenced_reactions: BTreeSet<KeggReactionId> = ko_reactions
-        .values()
-        .flat_map(|set| set.iter().cloned())
-        .collect();
+    let referenced_pathways = referenced_ids(&ko_pathways);
+    let referenced_modules = referenced_ids(&ko_modules);
+    let referenced_reactions = referenced_ids(&ko_reactions);
 
     let pathway_names = input
         .list_pathway
@@ -90,31 +81,63 @@ pub(crate) fn build_kegg_catalog(
         .transpose()?
         .unwrap_or_default();
 
-    let pathways = referenced_pathways
-        .into_iter()
-        .map(|id| {
-            let name = pathway_names.get(&id).cloned();
-            KeggPathway { id, name }
-        })
-        .collect();
-    let modules = referenced_modules
-        .into_iter()
-        .map(|id| {
-            let name = module_names.get(&id).cloned();
-            KeggModule { id, name }
-        })
-        .collect();
-    let reactions = referenced_reactions
-        .into_iter()
-        .map(|id| {
-            let name = reaction_names.get(&id).cloned();
-            KeggReaction { id, name }
-        })
-        .collect();
+    Ok(KeggCatalog {
+        pathways: named_pathways(referenced_pathways, &pathway_names),
+        modules: named_modules(referenced_modules, &module_names),
+        reactions: named_reactions(referenced_reactions, &reaction_names),
+        ko_links: build_ko_links(kos_in_dataset, &ko_pathways, &ko_modules, &ko_reactions),
+    })
+}
 
-    let mut ko_links_by_ko: BTreeMap<KeggEntryId, KeggKoLinks> = BTreeMap::new();
-    for ko in kos_in_dataset {
-        let entry = ko_links_by_ko.entry(ko.clone()).or_insert(KeggKoLinks {
+fn referenced_ids<T: Ord + Clone>(links: &BTreeMap<KeggEntryId, BTreeSet<T>>) -> BTreeSet<T> {
+    links.values().flat_map(|set| set.iter().cloned()).collect()
+}
+
+fn named_pathways(
+    ids: BTreeSet<KeggPathwayId>,
+    names: &BTreeMap<KeggPathwayId, String>,
+) -> Vec<KeggPathway> {
+    ids.into_iter()
+        .map(|id| KeggPathway {
+            name: names.get(&id).cloned(),
+            id,
+        })
+        .collect()
+}
+
+fn named_modules(
+    ids: BTreeSet<KeggModuleId>,
+    names: &BTreeMap<KeggModuleId, String>,
+) -> Vec<KeggModule> {
+    ids.into_iter()
+        .map(|id| KeggModule {
+            name: names.get(&id).cloned(),
+            id,
+        })
+        .collect()
+}
+
+fn named_reactions(
+    ids: BTreeSet<KeggReactionId>,
+    names: &BTreeMap<KeggReactionId, String>,
+) -> Vec<KeggReaction> {
+    ids.into_iter()
+        .map(|id| KeggReaction {
+            name: names.get(&id).cloned(),
+            id,
+        })
+        .collect()
+}
+
+fn build_ko_links(
+    kos: HashSet<KeggEntryId>,
+    ko_pathways: &BTreeMap<KeggEntryId, BTreeSet<KeggPathwayId>>,
+    ko_modules: &BTreeMap<KeggEntryId, BTreeSet<KeggModuleId>>,
+    ko_reactions: &BTreeMap<KeggEntryId, BTreeSet<KeggReactionId>>,
+) -> Vec<KeggKoLinks> {
+    let mut links_by_ko: BTreeMap<KeggEntryId, KeggKoLinks> = BTreeMap::new();
+    for ko in kos {
+        let entry = links_by_ko.entry(ko.clone()).or_insert(KeggKoLinks {
             ko: ko.clone(),
             pathways: Vec::new(),
             modules: Vec::new(),
@@ -130,19 +153,12 @@ pub(crate) fn build_kegg_catalog(
             entry.reactions = reactions.iter().cloned().collect();
         }
     }
-    let ko_links = ko_links_by_ko
+    links_by_ko
         .into_values()
         .filter(|links| {
             !(links.pathways.is_empty() && links.modules.is_empty() && links.reactions.is_empty())
         })
-        .collect();
-
-    Ok(KeggCatalog {
-        pathways,
-        modules,
-        reactions,
-        ko_links,
-    })
+        .collect()
 }
 
 fn collect_dataset_kos(parsed: &ParsedGff) -> HashSet<KeggEntryId> {

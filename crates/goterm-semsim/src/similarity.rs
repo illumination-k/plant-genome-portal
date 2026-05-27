@@ -188,7 +188,7 @@ pub fn set_similarity<F>(
     set_a: &[GoTermId],
     set_b: &[GoTermId],
     aggregator: SetAggregator,
-    mut pairwise: F,
+    pairwise: F,
 ) -> Option<f64>
 where
     F: FnMut(&GoTermId, &GoTermId) -> Option<f64>,
@@ -197,45 +197,70 @@ where
         return None;
     }
     match aggregator {
-        SetAggregator::Max => {
-            let mut best: Option<f64> = None;
-            for a in set_a {
-                for b in set_b {
-                    if let Some(score) = pairwise(a, b)
-                        && best.is_none_or(|current| score > current)
-                    {
-                        best = Some(score);
-                    }
-                }
-            }
-            best
-        }
-        SetAggregator::Average => {
-            let mut sum = 0.0;
-            let mut count: u64 = 0;
-            for a in set_a {
-                for b in set_b {
-                    if let Some(score) = pairwise(a, b) {
-                        sum += score;
-                        count += 1;
-                    }
-                }
-            }
-            if count == 0 {
-                None
-            } else {
-                Some(sum / count as f64)
+        SetAggregator::Max => max_pairwise_similarity(set_a, set_b, pairwise),
+        SetAggregator::Average => average_pairwise_similarity(set_a, set_b, pairwise),
+        SetAggregator::BestMatchAverage => best_match_average_similarity(set_a, set_b, pairwise),
+    }
+}
+
+fn max_pairwise_similarity<F>(
+    set_a: &[GoTermId],
+    set_b: &[GoTermId],
+    mut pairwise: F,
+) -> Option<f64>
+where
+    F: FnMut(&GoTermId, &GoTermId) -> Option<f64>,
+{
+    let mut best: Option<f64> = None;
+    for a in set_a {
+        for b in set_b {
+            if let Some(score) = pairwise(a, b) {
+                best = Some(best.map_or(score, |current| current.max(score)));
             }
         }
-        SetAggregator::BestMatchAverage => {
-            let avg_a = best_match_average(set_a, set_b, &mut pairwise);
-            let avg_b = best_match_average(set_b, set_a, &mut |b, a| pairwise(a, b));
-            match (avg_a, avg_b) {
-                (Some(x), Some(y)) => Some((x + y) / 2.0),
-                (Some(x), None) | (None, Some(x)) => Some(x),
-                (None, None) => None,
+    }
+    best
+}
+
+fn average_pairwise_similarity<F>(
+    set_a: &[GoTermId],
+    set_b: &[GoTermId],
+    mut pairwise: F,
+) -> Option<f64>
+where
+    F: FnMut(&GoTermId, &GoTermId) -> Option<f64>,
+{
+    let mut sum = 0.0;
+    let mut count: u64 = 0;
+    for a in set_a {
+        for b in set_b {
+            if let Some(score) = pairwise(a, b) {
+                sum += score;
+                count += 1;
             }
         }
+    }
+    if count == 0 {
+        None
+    } else {
+        Some(sum / count as f64)
+    }
+}
+
+fn best_match_average_similarity<F>(
+    set_a: &[GoTermId],
+    set_b: &[GoTermId],
+    mut pairwise: F,
+) -> Option<f64>
+where
+    F: FnMut(&GoTermId, &GoTermId) -> Option<f64>,
+{
+    let avg_a = best_match_average(set_a, set_b, &mut pairwise);
+    let avg_b = best_match_average(set_b, set_a, &mut |b, a| pairwise(a, b));
+    match (avg_a, avg_b) {
+        (Some(x), Some(y)) => Some((x + y) / 2.0),
+        (Some(x), None) | (None, Some(x)) => Some(x),
+        (None, None) => None,
     }
 }
 
@@ -456,6 +481,25 @@ mod tests {
             SimilarityMethod::Resnik,
         );
         assert!(value.is_none());
+    }
+
+    #[test]
+    fn max_set_similarity_returns_highest_pairwise_score() {
+        let value = set_similarity(
+            &[id("GO:0000001"), id("GO:0000002")],
+            &[id("GO:0000003")],
+            SetAggregator::Max,
+            |left, _| {
+                if left == &id("GO:0000001") {
+                    Some(0.25)
+                } else {
+                    Some(0.75)
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(value, 0.75);
     }
 
     #[test]

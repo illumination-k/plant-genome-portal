@@ -205,43 +205,74 @@ impl Display for TaxId {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn go_term_id_requires_canonical_accession() {
-        let id = GoTermId::new("GO:0008150").unwrap();
-        assert_eq!(id.as_str(), "GO:0008150");
-        assert_eq!(id.to_string(), "GO:0008150");
-        assert_eq!(id.clone().into_string(), "GO:0008150");
-        assert!(GoTermId::new("0008150").is_err());
-        assert!(GoTermId::new("GO:8150").is_err());
-        assert!(GoTermId::new("GO:abcdefg").is_err());
+    #[derive(Clone, Copy, Debug)]
+    enum ControlledKind {
+        GoTerm,
+        InterPro,
+        Pfam,
     }
 
-    #[test]
-    fn interpro_id_requires_canonical_identifier() {
-        let id = InterProId::new("IPR000001").unwrap();
-        assert_eq!(id.as_str(), "IPR000001");
-        assert_eq!(id.to_string(), "IPR000001");
-        assert_eq!(id.clone().into_string(), "IPR000001");
-        assert!(InterProId::new("PF00001").is_err());
-        // Right prefix, wrong digit-only-tail: catches && -> || in is_interpro_id.
-        assert!(InterProId::new("IPRabcdef").is_err());
-        // Right prefix, wrong length: catches len-check mutations.
-        assert!(InterProId::new("IPR0000001").is_err());
+    macro_rules! assert_accepts_identifier {
+        ($kind:expr, $value:expr) => {
+            match $kind {
+                ControlledKind::GoTerm => {
+                    let value = $value;
+                    let id = GoTermId::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+                ControlledKind::InterPro => {
+                    let value = $value;
+                    let id = InterProId::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+                ControlledKind::Pfam => {
+                    let value = $value;
+                    let id = PfamAccession::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+            }
+        };
     }
 
-    #[test]
-    fn pfam_accession_requires_canonical_identifier() {
-        let acc = PfamAccession::new("PF00001").unwrap();
-        assert_eq!(acc.as_str(), "PF00001");
-        assert_eq!(acc.to_string(), "PF00001");
-        assert_eq!(acc.clone().into_string(), "PF00001");
-        // Wrong prefix: catches `is_pfam_accession -> true` mutation.
-        assert!(PfamAccession::new("XX00001").is_err());
-        // Right prefix, non-digit tail: catches && -> || in is_pfam_accession.
-        assert!(PfamAccession::new("PFabcde").is_err());
-        // Right prefix, wrong length: catches len-check mutations.
-        assert!(PfamAccession::new("PF000001").is_err());
+    macro_rules! assert_rejects_identifier {
+        ($kind:expr, $value:expr) => {
+            let is_err = match $kind {
+                ControlledKind::GoTerm => GoTermId::new($value).is_err(),
+                ControlledKind::InterPro => InterProId::new($value).is_err(),
+                ControlledKind::Pfam => PfamAccession::new($value).is_err(),
+            };
+            assert!(is_err, "{:?} accepted invalid value {:?}", $kind, $value);
+        };
+    }
+
+    #[rstest]
+    #[case::go_term(ControlledKind::GoTerm, "GO:0008150")]
+    #[case::interpro(ControlledKind::InterPro, "IPR000001")]
+    #[case::pfam(ControlledKind::Pfam, "PF00001")]
+    fn controlled_ids_accept(#[case] kind: ControlledKind, #[case] value: &str) {
+        assert_accepts_identifier!(kind, value);
+    }
+
+    #[rstest]
+    #[case::go_term_missing_prefix(ControlledKind::GoTerm, "0008150")]
+    #[case::go_term_short_digits(ControlledKind::GoTerm, "GO:8150")]
+    #[case::go_term_non_digits(ControlledKind::GoTerm, "GO:abcdefg")]
+    #[case::interpro_wrong_prefix(ControlledKind::InterPro, "PF00001")]
+    #[case::interpro_non_digits(ControlledKind::InterPro, "IPRabcdef")]
+    #[case::interpro_wrong_length(ControlledKind::InterPro, "IPR0000001")]
+    #[case::pfam_wrong_prefix(ControlledKind::Pfam, "XX00001")]
+    #[case::pfam_non_digits(ControlledKind::Pfam, "PFabcde")]
+    #[case::pfam_wrong_length(ControlledKind::Pfam, "PF000001")]
+    fn controlled_ids_reject(#[case] kind: ControlledKind, #[case] value: &str) {
+        assert_rejects_identifier!(kind, value);
     }
 
     #[test]

@@ -1,55 +1,41 @@
 mod protein;
 mod refget;
+mod routes;
 mod sequence;
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
-    http::{StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use clap::{Parser, Subcommand};
-use co_expression::{
-    ClusterDendrogram, cluster_dendrogram_columns, cluster_dendrogram_rows, row_z_scores,
-};
-use enrichment_core::{EnrichmentInput, EnrichmentOptions, run_enrichment};
-use expression_core::{ExpressionQuery, ExpressionRepository, ExpressionUnit, SraRunAccession};
 use expression_store::FileExpressionRepository;
-use genome_core::{
-    AssemblyAccession, FunctionalAnnotation, Gene, GeneId, GeneSearch, GoNamespace, Sequence,
-    Strand, TaxId,
-};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use routes::blast::{BlastJobManager, BlastMethod, BlastWorkerCommand, BlastpJobManager};
+use serde::Serialize;
 use service::{
-    AnnotatedHomologySearchResult, GeneKeggOrthologyEntry, GeneKeggView, GenomeService,
-    InMemoryJobManager, JobExecutor, JobManager, JobManagerError, JobRecord, JobStatus,
-    KeggGeneSummary, KeggPathwayDetail, KeggPathwayKoEntry, KeggPathwaySummary, ServiceError,
-    WorkerJob,
+    GeneKeggOrthologyEntry, GeneKeggView, GenomeService, JobManagerError, KeggGeneSummary,
+    KeggPathwayDetail, KeggPathwayKoEntry, KeggPathwaySummary, ServiceError,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
-use std::process::{Command as ProcessCommand, Stdio};
 use storage::{FastaReference, FileGenomeRepository};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{OpenApi, ToSchema};
 
-type AppService = GenomeService<FileGenomeRepository>;
-type AppExpressionRepository = FileExpressionRepository;
-type BlastJobManager = InMemoryJobManager<BlastnJobInput, AnnotatedHomologySearchResult>;
-type BlastpJobManager = InMemoryJobManager<BlastpJobInput, AnnotatedHomologySearchResult>;
+pub(crate) type AppService = GenomeService<FileGenomeRepository>;
+pub(crate) type AppExpressionRepository = FileExpressionRepository;
 
 #[derive(Clone)]
-struct AppState {
-    service: AppService,
-    expression_repository: Option<AppExpressionRepository>,
-    default_assembly_accession: String,
-    blast_jobs: Option<BlastJobManager>,
-    blastp_jobs: Option<BlastpJobManager>,
+pub(crate) struct AppState {
+    pub(crate) service: AppService,
+    pub(crate) expression_repository: Option<AppExpressionRepository>,
+    pub(crate) default_assembly_accession: String,
+    pub(crate) blast_jobs: Option<BlastJobManager>,
+    pub(crate) blastp_jobs: Option<BlastpJobManager>,
 }
 
 #[tokio::main]
@@ -89,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(FileExpressionRepository::from_snapshot_path)
         .transpose()?;
     let blast_jobs = config.blast_db_prefix.clone().map(|blast_db_prefix| {
-        InMemoryJobManager::new(BlastWorkerCommand {
+        routes::blast::BlastJobManager::new(BlastWorkerCommand {
             worker_bin: config.blast_worker_bin.clone(),
             blast_db_prefix,
             work_dir: config.blast_work_dir.clone(),
@@ -99,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     });
     let blastp_jobs = config.blastp_db_prefix.clone().map(|blast_db_prefix| {
-        InMemoryJobManager::new(BlastWorkerCommand {
+        routes::blast::BlastpJobManager::new(BlastWorkerCommand {
             worker_bin: config.blast_worker_bin.clone(),
             blast_db_prefix,
             work_dir: config.blast_work_dir.clone(),
@@ -164,45 +150,72 @@ fn router(
     Router::new()
         .route("/health", get(health))
         .route("/openapi.json", get(openapi_json))
-        .route("/jbrowse/config", get(jbrowse_default_config))
-        .route("/jbrowse/config/{accession}", get(jbrowse_config))
+        .route("/jbrowse/config", get(routes::jbrowse::default_config))
+        .route("/jbrowse/config/{accession}", get(routes::jbrowse::config))
         .route(
             "/jbrowse/assemblies/{accession}/chrom.sizes",
-            get(jbrowse_chrom_sizes),
+            get(routes::jbrowse::chrom_sizes),
         )
         .route(
             "/jbrowse/assemblies/{accession}/features",
-            get(jbrowse_features),
+            get(routes::jbrowse::features),
         )
-        .route("/v2/genome/accession/{accession}", get(assembly))
+        .route(
+            "/v2/genome/accession/{accession}",
+            get(routes::genome::assembly),
+        )
         .route(
             "/v2/genome/accession/{accession}/sequences",
-            get(assembly_sequences),
+            get(routes::genome::assembly_sequences),
         )
-        .route("/v2/genome/taxon/{tax_id}", get(taxon))
-        .route("/v2/gene/id/{gene_id}", get(gene))
-        .route("/v2/gene/id/{gene_id}/kegg", get(gene_kegg))
-        .route("/v2/kegg/pathways", get(kegg_pathways))
-        .route("/v2/kegg/pathway/{pathway_id}", get(kegg_pathway))
-        .route("/v2/gene/id/{gene_id}/expression", get(gene_expression))
-        .route("/v2/expression/clustergram", get(expression_clustergram))
-        .route("/v2/analysis/enrichment", post(enrichment_analysis))
-        .route("/v2/gene/search", get(gene_search))
+        .route("/v2/genome/taxon/{tax_id}", get(routes::genome::taxon))
+        .route("/v2/gene/id/{gene_id}", get(routes::gene::gene))
+        .route("/v2/gene/id/{gene_id}/kegg", get(routes::gene::gene_kegg))
+        .route("/v2/kegg/pathways", get(routes::gene::kegg_pathways))
+        .route(
+            "/v2/kegg/pathway/{pathway_id}",
+            get(routes::gene::kegg_pathway),
+        )
+        .route(
+            "/v2/gene/id/{gene_id}/expression",
+            get(routes::expression::gene_expression),
+        )
+        .route(
+            "/v2/expression/clustergram",
+            get(routes::expression::clustergram),
+        )
+        .route(
+            "/v2/analysis/enrichment",
+            post(routes::enrichment::analysis),
+        )
+        .route("/v2/gene/search", get(routes::gene::gene_search))
         .route(
             "/v2/transcript/id/{transcript_id}/protein",
             get(protein::sequence),
         )
-        .route("/v2/tools/blastn/jobs", post(create_blastn_job))
-        .route("/v2/tools/blastn/jobs/{job_id}", get(blastn_job))
-        .route("/v2/tools/blastp/jobs", post(create_blastp_job))
-        .route("/v2/tools/blastp/jobs/{job_id}", get(blastp_job))
+        .route(
+            "/v2/tools/blastn/jobs",
+            post(routes::blast::create_blastn_job),
+        )
+        .route(
+            "/v2/tools/blastn/jobs/{job_id}",
+            get(routes::blast::blastn_job),
+        )
+        .route(
+            "/v2/tools/blastp/jobs",
+            post(routes::blast::create_blastp_job),
+        )
+        .route(
+            "/v2/tools/blastp/jobs/{job_id}",
+            get(routes::blast::blastp_job),
+        )
         .route(
             "/v2/genome/accession/{accession}/sequence/{sequence_name}",
             get(sequence::segments),
         )
         .route(
             "/v2/genome/accession/{accession}/region/{region}/features",
-            get(region_features),
+            get(routes::genome::region_features),
         )
         .route("/sequence/service-info", get(refget::service_info))
         .route("/sequence/{checksum}", get(refget::sequence))
@@ -232,488 +245,6 @@ async fn health() -> Json<HealthResponse> {
 
 async fn openapi_json() -> Json<utoipa::openapi::OpenApi> {
     Json(ApiDoc::openapi())
-}
-
-#[utoipa::path(
-    get,
-    path = "/jbrowse/config",
-    params(JBrowseConfigQuery),
-    responses(
-        (status = 200, description = "Default JBrowse launch config", body = JBrowseRootConfig),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn jbrowse_default_config(
-    State(state): State<AppState>,
-    Query(query): Query<JBrowseConfigQuery>,
-) -> Result<Json<JBrowseRootConfig>, ApiError> {
-    let accession = state.default_assembly_accession.clone();
-    jbrowse_config_for_accession(&state.service, &accession, query.base_url.as_deref()).map(Json)
-}
-
-#[utoipa::path(
-    get,
-    path = "/jbrowse/config/{accession}",
-    params(
-        ("accession" = String, Path, description = "Assembly accession"),
-        JBrowseConfigQuery,
-    ),
-    responses(
-        (status = 200, description = "JBrowse launch config", body = JBrowseRootConfig),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn jbrowse_config(
-    State(state): State<AppState>,
-    Path(accession): Path<String>,
-    Query(query): Query<JBrowseConfigQuery>,
-) -> Result<Json<JBrowseRootConfig>, ApiError> {
-    jbrowse_config_for_accession(&state.service, &accession, query.base_url.as_deref()).map(Json)
-}
-
-#[utoipa::path(
-    get,
-    path = "/jbrowse/assemblies/{accession}/chrom.sizes",
-    params(("accession" = String, Path, description = "Assembly accession")),
-    responses(
-        (status = 200, description = "UCSC chrom.sizes compatible sequence sizes", content_type = "text/plain", body = String),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn jbrowse_chrom_sizes(
-    State(state): State<AppState>,
-    Path(accession): Path<String>,
-) -> Result<impl IntoResponse, ApiError> {
-    let sequences = state.service.sequences_for_assembly(&accession)?;
-    Ok((
-        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
-        chrom_sizes_body(sequences),
-    ))
-}
-
-#[utoipa::path(
-    get,
-    path = "/jbrowse/assemblies/{accession}/features",
-    params(
-        ("accession" = String, Path, description = "Assembly accession"),
-        JBrowseFeaturesQuery,
-    ),
-    responses(
-        (status = 200, description = "Features for a JBrowse custom adapter", body = Vec<JBrowseFeature>),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn jbrowse_features(
-    State(state): State<AppState>,
-    Path(accession): Path<String>,
-    Query(query): Query<JBrowseFeaturesQuery>,
-) -> Result<Json<Vec<JBrowseFeature>>, ApiError> {
-    if query.start >= query.end {
-        return Err(ServiceError::InvalidRequest("start must be less than end".to_owned()).into());
-    }
-
-    let region = format!("{}:{}-{}", query.ref_name, query.start + 1, query.end);
-    let features = state
-        .service
-        .features_in_region(&accession, &region)?
-        .into_iter()
-        .map(JBrowseFeature::from)
-        .collect();
-    Ok(Json(features))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/genome/accession/{accession}",
-    params(("accession" = String, Path, description = "Assembly accession")),
-    responses(
-        (status = 200, description = "Assembly metadata", body = genome_core::Assembly),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn assembly(
-    State(state): State<AppState>,
-    Path(accession): Path<String>,
-) -> Result<Json<genome_core::Assembly>, ApiError> {
-    Ok(Json(state.service.assembly(&accession)?))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/genome/accession/{accession}/sequences",
-    params(("accession" = String, Path, description = "Assembly accession")),
-    responses(
-        (status = 200, description = "Assembly sequences", body = Vec<genome_core::Sequence>),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn assembly_sequences(
-    State(state): State<AppState>,
-    Path(accession): Path<String>,
-) -> Result<Json<Vec<genome_core::Sequence>>, ApiError> {
-    Ok(Json(state.service.sequences_for_assembly(&accession)?))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/genome/taxon/{tax_id}",
-    params(("tax_id" = u32, Path, description = "NCBI Taxonomy ID")),
-    responses(
-        (status = 200, description = "Taxon and assemblies", body = TaxonResponse),
-        (status = 404, description = "Taxon not found", body = ErrorResponse),
-    )
-)]
-async fn taxon(
-    State(state): State<AppState>,
-    Path(tax_id): Path<u32>,
-) -> Result<Json<TaxonResponse>, ApiError> {
-    let tax_id = TaxId::new(tax_id);
-    Ok(Json(TaxonResponse {
-        taxon: state.service.taxon(tax_id)?,
-        assemblies: state.service.assemblies_for_taxon(tax_id),
-    }))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/gene/id/{gene_id}",
-    params(("gene_id" = String, Path, description = "Gene identifier")),
-    responses(
-        (status = 200, description = "Gene detail", body = genome_core::GeneRecord),
-        (status = 404, description = "Gene not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn gene(
-    State(state): State<AppState>,
-    Path(gene_id): Path<String>,
-) -> Result<Json<genome_core::GeneRecord>, ApiError> {
-    Ok(Json(state.service.gene(&gene_id)?))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/gene/id/{gene_id}/kegg",
-    params(("gene_id" = String, Path, description = "Gene identifier")),
-    responses(
-        (status = 200, description = "Per-gene KEGG view with KOs hydrated by their related pathways/modules/reactions", body = GeneKeggView),
-        (status = 404, description = "Gene not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn gene_kegg(
-    State(state): State<AppState>,
-    Path(gene_id): Path<String>,
-) -> Result<Json<GeneKeggView>, ApiError> {
-    Ok(Json(state.service.gene_kegg_view(&gene_id)?))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/kegg/pathways",
-    responses(
-        (status = 200, description = "KEGG pathway catalog with dataset-level KO and gene counts", body = Vec<KeggPathwaySummary>),
-    )
-)]
-async fn kegg_pathways(State(state): State<AppState>) -> Json<Vec<KeggPathwaySummary>> {
-    Json(state.service.kegg_pathways())
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/kegg/pathway/{pathway_id}",
-    params(("pathway_id" = String, Path, description = "Canonical KEGG pathway id (e.g. map00010)")),
-    responses(
-        (status = 200, description = "KEGG pathway detail with KOs and the genes annotated with each KO", body = KeggPathwayDetail),
-        (status = 404, description = "KEGG pathway not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn kegg_pathway(
-    State(state): State<AppState>,
-    Path(pathway_id): Path<String>,
-) -> Result<Json<KeggPathwayDetail>, ApiError> {
-    Ok(Json(state.service.kegg_pathway(&pathway_id)?))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/gene/id/{gene_id}/expression",
-    params(
-        ("gene_id" = String, Path, description = "Gene identifier"),
-        GeneExpressionQuery,
-    ),
-    responses(
-        (status = 200, description = "Expression values for one gene", body = Vec<GeneExpressionPoint>),
-        (status = 404, description = "Gene not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn gene_expression(
-    State(state): State<AppState>,
-    Path(gene_id): Path<String>,
-    Query(query): Query<GeneExpressionQuery>,
-) -> Result<Json<Vec<GeneExpressionPoint>>, ApiError> {
-    let gene_record = state.service.gene(&gene_id)?;
-    let Some(expression_repository) = state.expression_repository.as_ref() else {
-        return Ok(Json(Vec::new()));
-    };
-
-    let expression_query = ExpressionQuery {
-        unit: query.unit,
-        limit: query.limit,
-        ..ExpressionQuery::default()
-    };
-    let points = expression_repository
-        .gene_expression(&gene_record.gene.id, &expression_query)
-        .into_iter()
-        .map(|measurement| {
-            let sample = expression_repository.sample(&measurement.run);
-            let label = sample
-                .as_ref()
-                .map(expression_core::Sample::display_label)
-                .unwrap_or_else(|| measurement.run.to_string());
-            let primary_group = sample.as_ref().and_then(sample_primary_group);
-
-            GeneExpressionPoint {
-                gene_id: measurement.gene_id.to_string(),
-                run: measurement.run.to_string(),
-                label,
-                primary_group,
-                value: measurement.value,
-                unit: measurement.unit,
-            }
-        })
-        .collect();
-
-    Ok(Json(points))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/expression/clustergram",
-    params(ExpressionClustergramQuery),
-    responses(
-        (status = 200, description = "Expression matrix with Rust-computed cluster ordering", body = ExpressionClustergramResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn expression_clustergram(
-    State(state): State<AppState>,
-    Query(query): Query<ExpressionClustergramQuery>,
-) -> Result<Json<ExpressionClustergramResponse>, ApiError> {
-    let Some(expression_repository) = state.expression_repository.as_ref() else {
-        return Ok(Json(ExpressionClustergramResponse::empty(
-            query.assembly_accession,
-            query.unit.unwrap_or(ExpressionUnit::Tpm),
-        )));
-    };
-
-    let accession = AssemblyAccession::new(&query.assembly_accession)
-        .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
-    let unit = query.unit.unwrap_or(ExpressionUnit::Tpm);
-    let gene_ids = parse_csv_gene_ids(&query.gene_ids)?;
-    if gene_ids.is_empty() {
-        return Err(ServiceError::InvalidRequest("geneIds must not be empty".to_owned()).into());
-    }
-
-    let genes = gene_ids
-        .iter()
-        .map(|gene_id| state.service.gene(gene_id.as_str()))
-        .collect::<Result<Vec<_>, _>>()?;
-    if genes
-        .iter()
-        .any(|gene_record| gene_record.gene.assembly_accession != accession)
-    {
-        return Err(ServiceError::InvalidRequest(
-            "all genes must belong to assemblyAccession".to_owned(),
-        )
-        .into());
-    }
-
-    let samples = expression_samples_for_query(expression_repository, &accession, &query)?;
-    let runs = samples
-        .iter()
-        .map(|sample| sample.run().clone())
-        .collect::<Vec<_>>();
-    if runs.is_empty() {
-        return Ok(Json(ExpressionClustergramResponse::empty(
-            query.assembly_accession,
-            unit,
-        )));
-    }
-
-    let matrix = expression_repository.expression_matrix(&accession, &gene_ids, &runs, unit);
-    let (matrix, genes) = match matrix {
-        Some(matrix) => (matrix, genes),
-        None if query.drop_missing_genes.unwrap_or(false) => {
-            let mut available_gene_ids = Vec::new();
-            let mut available_genes = Vec::new();
-            for (gene_id, gene_record) in gene_ids.iter().zip(genes) {
-                if expression_repository
-                    .expression_matrix(&accession, std::slice::from_ref(gene_id), &runs, unit)
-                    .is_some()
-                {
-                    available_gene_ids.push(gene_id.clone());
-                    available_genes.push(gene_record);
-                }
-            }
-            if available_gene_ids.is_empty() {
-                return Ok(Json(ExpressionClustergramResponse::empty(
-                    query.assembly_accession,
-                    unit,
-                )));
-            }
-            let Some(matrix) = expression_repository.expression_matrix(
-                &accession,
-                &available_gene_ids,
-                &runs,
-                unit,
-            ) else {
-                return Ok(Json(ExpressionClustergramResponse::empty(
-                    query.assembly_accession,
-                    unit,
-                )));
-            };
-            (matrix, available_genes)
-        }
-        None => {
-            return Err(ServiceError::InvalidRequest(
-                "expression matrix is unavailable for the requested genes, runs, or unit"
-                    .to_owned(),
-            )
-            .into());
-        }
-    };
-
-    let values = matrix
-        .values
-        .iter()
-        .copied()
-        .map(finite_or_zero)
-        .collect::<Vec<_>>();
-    let row_dendrogram = cluster_dendrogram_rows(&values, matrix.gene_count(), matrix.run_count());
-    let column_dendrogram =
-        cluster_dendrogram_columns(&values, matrix.gene_count(), matrix.run_count());
-    let row_order = row_dendrogram.leaf_order();
-    let column_order = column_dendrogram.leaf_order();
-    let z_scores = row_z_scores(&values, matrix.gene_count(), matrix.run_count());
-    let genes = genes
-        .into_iter()
-        .map(|gene_record| ExpressionGeneLabel {
-            gene_id: gene_record.gene.id.to_string(),
-            label: gene_record
-                .gene
-                .symbol
-                .or(gene_record.gene.locus_tag)
-                .unwrap_or_else(|| gene_record.gene.id.to_string()),
-        })
-        .collect();
-    let samples = samples
-        .into_iter()
-        .map(|sample| ExpressionSampleLabel {
-            run: sample.run().to_string(),
-            label: sample.display_label(),
-            primary_group: sample_primary_group(&sample),
-        })
-        .collect();
-
-    Ok(Json(ExpressionClustergramResponse {
-        assembly_accession: matrix.assembly_accession.to_string(),
-        unit: matrix.unit,
-        genes,
-        samples,
-        values,
-        row_order,
-        column_order,
-        row_dendrogram,
-        column_dendrogram,
-        z_scores,
-    }))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/gene/search",
-    params(GeneSearchQuery),
-    responses(
-        (status = 200, description = "Matching genes", body = Vec<genome_core::Gene>),
-    )
-)]
-async fn gene_search(
-    State(state): State<AppState>,
-    Query(query): Query<GeneSearchQuery>,
-) -> Json<Vec<genome_core::Gene>> {
-    Json(state.service.search_genes(query.into_search()))
-}
-
-#[utoipa::path(
-    post,
-    path = "/v2/tools/blastn/jobs",
-    request_body = BlastnJobRequest,
-    responses(
-        (status = 202, description = "BLASTN job accepted", body = BlastnJobResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-        (status = 503, description = "BLASTN worker is not configured", body = ErrorResponse),
-    )
-)]
-async fn create_blastn_job(
-    State(state): State<AppState>,
-    Json(request): Json<BlastnJobRequest>,
-) -> Result<(StatusCode, Json<BlastnJobResponse>), ApiError> {
-    let manager = state
-        .blast_jobs
-        .as_ref()
-        .ok_or_else(|| ApiError::BlastUnavailable("BLASTN worker is not configured".to_owned()))?;
-    let record = manager.submit("homology.blastn".to_owned(), request.into_job_input()?)?;
-    Ok((StatusCode::ACCEPTED, Json(record.into())))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/tools/blastn/jobs/{job_id}",
-    params(("job_id" = String, Path, description = "BLASTN job identifier")),
-    responses(
-        (status = 200, description = "BLASTN job status", body = BlastnJobResponse),
-        (status = 404, description = "Job not found", body = ErrorResponse),
-        (status = 503, description = "BLASTN worker is not configured", body = ErrorResponse),
-    )
-)]
-async fn blastn_job(
-    State(state): State<AppState>,
-    Path(job_id): Path<String>,
-) -> Result<Json<BlastnJobResponse>, ApiError> {
-    let manager = state
-        .blast_jobs
-        .as_ref()
-        .ok_or_else(|| ApiError::BlastUnavailable("BLASTN worker is not configured".to_owned()))?;
-    Ok(Json(manager.get(&job_id)?.into()))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/genome/accession/{accession}/region/{region}/features",
-    params(
-        ("accession" = String, Path, description = "Assembly accession"),
-        ("region" = String, Path, description = "1-based closed region, e.g. chr1:1-100000"),
-    ),
-    responses(
-        (status = 200, description = "Overlapping genes", body = Vec<genome_core::Gene>),
-        (status = 404, description = "Assembly not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn region_features(
-    State(state): State<AppState>,
-    Path((accession, region)): Path<(String, String)>,
-) -> Result<Json<Vec<genome_core::Gene>>, ApiError> {
-    Ok(Json(state.service.features_in_region(&accession, &region)?))
 }
 
 #[derive(Debug, Parser)]
@@ -764,74 +295,72 @@ enum Command {
 #[openapi(
     paths(
         health,
-        jbrowse_default_config,
-        jbrowse_config,
-        jbrowse_chrom_sizes,
-        jbrowse_features,
-        assembly,
-        assembly_sequences,
-        taxon,
-        gene,
-        gene_kegg,
-        kegg_pathways,
-        kegg_pathway,
-        gene_expression,
-        expression_clustergram,
-        enrichment_analysis,
-        gene_search,
-        create_blastn_job,
-        blastn_job,
-        create_blastp_job,
-        blastp_job,
+        routes::jbrowse::default_config,
+        routes::jbrowse::config,
+        routes::jbrowse::chrom_sizes,
+        routes::jbrowse::features,
+        routes::genome::assembly,
+        routes::genome::assembly_sequences,
+        routes::genome::taxon,
+        routes::gene::gene,
+        routes::gene::gene_kegg,
+        routes::gene::kegg_pathways,
+        routes::gene::kegg_pathway,
+        routes::expression::gene_expression,
+        routes::expression::clustergram,
+        routes::enrichment::analysis,
+        routes::gene::gene_search,
+        routes::blast::create_blastn_job,
+        routes::blast::blastn_job,
+        routes::blast::create_blastp_job,
+        routes::blast::blastp_job,
         protein::sequence,
         sequence::segments,
-        region_features,
+        routes::genome::region_features,
         refget::service_info,
         refget::sequence,
     ),
     components(schemas(
         ErrorResponse,
-        AnnotatedHomologyHitResponse,
-        AnnotatedHomologySearchResultResponse,
-        BlastnJobRequest,
-        BlastnJobResponse,
-        BlastpJobRequest,
+        routes::blast::AnnotatedHomologyHitResponse,
+        routes::blast::AnnotatedHomologySearchResultResponse,
+        routes::blast::BlastnJobRequest,
+        routes::blast::BlastnJobResponse,
+        routes::blast::BlastpJobRequest,
+        routes::blast::JobStatusResponse,
+        routes::expression::GeneExpressionPoint,
+        routes::expression::GeneExpressionQuery,
+        routes::expression::ExpressionClustergramQuery,
+        routes::expression::ExpressionClustergramResponse,
+        routes::expression::ExpressionGeneLabel,
+        routes::expression::ExpressionSampleLabel,
+        routes::enrichment::EnrichmentAnalysisRequest,
+        routes::enrichment::EnrichmentAnalysisResponse,
+        routes::enrichment::EnrichmentAnnotationKind,
+        routes::enrichment::EnrichmentTerm,
+        routes::enrichment::EnrichmentTermResult,
+        routes::gene::GeneSearchQuery,
+        routes::genome::TaxonResponse,
+        routes::jbrowse::JBrowseAssembly,
+        routes::jbrowse::JBrowseChromSizesAdapter,
+        routes::jbrowse::JBrowseConfigQuery,
+        routes::jbrowse::JBrowseDefaultSession,
+        routes::jbrowse::JBrowseDefaultView,
+        routes::jbrowse::JBrowseDefaultViewInit,
+        routes::jbrowse::JBrowseFeature,
+        routes::jbrowse::JBrowseFeaturesQuery,
+        routes::jbrowse::JBrowsePortalConfig,
+        routes::jbrowse::JBrowseRendering,
+        routes::jbrowse::JBrowseRootConfig,
+        routes::jbrowse::JBrowseSequenceTrack,
+        routes::jbrowse::JBrowseTrack,
+        routes::jbrowse::JBrowseUriLocation,
         protein::ProteinQuery,
-        GeneExpressionPoint,
-        GeneExpressionQuery,
-        ExpressionClustergramQuery,
-        ExpressionClustergramResponse,
-        ExpressionGeneLabel,
-        ExpressionSampleLabel,
-        EnrichmentAnalysisRequest,
-        EnrichmentAnalysisResponse,
-        EnrichmentAnnotationKind,
-        EnrichmentTerm,
-        EnrichmentTermResult,
-        co_expression::ClusterDendrogram,
-        co_expression::ClusterDendrogramNode,
-        GeneSearchQuery,
-        HealthResponse,
-        JBrowseAssembly,
-        JBrowseChromSizesAdapter,
-        JBrowseConfigQuery,
-        JBrowseDefaultSession,
-        JBrowseDefaultView,
-        JBrowseDefaultViewInit,
-        JBrowseFeature,
-        JBrowseFeaturesQuery,
-        JBrowsePortalConfig,
-        JBrowseRendering,
-        JBrowseRootConfig,
-        JBrowseSequenceTrack,
-        JBrowseTrack,
-        JBrowseUriLocation,
-        JobStatusResponse,
         refget::RefgetQuery,
         refget::RefgetServiceInfo,
         sequence::SequenceOutputFormat,
         sequence::SequenceSegmentsQuery,
-        TaxonResponse,
+        HealthResponse,
         expression_core::ExpressionUnit,
         genome_core::AnnotationEvidence,
         genome_core::AnnotationSource,
@@ -885,6 +414,8 @@ enum Command {
         genome_core::Taxon,
         genome_core::Transcript,
         genome_core::TranscriptId,
+        co_expression::ClusterDendrogram,
+        co_expression::ClusterDendrogramNode,
     )),
     tags((name = "plant-genome-portal", description = "Plant Genome Portal API"))
 )]
@@ -895,1211 +426,8 @@ struct HealthResponse {
     ok: bool,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-struct TaxonResponse {
-    taxon: genome_core::Taxon,
-    assemblies: Vec<genome_core::Assembly>,
-}
-
-#[derive(Debug, Deserialize, IntoParams, ToSchema)]
-struct GeneExpressionQuery {
-    unit: Option<ExpressionUnit>,
-    limit: Option<usize>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct GeneExpressionPoint {
-    gene_id: String,
-    run: String,
-    label: String,
-    primary_group: Option<String>,
-    value: f64,
-    unit: ExpressionUnit,
-}
-
-#[derive(Debug, Deserialize, IntoParams, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct ExpressionClustergramQuery {
-    assembly_accession: String,
-    gene_ids: String,
-    unit: Option<ExpressionUnit>,
-    runs: Option<String>,
-    limit: Option<usize>,
-    drop_missing_genes: Option<bool>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct ExpressionClustergramResponse {
-    assembly_accession: String,
-    unit: ExpressionUnit,
-    genes: Vec<ExpressionGeneLabel>,
-    samples: Vec<ExpressionSampleLabel>,
-    values: Vec<f64>,
-    row_order: Vec<usize>,
-    column_order: Vec<usize>,
-    row_dendrogram: ClusterDendrogram,
-    column_dendrogram: ClusterDendrogram,
-    z_scores: Vec<f64>,
-}
-
-impl ExpressionClustergramResponse {
-    fn empty(assembly_accession: String, unit: ExpressionUnit) -> Self {
-        Self {
-            assembly_accession,
-            unit,
-            genes: Vec::new(),
-            samples: Vec::new(),
-            values: Vec::new(),
-            row_order: Vec::new(),
-            column_order: Vec::new(),
-            row_dendrogram: ClusterDendrogram {
-                root: None,
-                nodes: Vec::new(),
-            },
-            column_dendrogram: ClusterDendrogram {
-                root: None,
-                nodes: Vec::new(),
-            },
-            z_scores: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct ExpressionGeneLabel {
-    gene_id: String,
-    label: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct ExpressionSampleLabel {
-    run: String,
-    label: String,
-    primary_group: Option<String>,
-}
-
-#[utoipa::path(
-    post,
-    path = "/v2/analysis/enrichment",
-    request_body = EnrichmentAnalysisRequest,
-    responses(
-        (status = 200, description = "Functional annotation over-representation analysis", body = EnrichmentAnalysisResponse),
-        (status = 404, description = "Assembly or gene not found", body = ErrorResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-    )
-)]
-async fn enrichment_analysis(
-    State(state): State<AppState>,
-    Json(request): Json<EnrichmentAnalysisRequest>,
-) -> Result<Json<EnrichmentAnalysisResponse>, ApiError> {
-    Ok(Json(run_functional_enrichment(&state.service, request)?))
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct EnrichmentAnalysisRequest {
-    assembly_accession: String,
-    gene_ids: Vec<String>,
-    background_gene_ids: Option<Vec<String>>,
-    annotation_kinds: Option<Vec<EnrichmentAnnotationKind>>,
-    min_population_hits: Option<u64>,
-    limit: Option<usize>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-enum EnrichmentAnnotationKind {
-    GoTerm,
-    Pfam,
-    InterPro,
-    Kegg,
-    Kog,
-    NcbiFam,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct EnrichmentAnalysisResponse {
-    assembly_accession: String,
-    study_size: u64,
-    population_size: u64,
-    tested_terms: usize,
-    results: Vec<EnrichmentTermResult>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct EnrichmentTermResult {
-    term: EnrichmentTerm,
-    study_hits: u64,
-    study_size: u64,
-    population_hits: u64,
-    population_size: u64,
-    fold_enrichment: Option<f64>,
-    p_value: f64,
-    q_value: f64,
-    study_gene_ids: Vec<GeneId>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct EnrichmentTerm {
-    kind: EnrichmentAnnotationKind,
-    id: String,
-    name: Option<String>,
-    namespace: Option<GoNamespace>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct EnrichmentTermKey {
-    kind: EnrichmentAnnotationKind,
-    id: String,
-}
-
-type EnrichmentTermItems = Vec<(EnrichmentTermKey, HashSet<GeneId>)>;
-type EnrichmentTermMetadata = HashMap<EnrichmentTermKey, EnrichmentTerm>;
-
-#[derive(Debug, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct BlastnJobRequest {
-    assembly_accession: String,
-    query: String,
-    task: Option<String>,
-    evalue: Option<f64>,
-    max_target_seqs: Option<usize>,
-}
-
-impl BlastnJobRequest {
-    fn into_job_input(self) -> Result<BlastnJobInput, ApiError> {
-        let assembly_accession = AssemblyAccession::new(&self.assembly_accession)
-            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
-        let task = self.task.unwrap_or_else(|| "blastn".to_owned());
-        validate_blastn_task(&task)?;
-        let evalue = self.evalue.unwrap_or(10.0);
-        if evalue <= 0.0 {
-            return Err(ServiceError::InvalidRequest(
-                "evalue must be greater than zero".to_owned(),
-            )
-            .into());
-        }
-        let max_target_seqs = self.max_target_seqs.unwrap_or(50);
-        if max_target_seqs == 0 {
-            return Err(ServiceError::InvalidRequest(
-                "maxTargetSeqs must be greater than zero".to_owned(),
-            )
-            .into());
-        }
-        if self.query.trim().is_empty() {
-            return Err(ServiceError::InvalidRequest("query must not be empty".to_owned()).into());
-        }
-
-        Ok(BlastnJobInput {
-            assembly_accession,
-            query: self.query,
-            task,
-            evalue,
-            max_target_seqs,
-        })
-    }
-}
-
-fn validate_blastn_task(task: &str) -> Result<(), ApiError> {
-    if matches!(
-        task,
-        "blastn" | "blastn-short" | "megablast" | "dc-megablast"
-    ) {
-        Ok(())
-    } else {
-        Err(ServiceError::InvalidRequest(format!("unsupported BLASTN task: {task}")).into())
-    }
-}
-
-fn validate_blastp_task(task: &str) -> Result<(), ApiError> {
-    if matches!(task, "blastp" | "blastp-short" | "blastp-fast") {
-        Ok(())
-    } else {
-        Err(ServiceError::InvalidRequest(format!("unsupported BLASTP task: {task}")).into())
-    }
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct BlastpJobRequest {
-    assembly_accession: String,
-    query: String,
-    task: Option<String>,
-    evalue: Option<f64>,
-    max_target_seqs: Option<usize>,
-}
-
-impl BlastpJobRequest {
-    fn into_job_input(self) -> Result<BlastpJobInput, ApiError> {
-        let assembly_accession = AssemblyAccession::new(&self.assembly_accession)
-            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
-        let task = self.task.unwrap_or_else(|| "blastp".to_owned());
-        validate_blastp_task(&task)?;
-        let evalue = self.evalue.unwrap_or(10.0);
-        if evalue <= 0.0 {
-            return Err(ServiceError::InvalidRequest(
-                "evalue must be greater than zero".to_owned(),
-            )
-            .into());
-        }
-        let max_target_seqs = self.max_target_seqs.unwrap_or(50);
-        if max_target_seqs == 0 {
-            return Err(ServiceError::InvalidRequest(
-                "maxTargetSeqs must be greater than zero".to_owned(),
-            )
-            .into());
-        }
-        if self.query.trim().is_empty() {
-            return Err(ServiceError::InvalidRequest("query must not be empty".to_owned()).into());
-        }
-
-        Ok(BlastpJobInput {
-            assembly_accession,
-            query: self.query,
-            task,
-            evalue,
-            max_target_seqs,
-        })
-    }
-}
-
-#[utoipa::path(
-    post,
-    path = "/v2/tools/blastp/jobs",
-    request_body = BlastpJobRequest,
-    responses(
-        (status = 202, description = "BLASTP job accepted", body = BlastnJobResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-        (status = 503, description = "BLASTP worker is not configured", body = ErrorResponse),
-    )
-)]
-async fn create_blastp_job(
-    State(state): State<AppState>,
-    Json(request): Json<BlastpJobRequest>,
-) -> Result<(StatusCode, Json<BlastnJobResponse>), ApiError> {
-    let manager = state
-        .blastp_jobs
-        .as_ref()
-        .ok_or_else(|| ApiError::BlastUnavailable("BLASTP worker is not configured".to_owned()))?;
-    let record = manager.submit("homology.blastp".to_owned(), request.into_job_input()?)?;
-    Ok((StatusCode::ACCEPTED, Json(record.into())))
-}
-
-#[utoipa::path(
-    get,
-    path = "/v2/tools/blastp/jobs/{job_id}",
-    params(("job_id" = String, Path, description = "BLASTP job identifier")),
-    responses(
-        (status = 200, description = "BLASTP job status", body = BlastnJobResponse),
-        (status = 404, description = "Job not found", body = ErrorResponse),
-        (status = 503, description = "BLASTP worker is not configured", body = ErrorResponse),
-    )
-)]
-async fn blastp_job(
-    State(state): State<AppState>,
-    Path(job_id): Path<String>,
-) -> Result<Json<BlastnJobResponse>, ApiError> {
-    let manager = state
-        .blastp_jobs
-        .as_ref()
-        .ok_or_else(|| ApiError::BlastUnavailable("BLASTP worker is not configured".to_owned()))?;
-    Ok(Json(manager.get(&job_id)?.into()))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BlastnJobInput {
-    assembly_accession: AssemblyAccession,
-    query: String,
-    task: String,
-    evalue: f64,
-    max_target_seqs: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BlastpJobInput {
-    assembly_accession: AssemblyAccession,
-    query: String,
-    task: String,
-    evalue: f64,
-    max_target_seqs: usize,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum BlastMethod {
-    Blastn,
-    Blastp,
-}
-
-impl BlastMethod {
-    fn subcommand(self) -> &'static str {
-        match self {
-            Self::Blastn => "blastn-job",
-            Self::Blastp => "blastp-job",
-        }
-    }
-
-    fn program_flag(self) -> &'static str {
-        match self {
-            Self::Blastn => "--blastn",
-            Self::Blastp => "--blastp",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct BlastWorkerCommand {
-    worker_bin: PathBuf,
-    blast_db_prefix: PathBuf,
-    work_dir: PathBuf,
-    program: PathBuf,
-    snapshot: Option<PathBuf>,
-    method: BlastMethod,
-}
-
-impl BlastWorkerCommand {
-    fn dispatch(
-        &self,
-        job_id: String,
-        kind: String,
-        worker_input: BlastWorkerInput,
-    ) -> Result<AnnotatedHomologySearchResult, String> {
-        fs::create_dir_all(&self.work_dir).map_err(|error| error.to_string())?;
-        let input_path = self.work_dir.join(format!("{job_id}.input.msgpack"));
-        let output_path = self.work_dir.join(format!("{job_id}.output.msgpack"));
-        let worker_job = WorkerJob {
-            id: job_id,
-            kind,
-            payload: worker_input,
-        };
-
-        fs::write(&input_path, encode_message_pack(&worker_job)?)
-            .map_err(|error| error.to_string())?;
-
-        let output = ProcessCommand::new(&self.worker_bin)
-            .arg(self.method.subcommand())
-            .arg("--blast-db-prefix")
-            .arg(&self.blast_db_prefix)
-            .arg("--work-dir")
-            .arg(&self.work_dir)
-            .arg(self.method.program_flag())
-            .arg(&self.program)
-            .arg("--input")
-            .arg(&input_path)
-            .arg("--output")
-            .arg(&output_path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|error| format!("failed to start worker: {error}"))?;
-
-        let _ = fs::remove_file(&input_path);
-
-        if !output.status.success() {
-            let _ = fs::remove_file(&output_path);
-            return Err(format!(
-                "worker exited with status {:?}: {}",
-                output.status.code(),
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        let result_bytes = fs::read(&output_path).map_err(|error| error.to_string())?;
-        let _ = fs::remove_file(&output_path);
-        decode_message_pack(&result_bytes)
-    }
-}
-
-impl JobExecutor<BlastnJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
-    fn execute(
-        &self,
-        job: WorkerJob<BlastnJobInput>,
-    ) -> Result<AnnotatedHomologySearchResult, String> {
-        self.dispatch(
-            job.id,
-            job.kind,
-            BlastWorkerInput {
-                assembly_accession: job.payload.assembly_accession,
-                query: job.payload.query,
-                task: job.payload.task,
-                evalue: job.payload.evalue,
-                max_target_seqs: job.payload.max_target_seqs,
-                snapshot: self.snapshot.clone(),
-            },
-        )
-    }
-}
-
-impl JobExecutor<BlastpJobInput, AnnotatedHomologySearchResult> for BlastWorkerCommand {
-    fn execute(
-        &self,
-        job: WorkerJob<BlastpJobInput>,
-    ) -> Result<AnnotatedHomologySearchResult, String> {
-        self.dispatch(
-            job.id,
-            job.kind,
-            BlastWorkerInput {
-                assembly_accession: job.payload.assembly_accession,
-                query: job.payload.query,
-                task: job.payload.task,
-                evalue: job.payload.evalue,
-                max_target_seqs: job.payload.max_target_seqs,
-                snapshot: self.snapshot.clone(),
-            },
-        )
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BlastWorkerInput {
-    assembly_accession: AssemblyAccession,
-    query: String,
-    task: String,
-    evalue: f64,
-    max_target_seqs: usize,
-    snapshot: Option<PathBuf>,
-}
-
-fn encode_message_pack<T>(value: &T) -> Result<Vec<u8>, String>
-where
-    T: Serialize,
-{
-    rmp_serde::to_vec_named(value).map_err(|error| error.to_string())
-}
-
-fn decode_message_pack<T>(bytes: &[u8]) -> Result<T, String>
-where
-    T: DeserializeOwned,
-{
-    rmp_serde::from_slice(bytes).map_err(|error| error.to_string())
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct BlastnJobResponse {
-    id: String,
-    kind: String,
-    status: JobStatusResponse,
-    result: Option<AnnotatedHomologySearchResultResponse>,
-    error: Option<String>,
-}
-
-impl From<JobRecord<AnnotatedHomologySearchResult>> for BlastnJobResponse {
-    fn from(record: JobRecord<AnnotatedHomologySearchResult>) -> Self {
-        Self {
-            id: record.id,
-            kind: record.kind,
-            status: record.status.into(),
-            result: record.output.map(Into::into),
-            error: record.error,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-enum JobStatusResponse {
-    Queued,
-    Running,
-    Succeeded,
-    Failed,
-}
-
-impl From<JobStatus> for JobStatusResponse {
-    fn from(status: JobStatus) -> Self {
-        match status {
-            JobStatus::Queued => Self::Queued,
-            JobStatus::Running => Self::Running,
-            JobStatus::Succeeded => Self::Succeeded,
-            JobStatus::Failed => Self::Failed,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct AnnotatedHomologySearchResultResponse {
-    method: genome_core::HomologySearchMethod,
-    task: String,
-    hits: Vec<AnnotatedHomologyHitResponse>,
-}
-
-impl From<AnnotatedHomologySearchResult> for AnnotatedHomologySearchResultResponse {
-    fn from(result: AnnotatedHomologySearchResult) -> Self {
-        Self {
-            method: result.method,
-            task: result.task,
-            hits: result.hits.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct AnnotatedHomologyHitResponse {
-    hit: genome_core::HomologyHit,
-    overlapping_gene_ids: Vec<genome_core::GeneId>,
-}
-
-impl From<service::AnnotatedHomologyHit> for AnnotatedHomologyHitResponse {
-    fn from(hit: service::AnnotatedHomologyHit) -> Self {
-        Self {
-            hit: hit.hit,
-            overlapping_gene_ids: hit.overlapping_gene_ids,
-        }
-    }
-}
-
-fn run_functional_enrichment(
-    service: &AppService,
-    request: EnrichmentAnalysisRequest,
-) -> Result<EnrichmentAnalysisResponse, ApiError> {
-    let accession = AssemblyAccession::new(&request.assembly_accession)
-        .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
-    let assembly_accession = accession.into_string();
-    service.assembly(&assembly_accession)?;
-
-    let study_genes = resolve_gene_ids(service, &request.gene_ids, "geneIds")?;
-    if study_genes.is_empty() {
-        return Err(ServiceError::InvalidRequest("geneIds must not be empty".to_owned()).into());
-    }
-    ensure_genes_belong_to_assembly(&study_genes, &assembly_accession, "geneIds")?;
-
-    let population_genes = match request.background_gene_ids.as_ref() {
-        Some(gene_ids) => {
-            let genes = resolve_gene_ids(service, gene_ids, "backgroundGeneIds")?;
-            if genes.is_empty() {
-                return Err(ServiceError::InvalidRequest(
-                    "backgroundGeneIds must not be empty when provided".to_owned(),
-                )
-                .into());
-            }
-            ensure_genes_belong_to_assembly(&genes, &assembly_accession, "backgroundGeneIds")?;
-            genes
-        }
-        None => genes_for_assembly(service, &assembly_accession),
-    };
-
-    let kinds = request
-        .annotation_kinds
-        .unwrap_or_else(default_enrichment_annotation_kinds);
-    if kinds.is_empty() {
-        return Err(
-            ServiceError::InvalidRequest("annotationKinds must not be empty".to_owned()).into(),
-        );
-    }
-    let min_population_hits = request.min_population_hits.unwrap_or(2);
-    if min_population_hits == 0 {
-        return Err(ServiceError::InvalidRequest(
-            "minPopulationHits must be greater than zero".to_owned(),
-        )
-        .into());
-    }
-    let limit = request.limit.unwrap_or(50);
-    if limit == 0 {
-        return Err(
-            ServiceError::InvalidRequest("limit must be greater than zero".to_owned()).into(),
-        );
-    }
-
-    let study: HashSet<GeneId> = study_genes.into_iter().map(|gene| gene.id).collect();
-    let population: HashSet<GeneId> = population_genes
-        .iter()
-        .map(|gene| gene.id.clone())
-        .collect();
-    if population.is_empty() {
-        return Err(ServiceError::InvalidRequest(
-            "population has no genes for the selected assembly".to_owned(),
-        )
-        .into());
-    }
-
-    let (terms, term_metadata) = build_enrichment_terms(&population_genes, &kinds);
-    let results = run_enrichment(
-        EnrichmentInput {
-            study: &study,
-            population: &population,
-            term_to_items: &terms,
-        },
-        EnrichmentOptions {
-            min_population_hits,
-        },
-    )
-    .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
-
-    let response_results = results
-        .into_iter()
-        .take(limit)
-        .map(|result| {
-            let mut study_gene_ids = terms
-                .iter()
-                .find(|(term, _)| term == &result.term)
-                .map(|(_, genes)| {
-                    genes
-                        .iter()
-                        .filter(|gene_id| study.contains(*gene_id))
-                        .cloned()
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            study_gene_ids.sort();
-
-            let term = term_metadata
-                .get(&result.term)
-                .cloned()
-                .unwrap_or_else(|| EnrichmentTerm {
-                    kind: result.term.kind,
-                    id: result.term.id.clone(),
-                    name: None,
-                    namespace: None,
-                });
-
-            EnrichmentTermResult {
-                term,
-                study_hits: result.study_hits,
-                study_size: result.study_size,
-                population_hits: result.population_hits,
-                population_size: result.population_size,
-                fold_enrichment: result.fold_enrichment,
-                p_value: result.p_value,
-                q_value: result.q_value,
-                study_gene_ids,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    Ok(EnrichmentAnalysisResponse {
-        assembly_accession,
-        study_size: study.intersection(&population).count() as u64,
-        population_size: population.len() as u64,
-        tested_terms: terms.len(),
-        results: response_results,
-    })
-}
-
-fn default_enrichment_annotation_kinds() -> Vec<EnrichmentAnnotationKind> {
-    vec![
-        EnrichmentAnnotationKind::GoTerm,
-        EnrichmentAnnotationKind::Pfam,
-        EnrichmentAnnotationKind::InterPro,
-        EnrichmentAnnotationKind::Kegg,
-        EnrichmentAnnotationKind::Kog,
-        EnrichmentAnnotationKind::NcbiFam,
-    ]
-}
-
-fn resolve_gene_ids(
-    service: &AppService,
-    gene_ids: &[String],
-    field_name: &str,
-) -> Result<Vec<Gene>, ApiError> {
-    let mut genes = Vec::new();
-    let mut seen = HashSet::new();
-    for raw_gene_id in gene_ids {
-        let gene_id = raw_gene_id.trim();
-        if gene_id.is_empty() {
-            continue;
-        }
-        let gene = service.gene(gene_id)?.gene;
-        if seen.insert(gene.id.clone()) {
-            genes.push(gene);
-        }
-    }
-    if genes.is_empty() {
-        return Err(ServiceError::InvalidRequest(format!("{field_name} must not be empty")).into());
-    }
-    Ok(genes)
-}
-
-fn ensure_genes_belong_to_assembly(
-    genes: &[Gene],
-    assembly_accession: &str,
-    field_name: &str,
-) -> Result<(), ApiError> {
-    if genes
-        .iter()
-        .all(|gene| gene.assembly_accession.as_str() == assembly_accession)
-    {
-        return Ok(());
-    }
-    Err(ServiceError::InvalidRequest(format!(
-        "all genes in {field_name} must belong to assemblyAccession"
-    ))
-    .into())
-}
-
-fn genes_for_assembly(service: &AppService, assembly_accession: &str) -> Vec<Gene> {
-    service
-        .search_genes(GeneSearch {
-            limit: Some(usize::MAX),
-            ..GeneSearch::default()
-        })
-        .into_iter()
-        .filter(|gene| gene.assembly_accession.as_str() == assembly_accession)
-        .collect()
-}
-
-fn build_enrichment_terms(
-    genes: &[Gene],
-    kinds: &[EnrichmentAnnotationKind],
-) -> (EnrichmentTermItems, EnrichmentTermMetadata) {
-    let selected: HashSet<EnrichmentAnnotationKind> = kinds.iter().copied().collect();
-    let mut term_to_items: HashMap<EnrichmentTermKey, HashSet<GeneId>> = HashMap::new();
-    let mut metadata: HashMap<EnrichmentTermKey, EnrichmentTerm> = HashMap::new();
-
-    for gene in genes {
-        let mut seen_for_gene = HashSet::new();
-        for annotation in &gene.annotations {
-            let Some(term) = enrichment_term_for_annotation(annotation, &selected) else {
-                continue;
-            };
-            let key = EnrichmentTermKey {
-                kind: term.kind,
-                id: term.id.clone(),
-            };
-            metadata.entry(key.clone()).or_insert(term);
-            if seen_for_gene.insert(key.clone()) {
-                term_to_items
-                    .entry(key)
-                    .or_default()
-                    .insert(gene.id.clone());
-            }
-        }
-    }
-
-    let mut terms = term_to_items.into_iter().collect::<Vec<_>>();
-    terms.sort_by(|(left, _), (right, _)| {
-        enrichment_kind_rank(left.kind)
-            .cmp(&enrichment_kind_rank(right.kind))
-            .then_with(|| left.id.cmp(&right.id))
-    });
-    (terms, metadata)
-}
-
-fn enrichment_term_for_annotation(
-    annotation: &FunctionalAnnotation,
-    selected: &HashSet<EnrichmentAnnotationKind>,
-) -> Option<EnrichmentTerm> {
-    match annotation {
-        FunctionalAnnotation::GoTerm(go)
-            if selected.contains(&EnrichmentAnnotationKind::GoTerm) =>
-        {
-            Some(EnrichmentTerm {
-                kind: EnrichmentAnnotationKind::GoTerm,
-                id: go.term_id.as_str().to_owned(),
-                name: go.name.clone(),
-                namespace: go.namespace,
-            })
-        }
-        FunctionalAnnotation::Pfam(pfam) if selected.contains(&EnrichmentAnnotationKind::Pfam) => {
-            Some(EnrichmentTerm {
-                kind: EnrichmentAnnotationKind::Pfam,
-                id: pfam.accession.as_str().to_owned(),
-                name: pfam.name.clone(),
-                namespace: None,
-            })
-        }
-        FunctionalAnnotation::InterPro(interpro)
-            if selected.contains(&EnrichmentAnnotationKind::InterPro) =>
-        {
-            Some(EnrichmentTerm {
-                kind: EnrichmentAnnotationKind::InterPro,
-                id: interpro.interpro_id.as_str().to_owned(),
-                name: interpro.name.clone(),
-                namespace: None,
-            })
-        }
-        FunctionalAnnotation::Kegg(kegg) if selected.contains(&EnrichmentAnnotationKind::Kegg) => {
-            Some(EnrichmentTerm {
-                kind: EnrichmentAnnotationKind::Kegg,
-                id: kegg.entry_id.as_str().to_owned(),
-                name: kegg.name.clone(),
-                namespace: None,
-            })
-        }
-        FunctionalAnnotation::Kog(kog) if selected.contains(&EnrichmentAnnotationKind::Kog) => {
-            Some(EnrichmentTerm {
-                kind: EnrichmentAnnotationKind::Kog,
-                id: kog.entry_id.as_str().to_owned(),
-                name: kog.name.clone(),
-                namespace: None,
-            })
-        }
-        FunctionalAnnotation::NcbiFam(ncbi_fam)
-            if selected.contains(&EnrichmentAnnotationKind::NcbiFam) =>
-        {
-            Some(EnrichmentTerm {
-                kind: EnrichmentAnnotationKind::NcbiFam,
-                id: ncbi_fam.accession.as_str().to_owned(),
-                name: ncbi_fam.name.clone(),
-                namespace: None,
-            })
-        }
-        _ => None,
-    }
-}
-
-fn enrichment_kind_rank(kind: EnrichmentAnnotationKind) -> u8 {
-    match kind {
-        EnrichmentAnnotationKind::GoTerm => 0,
-        EnrichmentAnnotationKind::Pfam => 1,
-        EnrichmentAnnotationKind::InterPro => 2,
-        EnrichmentAnnotationKind::Kegg => 3,
-        EnrichmentAnnotationKind::Kog => 4,
-        EnrichmentAnnotationKind::NcbiFam => 5,
-    }
-}
-
-fn jbrowse_config_for_accession(
-    service: &AppService,
-    accession: &str,
-    base_url: Option<&str>,
-) -> Result<JBrowseRootConfig, ApiError> {
-    let assembly = service.assembly(accession)?;
-    let sequences = service.sequences_for_assembly(accession)?;
-    Ok(build_jbrowse_config(&assembly, &sequences, base_url))
-}
-
-fn build_jbrowse_config(
-    assembly: &genome_core::Assembly,
-    sequences: &[Sequence],
-    base_url: Option<&str>,
-) -> JBrowseRootConfig {
-    let accession = assembly.accession.as_str();
-    let initial_ref = sequences
-        .iter()
-        .min_by(|left, right| left.name.as_str().cmp(right.name.as_str()))
-        .map(|sequence| sequence.name.as_str())
-        .unwrap_or("chr1");
-    let initial_end = sequences
-        .iter()
-        .find(|sequence| sequence.name.as_str() == initial_ref)
-        .map(|sequence| sequence.length.min(100_000))
-        .unwrap_or(100_000);
-    let loc = format!("{initial_ref}:1..{initial_end}");
-    let chrom_sizes_url = endpoint_url(
-        base_url,
-        &format!("/jbrowse/assemblies/{accession}/chrom.sizes"),
-    );
-    let features_url = endpoint_url(
-        base_url,
-        &format!("/jbrowse/assemblies/{accession}/features"),
-    );
-
-    JBrowseRootConfig {
-        assemblies: vec![JBrowseAssembly {
-            name: accession.to_owned(),
-            aliases: vec![assembly.name.clone()],
-            sequence: JBrowseSequenceTrack {
-                track_type: "ReferenceSequenceTrack".to_owned(),
-                track_id: format!("{accession}-ReferenceSequenceTrack"),
-                adapter: JBrowseChromSizesAdapter {
-                    adapter_type: "ChromSizesAdapter".to_owned(),
-                    chrom_sizes_location: JBrowseUriLocation {
-                        uri: chrom_sizes_url.clone(),
-                        location_type: "UriLocation".to_owned(),
-                    },
-                },
-                rendering: JBrowseRendering {
-                    rendering_type: "DivSequenceRenderer".to_owned(),
-                },
-            },
-        }],
-        tracks: Vec::new(),
-        default_session: JBrowseDefaultSession {
-            name: format!("{} genome browser", assembly.name),
-            view: JBrowseDefaultView {
-                id: "linearGenomeView".to_owned(),
-                view_type: "LinearGenomeView".to_owned(),
-                init: JBrowseDefaultViewInit {
-                    assembly: accession.to_owned(),
-                    loc,
-                    tracks: Vec::new(),
-                },
-            },
-        },
-        plant_genome_portal: JBrowsePortalConfig {
-            assembly_accession: accession.to_owned(),
-            chrom_sizes_url,
-            features_url,
-            features_url_template: endpoint_url(
-                base_url,
-                &format!(
-                    "/jbrowse/assemblies/{accession}/features?refName={{refName}}&start={{start}}&end={{end}}"
-                ),
-            ),
-            sequence_url_template: endpoint_url(
-                base_url,
-                "/sequence/{checksum}?start={start}&end={end}",
-            ),
-        },
-    }
-}
-
-fn endpoint_url(base_url: Option<&str>, path: &str) -> String {
-    match base_url
-        .map(str::trim)
-        .filter(|base_url| !base_url.is_empty())
-    {
-        Some(base_url) => format!("{}{}", base_url.trim_end_matches('/'), path),
-        None => path.to_owned(),
-    }
-}
-
-fn chrom_sizes_body(mut sequences: Vec<Sequence>) -> String {
-    sequences.sort_by(|left, right| left.name.as_str().cmp(right.name.as_str()));
-    sequences
-        .into_iter()
-        .map(|sequence| format!("{}\t{}", sequence.name.as_str(), sequence.length))
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n"
-}
-
-fn sample_primary_group(sample: &expression_core::Sample) -> Option<String> {
-    sample
-        .metadata
-        .primary_group
-        .as_deref()
-        .and_then(|key| sample.metadata_value(key))
-        .map(ToOwned::to_owned)
-}
-
-fn parse_csv_gene_ids(value: &str) -> Result<Vec<genome_core::GeneId>, ApiError> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| {
-            genome_core::GeneId::new(value)
-                .map_err(|error| ServiceError::InvalidRequest(error.to_string()).into())
-        })
-        .collect()
-}
-
-fn parse_csv_runs(value: &str) -> Result<Vec<SraRunAccession>, ApiError> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| {
-            SraRunAccession::new(value)
-                .map_err(|error| ServiceError::InvalidRequest(error.to_string()).into())
-        })
-        .collect()
-}
-
-fn expression_samples_for_query(
-    repository: &AppExpressionRepository,
-    accession: &AssemblyAccession,
-    query: &ExpressionClustergramQuery,
-) -> Result<Vec<expression_core::Sample>, ApiError> {
-    let mut samples = repository.samples_for_assembly(accession);
-    samples.sort_by_key(sample_sort_key);
-
-    if let Some(runs) = query.runs.as_deref() {
-        let requested_runs = parse_csv_runs(runs)?;
-        let mut selected = Vec::with_capacity(requested_runs.len());
-        for run in requested_runs {
-            let Some(sample) = samples.iter().find(|sample| sample.run() == &run) else {
-                return Err(
-                    ServiceError::InvalidRequest(format!("unknown expression run: {run}")).into(),
-                );
-            };
-            selected.push(sample.clone());
-        }
-        samples = selected;
-    }
-
-    if let Some(limit) = query.limit {
-        samples.truncate(limit);
-    }
-
-    Ok(samples)
-}
-
-fn sample_sort_key(sample: &expression_core::Sample) -> (String, String, String) {
-    (
-        sample.metadata.sort_key.clone().unwrap_or_default(),
-        sample.display_label(),
-        sample.run().to_string(),
-    )
-}
-
-fn finite_or_zero(value: f64) -> f64 {
-    if value.is_finite() { value } else { 0.0 }
-}
-
-#[derive(Debug, Deserialize, IntoParams, ToSchema)]
-struct GeneSearchQuery {
-    tax_id: Option<u32>,
-    symbol: Option<String>,
-    locus_tag: Option<String>,
-    q: Option<String>,
-    limit: Option<usize>,
-}
-
-impl GeneSearchQuery {
-    fn into_search(self) -> GeneSearch {
-        GeneSearch {
-            tax_id: self.tax_id.map(TaxId::new),
-            symbol: self.symbol,
-            locus_tag: self.locus_tag,
-            query: self.q,
-            limit: self.limit,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, IntoParams, ToSchema)]
-struct JBrowseConfigQuery {
-    #[serde(default, alias = "baseUrl")]
-    base_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, IntoParams, ToSchema)]
-struct JBrowseFeaturesQuery {
-    #[serde(alias = "refName")]
-    ref_name: String,
-    start: u64,
-    end: u64,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseRootConfig {
-    assemblies: Vec<JBrowseAssembly>,
-    tracks: Vec<JBrowseTrack>,
-    default_session: JBrowseDefaultSession,
-    plant_genome_portal: JBrowsePortalConfig,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseAssembly {
-    name: String,
-    aliases: Vec<String>,
-    sequence: JBrowseSequenceTrack,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseSequenceTrack {
-    #[serde(rename = "type")]
-    track_type: String,
-    track_id: String,
-    adapter: JBrowseChromSizesAdapter,
-    rendering: JBrowseRendering,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseChromSizesAdapter {
-    #[serde(rename = "type")]
-    adapter_type: String,
-    chrom_sizes_location: JBrowseUriLocation,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseUriLocation {
-    uri: String,
-    location_type: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseRendering {
-    #[serde(rename = "type")]
-    rendering_type: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-struct JBrowseTrack {}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseDefaultSession {
-    name: String,
-    view: JBrowseDefaultView,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseDefaultView {
-    id: String,
-    #[serde(rename = "type")]
-    view_type: String,
-    init: JBrowseDefaultViewInit,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseDefaultViewInit {
-    assembly: String,
-    loc: String,
-    tracks: Vec<String>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowsePortalConfig {
-    assembly_accession: String,
-    chrom_sizes_url: String,
-    features_url: String,
-    features_url_template: String,
-    sequence_url_template: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-struct JBrowseFeature {
-    unique_id: String,
-    ref_name: String,
-    start: u64,
-    end: u64,
-    name: String,
-    #[serde(rename = "type")]
-    feature_type: String,
-    strand: i8,
-    attributes: BTreeMap<String, String>,
-}
-
-impl From<Gene> for JBrowseFeature {
-    fn from(gene: Gene) -> Self {
-        let name = gene
-            .symbol
-            .clone()
-            .or_else(|| gene.locus_tag.clone())
-            .unwrap_or_else(|| gene.id.as_str().to_owned());
-        Self {
-            unique_id: gene.id.as_str().to_owned(),
-            ref_name: gene.sequence_name.as_str().to_owned(),
-            start: gene.region.start.get(),
-            end: gene.region.end.get(),
-            name,
-            feature_type: gene.feature_type,
-            strand: match gene.strand {
-                Strand::Forward => 1,
-                Strand::Reverse => -1,
-                Strand::Unknown => 0,
-            },
-            attributes: gene.attributes,
-        }
-    }
-}
-
 #[derive(Debug)]
-enum ApiError {
+pub(crate) enum ApiError {
     Service(ServiceError),
     Job(JobManagerError),
     BlastUnavailable(String),
@@ -2145,196 +473,6 @@ impl IntoResponse for ApiError {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-struct ErrorResponse {
+pub(crate) struct ErrorResponse {
     error: String,
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-mod tests {
-    use super::*;
-    use genome_core::{
-        Assembly, AssemblyAccession, AssemblySource, HalfOpenRegion, Position0, SequenceName,
-    };
-
-    #[test]
-    fn jbrowse_config_uses_chrom_sizes_adapter_and_default_location() {
-        let assembly = Assembly {
-            accession: AssemblyAccession::new("GCA_test").unwrap(),
-            tax_id: TaxId::new(3197),
-            name: "TestAssembly".to_owned(),
-            source: AssemblySource::Local,
-            refget_checksum: None,
-        };
-        let sequences = vec![Sequence {
-            name: SequenceName::new("chr2").unwrap(),
-            assembly_accession: assembly.accession.clone(),
-            length: 50_000,
-            refget_checksum: "checksum".to_owned(),
-        }];
-
-        let config = build_jbrowse_config(&assembly, &sequences, Some("http://api.test/"));
-
-        assert_eq!(config.assemblies[0].name, "GCA_test");
-        assert_eq!(
-            config.assemblies[0].sequence.adapter.adapter_type,
-            "ChromSizesAdapter"
-        );
-        assert_eq!(
-            config.assemblies[0]
-                .sequence
-                .adapter
-                .chrom_sizes_location
-                .uri,
-            "http://api.test/jbrowse/assemblies/GCA_test/chrom.sizes"
-        );
-        assert_eq!(config.default_session.view.init.loc, "chr2:1..50000");
-        assert_eq!(
-            config.plant_genome_portal.features_url_template,
-            "http://api.test/jbrowse/assemblies/GCA_test/features?refName={refName}&start={start}&end={end}"
-        );
-    }
-
-    #[test]
-    fn chrom_sizes_body_is_sorted_and_tab_delimited() {
-        let accession = AssemblyAccession::new("GCA_test").unwrap();
-        let sequences = vec![
-            Sequence {
-                name: SequenceName::new("chr2").unwrap(),
-                assembly_accession: accession.clone(),
-                length: 20,
-                refget_checksum: "checksum2".to_owned(),
-            },
-            Sequence {
-                name: SequenceName::new("chr1").unwrap(),
-                assembly_accession: accession,
-                length: 10,
-                refget_checksum: "checksum1".to_owned(),
-            },
-        ];
-
-        assert_eq!(chrom_sizes_body(sequences), "chr1\t10\nchr2\t20\n");
-    }
-
-    #[test]
-    fn gene_converts_to_jbrowse_feature_coordinates() {
-        let gene = Gene {
-            id: genome_core::GeneId::new("gene1").unwrap(),
-            assembly_accession: AssemblyAccession::new("GCA_test").unwrap(),
-            symbol: Some("SYMBOL1".to_owned()),
-            locus_tag: None,
-            sequence_name: SequenceName::new("chr1").unwrap(),
-            region: HalfOpenRegion::new(
-                SequenceName::new("chr1").unwrap(),
-                Position0::new(9),
-                Position0::new(20),
-            )
-            .unwrap(),
-            strand: Strand::Reverse,
-            feature_type: "gene".to_owned(),
-            annotations: Vec::new(),
-            attributes: BTreeMap::new(),
-        };
-
-        let feature = JBrowseFeature::from(gene);
-
-        assert_eq!(feature.unique_id, "gene1");
-        assert_eq!(feature.name, "SYMBOL1");
-        assert_eq!(feature.ref_name, "chr1");
-        assert_eq!(feature.start, 9);
-        assert_eq!(feature.end, 20);
-        assert_eq!(feature.strand, -1);
-    }
-
-    #[test]
-    fn validate_blastp_task_accepts_supported_tasks_and_rejects_others() {
-        assert!(validate_blastp_task("blastp").is_ok());
-        assert!(validate_blastp_task("blastp-short").is_ok());
-        assert!(validate_blastp_task("blastp-fast").is_ok());
-        assert!(matches!(
-            validate_blastp_task("blastn"),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-        assert!(matches!(
-            validate_blastp_task(""),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-    }
-
-    fn valid_blastp_request() -> BlastpJobRequest {
-        BlastpJobRequest {
-            assembly_accession: "GCA_test".to_owned(),
-            query: "MVTAG".to_owned(),
-            task: None,
-            evalue: None,
-            max_target_seqs: None,
-        }
-    }
-
-    #[test]
-    fn blastp_request_defaults_task_to_blastp_and_uses_default_thresholds() {
-        let input = valid_blastp_request().into_job_input().unwrap();
-        assert_eq!(input.task, "blastp");
-        assert_eq!(input.evalue, 10.0);
-        assert_eq!(input.max_target_seqs, 50);
-        assert_eq!(input.assembly_accession.as_str(), "GCA_test");
-    }
-
-    #[test]
-    fn blastp_request_rejects_non_positive_evalue() {
-        let mut request = valid_blastp_request();
-        request.evalue = Some(0.0);
-        assert!(matches!(
-            request.into_job_input(),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-        let mut request = valid_blastp_request();
-        request.evalue = Some(-1.0);
-        assert!(matches!(
-            request.into_job_input(),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-    }
-
-    #[test]
-    fn blastp_request_rejects_zero_max_target_seqs() {
-        let mut request = valid_blastp_request();
-        request.max_target_seqs = Some(0);
-        assert!(matches!(
-            request.into_job_input(),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-    }
-
-    #[test]
-    fn blastp_request_rejects_empty_query() {
-        let mut request = valid_blastp_request();
-        request.query = "   ".to_owned();
-        assert!(matches!(
-            request.into_job_input(),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-    }
-
-    #[test]
-    fn blastp_request_rejects_unsupported_task() {
-        let mut request = valid_blastp_request();
-        request.task = Some("blastn".to_owned());
-        assert!(matches!(
-            request.into_job_input(),
-            Err(ApiError::Service(ServiceError::InvalidRequest(_)))
-        ));
-    }
-
-    #[test]
-    fn blast_method_subcommand_matches_worker_cli_names() {
-        assert_eq!(BlastMethod::Blastn.subcommand(), "blastn-job");
-        assert_eq!(BlastMethod::Blastp.subcommand(), "blastp-job");
-    }
-
-    #[test]
-    fn blast_method_program_flag_matches_worker_cli_flags() {
-        assert_eq!(BlastMethod::Blastn.program_flag(), "--blastn");
-        assert_eq!(BlastMethod::Blastp.program_flag(), "--blastp");
-    }
 }

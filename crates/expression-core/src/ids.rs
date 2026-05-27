@@ -113,79 +113,135 @@ sra_accession!(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn sra_run_accession_accepts_all_three_archives() {
-        assert!(SraRunAccession::new("SRR000001").is_ok());
-        assert!(SraRunAccession::new("ERR1234567").is_ok());
-        assert!(SraRunAccession::new("DRR000001").is_ok());
-        // 10+ digits are common in modern entries.
-        assert!(SraRunAccession::new("SRR1234567890").is_ok());
+    #[derive(Clone, Copy, Debug)]
+    enum AccessionKind {
+        SraRun,
+        SraExperiment,
+        SraStudy,
+        BioSample,
+        BioProject,
     }
 
-    #[test]
-    fn sra_run_accession_rejects_wrong_prefix_or_short_digits() {
-        // Wrong prefix.
-        assert!(SraRunAccession::new("XRR000001").is_err());
-        assert!(SraRunAccession::new("SRX000001").is_err());
-        // Right prefix, too few digits.
-        assert!(SraRunAccession::new("SRR123").is_err());
-        // Right prefix, non-digit tail.
-        assert!(SraRunAccession::new("SRRabcdef").is_err());
-        // Empty.
-        assert!(SraRunAccession::new("").is_err());
+    impl AccessionKind {
+        fn assert_accepts(self, value: &str) {
+            match self {
+                Self::SraRun => {
+                    let id = SraRunAccession::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+                Self::SraExperiment => {
+                    let id = SraExperimentAccession::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+                Self::SraStudy => {
+                    let id = SraStudyAccession::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+                Self::BioSample => {
+                    let id = BioSampleAccession::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+                Self::BioProject => {
+                    let id = BioProjectAccession::new(value).unwrap();
+                    assert_eq!(id.as_str(), value);
+                    assert_eq!(id.to_string(), value);
+                    assert_eq!(id.clone().into_string(), value);
+                }
+            }
+        }
+
+        fn assert_rejects(self, value: &str) {
+            let is_err = match self {
+                Self::SraRun => SraRunAccession::new(value).is_err(),
+                Self::SraExperiment => SraExperimentAccession::new(value).is_err(),
+                Self::SraStudy => SraStudyAccession::new(value).is_err(),
+                Self::BioSample => BioSampleAccession::new(value).is_err(),
+                Self::BioProject => BioProjectAccession::new(value).is_err(),
+            };
+            assert!(is_err, "{self:?} accepted invalid value {value:?}");
+        }
+
+        fn assert_parses(self, value: &str) {
+            match self {
+                Self::SraRun => {
+                    let id: SraRunAccession = value.parse().unwrap();
+                    assert_eq!(id.as_str(), value);
+                }
+                Self::SraExperiment => {
+                    let id: SraExperimentAccession = value.parse().unwrap();
+                    assert_eq!(id.as_str(), value);
+                }
+                Self::SraStudy => {
+                    let id: SraStudyAccession = value.parse().unwrap();
+                    assert_eq!(id.as_str(), value);
+                }
+                Self::BioSample => {
+                    let id: BioSampleAccession = value.parse().unwrap();
+                    assert_eq!(id.as_str(), value);
+                }
+                Self::BioProject => {
+                    let id: BioProjectAccession = value.parse().unwrap();
+                    assert_eq!(id.as_str(), value);
+                }
+            }
+        }
     }
 
-    #[test]
-    fn sra_experiment_accession_validates_format() {
-        assert!(SraExperimentAccession::new("SRX000001").is_ok());
-        assert!(SraExperimentAccession::new("ERX123456").is_ok());
-        assert!(SraExperimentAccession::new("DRX999999").is_ok());
-        assert!(SraExperimentAccession::new("SRR000001").is_err());
+    #[rstest]
+    #[case::sra_run_sra(AccessionKind::SraRun, "SRR000001")]
+    #[case::sra_run_ena(AccessionKind::SraRun, "ERR1234567")]
+    #[case::sra_run_dra(AccessionKind::SraRun, "DRR000001")]
+    #[case::sra_run_modern_digits(AccessionKind::SraRun, "SRR1234567890")]
+    #[case::sra_experiment_sra(AccessionKind::SraExperiment, "SRX000001")]
+    #[case::sra_experiment_ena(AccessionKind::SraExperiment, "ERX123456")]
+    #[case::sra_experiment_dra(AccessionKind::SraExperiment, "DRX999999")]
+    #[case::sra_study_sra(AccessionKind::SraStudy, "SRP000001")]
+    #[case::sra_study_ena(AccessionKind::SraStudy, "ERP000001")]
+    #[case::sra_study_dra(AccessionKind::SraStudy, "DRP000001")]
+    #[case::biosample_ncbi(AccessionKind::BioSample, "SAMN12345678")]
+    #[case::biosample_ena(AccessionKind::BioSample, "SAMEA1234567")]
+    #[case::biosample_dra(AccessionKind::BioSample, "SAMD00012345")]
+    #[case::bioproject_ncbi(AccessionKind::BioProject, "PRJNA1")]
+    #[case::bioproject_ena(AccessionKind::BioProject, "PRJEB12345")]
+    #[case::bioproject_dra(AccessionKind::BioProject, "PRJDB6789")]
+    fn accessions_accept_valid_values(#[case] kind: AccessionKind, #[case] value: &str) {
+        kind.assert_accepts(value);
     }
 
-    #[test]
-    fn sra_study_accession_validates_format() {
-        assert!(SraStudyAccession::new("SRP000001").is_ok());
-        assert!(SraStudyAccession::new("ERP000001").is_ok());
-        assert!(SraStudyAccession::new("DRP000001").is_ok());
-        assert!(SraStudyAccession::new("SRX000001").is_err());
+    #[rstest]
+    #[case::sra_run_wrong_prefix(AccessionKind::SraRun, "XRR000001")]
+    #[case::sra_run_experiment_prefix(AccessionKind::SraRun, "SRX000001")]
+    #[case::sra_run_short_digits(AccessionKind::SraRun, "SRR123")]
+    #[case::sra_run_non_digits(AccessionKind::SraRun, "SRRabcdef")]
+    #[case::sra_run_empty(AccessionKind::SraRun, "")]
+    #[case::sra_experiment_run_prefix(AccessionKind::SraExperiment, "SRR000001")]
+    #[case::sra_study_experiment_prefix(AccessionKind::SraStudy, "SRX000001")]
+    #[case::biosample_short_prefix(AccessionKind::BioSample, "SAM12345")]
+    #[case::biosample_project_prefix(AccessionKind::BioSample, "PRJNA1")]
+    #[case::biosample_non_digits(AccessionKind::BioSample, "SAMNabcd")]
+    #[case::bioproject_short_prefix(AccessionKind::BioProject, "PRJ123")]
+    #[case::bioproject_sample_prefix(AccessionKind::BioProject, "SAMN1")]
+    fn accessions_reject_invalid_values(#[case] kind: AccessionKind, #[case] value: &str) {
+        kind.assert_rejects(value);
     }
 
-    #[test]
-    fn biosample_accession_validates_format() {
-        assert!(BioSampleAccession::new("SAMN12345678").is_ok());
-        assert!(BioSampleAccession::new("SAMEA1234567").is_ok());
-        assert!(BioSampleAccession::new("SAMD00012345").is_ok());
-        // Wrong prefix.
-        assert!(BioSampleAccession::new("SAM12345").is_err());
-        assert!(BioSampleAccession::new("PRJNA1").is_err());
-        // Non-digit tail.
-        assert!(BioSampleAccession::new("SAMNabcd").is_err());
-    }
-
-    #[test]
-    fn bioproject_accession_validates_format() {
-        assert!(BioProjectAccession::new("PRJNA1").is_ok());
-        assert!(BioProjectAccession::new("PRJEB12345").is_ok());
-        assert!(BioProjectAccession::new("PRJDB6789").is_ok());
-        assert!(BioProjectAccession::new("PRJ123").is_err());
-        assert!(BioProjectAccession::new("SAMN1").is_err());
-    }
-
-    #[test]
-    fn round_trip_via_as_str_into_string_display() {
-        let run = SraRunAccession::new("SRR000001").unwrap();
-        assert_eq!(run.as_str(), "SRR000001");
-        assert_eq!(run.to_string(), "SRR000001");
-        assert_eq!(run.clone().into_string(), "SRR000001");
-    }
-
-    #[test]
-    fn ids_parse_from_str() {
-        let run: SraRunAccession = "SRR000001".parse().unwrap();
-        let project: BioProjectAccession = "PRJNA1".parse().unwrap();
-        assert_eq!(run.as_str(), "SRR000001");
-        assert_eq!(project.as_str(), "PRJNA1");
+    #[rstest]
+    #[case::sra_run(AccessionKind::SraRun, "SRR000001")]
+    #[case::sra_experiment(AccessionKind::SraExperiment, "SRX000001")]
+    #[case::sra_study(AccessionKind::SraStudy, "SRP000001")]
+    #[case::biosample(AccessionKind::BioSample, "SAMN12345678")]
+    #[case::bioproject(AccessionKind::BioProject, "PRJNA1")]
+    fn accessions_parse_from_str(#[case] kind: AccessionKind, #[case] value: &str) {
+        kind.assert_parses(value);
     }
 }

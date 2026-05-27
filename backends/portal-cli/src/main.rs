@@ -7,8 +7,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 use storage::{
-    GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest, build_genome_snapshot,
-    write_snapshot,
+    GenomeSnapshot, GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest,
+    build_genome_snapshot, write_snapshot,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -239,20 +239,44 @@ impl MarpolbaseMptak1V7_1Import {
         std::fs::create_dir_all(&self.out)?;
 
         let config = self.config()?;
-        if config.snapshot_path.exists()
-            && config.input_files_exist()
-            && !self.force
-            && !self.rebuild_snapshot
-        {
-            let mut stdout = std::io::stdout().lock();
-            writeln!(
-                stdout,
-                "using existing snapshot {}",
-                config.snapshot_path.display()
-            )?;
+        if self.use_existing_snapshot(&config)? {
             return Ok(());
         }
 
+        self.download_inputs(&config).await?;
+
+        tracing::info!("parsing MarpolBase Tak-1 v7.1 files");
+        let snapshot = build_genome_snapshot(&config.snapshot)?;
+        write_snapshot(&config.snapshot_path, &snapshot)?;
+        write_import_summary(&snapshot, &config.snapshot_path)?;
+
+        Ok(())
+    }
+
+    fn use_existing_snapshot(
+        &self,
+        config: &ImportConfig,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        if !config.snapshot_path.exists()
+            || !config.input_files_exist()
+            || self.force
+            || self.rebuild_snapshot
+        {
+            return Ok(false);
+        }
+        let mut stdout = std::io::stdout().lock();
+        writeln!(
+            stdout,
+            "using existing snapshot {}",
+            config.snapshot_path.display()
+        )?;
+        Ok(true)
+    }
+
+    async fn download_inputs(
+        &self,
+        config: &ImportConfig,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         download_if_needed(&config.fasta_url, &config.snapshot.fasta_path, self.force).await?;
         download_if_needed(&config.gff_url, &config.snapshot.gff_path, self.force).await?;
         if let Some(functional_annotation_path) = &config.snapshot.functional_annotation_path {
@@ -272,21 +296,6 @@ impl MarpolbaseMptak1V7_1Import {
         for download in &config.kegg_downloads {
             download_if_needed(&download.url, &download.path, self.force).await?;
         }
-
-        tracing::info!("parsing MarpolBase Tak-1 v7.1 files");
-        let snapshot = build_genome_snapshot(&config.snapshot)?;
-        write_snapshot(&config.snapshot_path, &snapshot)?;
-
-        let mut stdout = std::io::stdout().lock();
-        writeln!(
-            stdout,
-            "wrote {} genes, {} transcripts, {} sequences to {}",
-            snapshot.dataset.genes.len(),
-            snapshot.dataset.transcripts.len(),
-            snapshot.dataset.sequences.len(),
-            config.snapshot_path.display()
-        )?;
-
         Ok(())
     }
 
@@ -435,6 +444,22 @@ fn kegg_dump_layout(dir: &Path) -> Result<KeggDumpLayout, Box<dyn std::error::Er
         downloads,
         manifest,
     })
+}
+
+fn write_import_summary(
+    snapshot: &GenomeSnapshot,
+    snapshot_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stdout = std::io::stdout().lock();
+    writeln!(
+        stdout,
+        "wrote {} genes, {} transcripts, {} sequences to {}",
+        snapshot.dataset.genes.len(),
+        snapshot.dataset.transcripts.len(),
+        snapshot.dataset.sequences.len(),
+        snapshot_path.display()
+    )?;
+    Ok(())
 }
 
 #[derive(Debug)]
