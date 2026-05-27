@@ -199,46 +199,84 @@ pub struct KeggCatalog {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn pathway_id_canonicalizes_ko_and_ec_prefixes_to_map() {
-        assert_eq!(KeggPathwayId::new("map00010").unwrap().as_str(), "map00010");
-        assert_eq!(KeggPathwayId::new("ko00010").unwrap().as_str(), "map00010");
-        assert_eq!(KeggPathwayId::new("ec00010").unwrap().as_str(), "map00010");
-        assert_eq!(
-            KeggPathwayId::new("path:map00010").unwrap().as_str(),
-            "map00010"
-        );
-        assert_eq!(
-            KeggPathwayId::new("path:ko00010").unwrap().as_str(),
-            "map00010"
-        );
+    #[derive(Clone, Copy, Debug)]
+    enum KeggKind {
+        Pathway,
+        Module,
+        Reaction,
     }
 
-    #[test]
-    fn pathway_id_rejects_unknown_prefix_and_wrong_digit_count() {
-        assert!(KeggPathwayId::new("xy00010").is_err());
-        assert!(KeggPathwayId::new("map0001").is_err());
-        assert!(KeggPathwayId::new("map000010").is_err());
-        assert!(KeggPathwayId::new("mapABCDE").is_err());
+    macro_rules! assert_accepts_kegg_identifier {
+        ($kind:expr, $value:expr, $expected:expr) => {
+            match $kind {
+                KeggKind::Pathway => {
+                    let value = $value;
+                    let expected = $expected;
+                    let id = KeggPathwayId::new(value).unwrap();
+                    assert_eq!(id.as_str(), expected);
+                    assert_eq!(id.to_string(), expected);
+                    assert_eq!(id.clone().into_string(), expected);
+                }
+                KeggKind::Module => {
+                    let value = $value;
+                    let expected = $expected;
+                    let id = KeggModuleId::new(value).unwrap();
+                    assert_eq!(id.as_str(), expected);
+                    assert_eq!(id.to_string(), expected);
+                    assert_eq!(id.clone().into_string(), expected);
+                }
+                KeggKind::Reaction => {
+                    let value = $value;
+                    let expected = $expected;
+                    let id = KeggReactionId::new(value).unwrap();
+                    assert_eq!(id.as_str(), expected);
+                    assert_eq!(id.to_string(), expected);
+                    assert_eq!(id.clone().into_string(), expected);
+                }
+            }
+        };
     }
 
-    #[test]
-    fn module_id_requires_six_chars_starting_with_m() {
-        assert_eq!(KeggModuleId::new("M00001").unwrap().as_str(), "M00001");
-        assert!(KeggModuleId::new("K00001").is_err());
-        assert!(KeggModuleId::new("M0001").is_err());
-        assert!(KeggModuleId::new("M000001").is_err());
-        assert!(KeggModuleId::new("Mabcde").is_err());
+    macro_rules! assert_rejects_kegg_identifier {
+        ($kind:expr, $value:expr) => {
+            let is_err = match $kind {
+                KeggKind::Pathway => KeggPathwayId::new($value).is_err(),
+                KeggKind::Module => KeggModuleId::new($value).is_err(),
+                KeggKind::Reaction => KeggReactionId::new($value).is_err(),
+            };
+            assert!(is_err, "{:?} accepted invalid value {:?}", $kind, $value);
+        };
     }
 
-    #[test]
-    fn reaction_id_requires_six_chars_starting_with_r() {
-        assert_eq!(KeggReactionId::new("R00001").unwrap().as_str(), "R00001");
-        assert_eq!(KeggReactionId::new("rn:R00001").unwrap().as_str(), "R00001");
-        assert!(KeggReactionId::new("K00001").is_err());
-        assert!(KeggReactionId::new("R0001").is_err());
-        assert!(KeggReactionId::new("Rabcde").is_err());
+    #[rstest]
+    #[case::pathway_map(KeggKind::Pathway, "map00010", "map00010")]
+    #[case::pathway_ko(KeggKind::Pathway, "ko00010", "map00010")]
+    #[case::pathway_ec(KeggKind::Pathway, "ec00010", "map00010")]
+    #[case::pathway_with_prefix(KeggKind::Pathway, "path:map00010", "map00010")]
+    #[case::pathway_ko_with_prefix(KeggKind::Pathway, "path:ko00010", "map00010")]
+    #[case::module(KeggKind::Module, "M00001", "M00001")]
+    #[case::reaction(KeggKind::Reaction, "R00001", "R00001")]
+    #[case::reaction_with_prefix(KeggKind::Reaction, "rn:R00001", "R00001")]
+    fn kegg_ids_accept(#[case] kind: KeggKind, #[case] value: &str, #[case] expected: &str) {
+        assert_accepts_kegg_identifier!(kind, value, expected);
+    }
+
+    #[rstest]
+    #[case::pathway_unknown_prefix(KeggKind::Pathway, "xy00010")]
+    #[case::pathway_short_digits(KeggKind::Pathway, "map0001")]
+    #[case::pathway_long_digits(KeggKind::Pathway, "map000010")]
+    #[case::pathway_non_digits(KeggKind::Pathway, "mapABCDE")]
+    #[case::module_wrong_prefix(KeggKind::Module, "K00001")]
+    #[case::module_short_digits(KeggKind::Module, "M0001")]
+    #[case::module_long_digits(KeggKind::Module, "M000001")]
+    #[case::module_non_digits(KeggKind::Module, "Mabcde")]
+    #[case::reaction_wrong_prefix(KeggKind::Reaction, "K00001")]
+    #[case::reaction_short_digits(KeggKind::Reaction, "R0001")]
+    #[case::reaction_non_digits(KeggKind::Reaction, "Rabcde")]
+    fn kegg_ids_reject(#[case] kind: KeggKind, #[case] value: &str) {
+        assert_rejects_kegg_identifier!(kind, value);
     }
 
     #[test]
@@ -254,26 +292,5 @@ mod tests {
 
         let other = KeggEntryId::new("M00001").unwrap();
         assert!(ko_entry_id(&other).is_none());
-    }
-
-    #[test]
-    fn pathway_id_display_and_into_string_preserve_value() {
-        let id = KeggPathwayId::new("map00010").unwrap();
-        assert_eq!(id.to_string(), "map00010");
-        assert_eq!(id.clone().into_string(), "map00010");
-    }
-
-    #[test]
-    fn module_id_display_and_into_string_preserve_value() {
-        let id = KeggModuleId::new("M00001").unwrap();
-        assert_eq!(id.to_string(), "M00001");
-        assert_eq!(id.clone().into_string(), "M00001");
-    }
-
-    #[test]
-    fn reaction_id_display_and_into_string_preserve_value() {
-        let id = KeggReactionId::new("R00754").unwrap();
-        assert_eq!(id.to_string(), "R00754");
-        assert_eq!(id.clone().into_string(), "R00754");
     }
 }
