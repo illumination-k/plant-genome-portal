@@ -220,6 +220,7 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         };
 
         static NEXT_FASTA_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);

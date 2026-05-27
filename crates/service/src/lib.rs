@@ -6,8 +6,8 @@ mod sequence;
 use genome_core::{
     Assembly, AssemblyAccession, ClosedRegion, FunctionalAnnotation, Gene, GeneId, GeneRecord,
     GeneSearch, GenomeRepository, KeggEntryId, KeggKoLinks, KeggModule, KeggModuleId, KeggPathway,
-    KeggPathwayId, KeggReaction, KeggReactionId, Sequence, TaxId, Taxon, Transcript, TranscriptId,
-    ko_entry_id,
+    KeggPathwayId, KeggReaction, KeggReactionId, Orthogroup, OrthogroupId, Sequence, TaxId, Taxon,
+    Transcript, TranscriptId, ko_entry_id,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -42,6 +42,8 @@ pub enum ServiceError {
     ProteinSequenceUnavailable(String),
     #[error("KEGG pathway not found: {0}")]
     KeggPathwayNotFound(String),
+    #[error("orthogroup not found: {0}")]
+    OrthogroupNotFound(String),
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 }
@@ -280,6 +282,23 @@ where
             entries,
         })
     }
+
+    pub fn gene_orthogroups(&self, gene_id: &str) -> Result<Vec<Orthogroup>, ServiceError> {
+        let gene_id = GeneId::new(gene_id)
+            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+        if self.repository.gene(&gene_id).is_none() {
+            return Err(ServiceError::GeneNotFound(gene_id.into_string()));
+        }
+        Ok(self.repository.orthogroups_for_gene(&gene_id))
+    }
+
+    pub fn orthogroup(&self, orthogroup_id: &str) -> Result<Orthogroup, ServiceError> {
+        let orthogroup_id = OrthogroupId::new(orthogroup_id)
+            .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+        self.repository
+            .orthogroup(&orthogroup_id)
+            .ok_or_else(|| ServiceError::OrthogroupNotFound(orthogroup_id.into_string()))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -355,6 +374,48 @@ mod tests {
         assert_eq!(results.len(), 1);
     }
 
+    #[test]
+    fn gene_orthogroups_returns_empty_for_gene_without_membership() {
+        let service = make_service();
+
+        let groups = service.gene_orthogroups("Mp1g00010").unwrap();
+
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn gene_orthogroups_returns_404_for_missing_gene() {
+        let service = make_service();
+
+        let error = service.gene_orthogroups("Mp9g99999").unwrap_err();
+
+        assert!(matches!(error, ServiceError::GeneNotFound(_)));
+    }
+
+    #[test]
+    fn orthogroup_returns_group_by_id() {
+        let service = orthogroup_service();
+
+        let group = service.orthogroup("OG1").unwrap();
+
+        assert_eq!(group.id.as_str(), "OG1");
+        assert_eq!(group.members.len(), 1);
+        assert!(matches!(
+            service.orthogroup("OG404").unwrap_err(),
+            ServiceError::OrthogroupNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn gene_orthogroups_returns_membership_for_existing_gene() {
+        let service = orthogroup_service();
+
+        let groups = service.gene_orthogroups("Mp1g00010").unwrap();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].id.as_str(), "OG1");
+    }
+
     fn make_service() -> GenomeService<FileGenomeRepository> {
         let accession = AssemblyAccession::new("GCA_test").unwrap();
         let dataset = GenomeDataset {
@@ -393,8 +454,63 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         };
 
+        GenomeService::new(FileGenomeRepository::new(dataset), None)
+    }
+
+    fn orthogroup_service() -> GenomeService<FileGenomeRepository> {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let dataset = GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: accession.clone(),
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: Vec::new(),
+            genes: vec![Gene {
+                id: GeneId::new("Mp1g00010").unwrap(),
+                assembly_accession: accession.clone(),
+                symbol: Some("FOO".to_owned()),
+                locus_tag: None,
+                sequence_name: SequenceName::new("chr1").unwrap(),
+                region: HalfOpenRegion::new(
+                    SequenceName::new("chr1").unwrap(),
+                    Position0::new(0),
+                    Position0::new(10),
+                )
+                .unwrap(),
+                strand: Strand::Forward,
+                feature_type: "gene".to_owned(),
+                annotations: Vec::new(),
+                attributes: BTreeMap::new(),
+            }],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog {
+                groups: vec![genome_core::Orthogroup {
+                    id: genome_core::OrthogroupId::new("OG1").unwrap(),
+                    members: vec![genome_core::OrthogroupMember {
+                        gene_id: GeneId::new("Mp1g00010").unwrap(),
+                        tax_id: TaxId::new(3197),
+                        scientific_name: "Marchantia polymorpha".to_owned(),
+                        assembly_accession: Some(accession),
+                        symbol: Some("FOO".to_owned()),
+                    }],
+                }],
+            },
+        };
         GenomeService::new(FileGenomeRepository::new(dataset), None)
     }
 
@@ -497,6 +613,7 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: catalog,
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         };
         GenomeService::new(FileGenomeRepository::new(dataset), None)
     }

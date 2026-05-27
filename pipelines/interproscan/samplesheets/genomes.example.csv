@@ -1,0 +1,2 @@
+genome_id,tax_id,scientific_name,assembly_accession,protein_fasta,gene_metadata_tsv
+marchantia_tak1_v7_1,3197,Marchantia polymorpha,GCA_037833805.1,data/marpolbase/MpTak1_v7.1/MpTak1_v7.1.protein.fa,

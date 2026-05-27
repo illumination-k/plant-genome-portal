@@ -95,3 +95,24 @@ The task starts the API with `tests/fixtures/backend-pbt`, then runs Schemathesi
 ```bash
 bash scripts/pbt/backend-schemathesis.sh --max-examples 200 --continue-on-failure
 ```
+
+## Comparative and Functional Annotation Pipelines
+
+Two genome-manifest driven Nextflow pipelines are available for adding genomes
+after the portal is already running:
+
+```bash
+nextflow run pipelines/orthology \
+  -profile docker \
+  --genomes pipelines/orthology/samplesheets/genomes.example.csv \
+  --outdir results/orthology
+
+nextflow run pipelines/interproscan \
+  -profile docker \
+  --genomes pipelines/interproscan/samplesheets/genomes.example.csv \
+  --outdir results/interproscan
+```
+
+Append rows to each `genomes.csv` to add species/assemblies. Orthology exports
+`results/orthology/portal/orthogroups.tsv`; InterProScan exports
+`results/interproscan/portal/functional_annotation.1_line.tsv`.

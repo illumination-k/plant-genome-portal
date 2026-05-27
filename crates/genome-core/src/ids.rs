@@ -51,6 +51,7 @@ string_id!(GeneId, "gene id");
 string_id!(KeggEntryId, "KEGG entry id");
 string_id!(KogEntryId, "KOG entry id");
 string_id!(NcbiFamAccession, "NCBIfam accession");
+string_id!(OrthogroupId, "orthogroup id");
 string_id!(SequenceName, "sequence name");
 string_id!(TranscriptId, "transcript id");
 

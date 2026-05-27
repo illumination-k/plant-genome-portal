@@ -11,6 +11,7 @@ use crate::{ApiError, AppService, AppState};
 #[utoipa::path(
     post,
     path = "/v2/analysis/enrichment",
+    operation_id = "enrichment_analysis",
     request_body = EnrichmentAnalysisRequest,
     responses(
         (status = 200, description = "Functional annotation over-representation analysis", body = EnrichmentAnalysisResponse),
@@ -479,6 +480,7 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         };
         service::GenomeService::new(FileGenomeRepository::new(dataset), None)
     }
