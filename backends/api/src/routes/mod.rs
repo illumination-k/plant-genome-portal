@@ -1,5 +1,6 @@
 pub(crate) mod blast;
 pub(crate) mod enrichment;
+pub(crate) mod epigenome;
 pub(crate) mod expression;
 pub(crate) mod gene;
 pub(crate) mod genome;

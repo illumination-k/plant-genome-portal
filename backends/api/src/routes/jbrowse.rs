@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{ApiError, AppService, AppState};
+use crate::routes::epigenome::jbrowse_tracks;
+use crate::{ApiError, AppEpigenomeRepository, AppService, AppState};
 use service::ServiceError;
 
 #[utoipa::path(
@@ -27,7 +28,14 @@ pub(crate) async fn default_config(
     Query(query): Query<JBrowseConfigQuery>,
 ) -> Result<Json<JBrowseRootConfig>, ApiError> {
     let accession = state.default_assembly_accession.clone();
-    config_for_accession(&state.service, &accession, query.base_url.as_deref()).map(Json)
+    config_for_accession(
+        &state.service,
+        state.epigenome_repository.as_ref(),
+        state.epigenome_base_path.as_deref(),
+        &accession,
+        query.base_url.as_deref(),
+    )
+    .map(Json)
 }
 
 #[utoipa::path(
@@ -48,7 +56,14 @@ pub(crate) async fn config(
     Path(accession): Path<String>,
     Query(query): Query<JBrowseConfigQuery>,
 ) -> Result<Json<JBrowseRootConfig>, ApiError> {
-    config_for_accession(&state.service, &accession, query.base_url.as_deref()).map(Json)
+    config_for_accession(
+        &state.service,
+        state.epigenome_repository.as_ref(),
+        state.epigenome_base_path.as_deref(),
+        &accession,
+        query.base_url.as_deref(),
+    )
+    .map(Json)
 }
 
 #[utoipa::path(
@@ -111,18 +126,31 @@ fn validate_feature_range(start: u64, end: u64) -> Result<(), ApiError> {
 
 fn config_for_accession(
     service: &AppService,
+    epigenome_repository: Option<&AppEpigenomeRepository>,
+    epigenome_signal_base: Option<&str>,
     accession: &str,
     base_url: Option<&str>,
 ) -> Result<JBrowseRootConfig, ApiError> {
     let assembly = service.assembly(accession)?;
     let sequences = service.sequences_for_assembly(accession)?;
-    Ok(build_config(&assembly, &sequences, base_url))
+    let extra_tracks = epigenome_repository
+        .map(|repository| {
+            jbrowse_tracks(
+                repository,
+                &assembly.accession,
+                base_url,
+                epigenome_signal_base,
+            )
+        })
+        .unwrap_or_default();
+    Ok(build_config(&assembly, &sequences, base_url, extra_tracks))
 }
 
 pub(crate) fn build_config(
     assembly: &genome_core::Assembly,
     sequences: &[Sequence],
     base_url: Option<&str>,
+    extra_tracks: Vec<serde_json::Value>,
 ) -> JBrowseRootConfig {
     let accession = assembly.accession.as_str();
     let initial_ref = sequences
@@ -164,7 +192,7 @@ pub(crate) fn build_config(
                 },
             },
         }],
-        tracks: Vec::new(),
+        tracks: extra_tracks,
         default_session: JBrowseDefaultSession {
             name: format!("{} genome browser", assembly.name),
             view: JBrowseDefaultView {
@@ -233,7 +261,11 @@ pub(crate) struct JBrowseFeaturesQuery {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct JBrowseRootConfig {
     assemblies: Vec<JBrowseAssembly>,
-    tracks: Vec<JBrowseTrack>,
+    /// Opaque JBrowse track configs. JBrowse supports many track / adapter
+    /// types that don't share a single Rust schema, so we ship them as
+    /// `serde_json::Value` and let the frontend's JBrowse typings interpret.
+    #[schema(value_type = Vec<Object>)]
+    tracks: Vec<serde_json::Value>,
     default_session: JBrowseDefaultSession,
     plant_genome_portal: JBrowsePortalConfig,
 }
@@ -277,9 +309,6 @@ pub(crate) struct JBrowseRendering {
     #[serde(rename = "type")]
     rendering_type: String,
 }
-
-#[derive(Debug, Serialize, ToSchema)]
-pub(crate) struct JBrowseTrack {}
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -377,7 +406,7 @@ mod tests {
             refget_checksum: "checksum".to_owned(),
         }];
 
-        let config = build_config(&assembly, &sequences, Some("http://api.test/"));
+        let config = build_config(&assembly, &sequences, Some("http://api.test/"), Vec::new());
 
         assert_eq!(config.assemblies[0].name, "GCA_test");
         assert_eq!(
