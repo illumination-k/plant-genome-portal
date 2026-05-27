@@ -606,6 +606,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "epigenome-core"
+version = "0.1.0"
+dependencies = [
+ "expression-core",
+ "genome-core",
+ "rstest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "utoipa",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
