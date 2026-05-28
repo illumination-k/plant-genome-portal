@@ -7,9 +7,7 @@ import EpigenomeTargetBadge from "@/features/epigenome/components/EpigenomeTarge
 
 const FRIP_PRECISION = 2;
 
-const EpigenomeExperimentCard = (props: {
-  entry: EpigenomeExperimentWithPeaks;
-}): ReactElement => {
+const EpigenomeExperimentCard = (props: { entry: EpigenomeExperimentWithPeaks }): ReactElement => {
   const { experiment, peaks } = props.entry;
   const tissue = experiment.tissue ?? undefined;
   const replicate = experiment.replicate ?? undefined;
@@ -22,9 +20,7 @@ const EpigenomeExperimentCard = (props: {
         <span className="font-mono text-xs text-text-muted">{experiment.experimentId}</span>
         <EpigenomeAssayBadge assay={experiment.assay} />
         <EpigenomeTargetBadge target={experiment.target} />
-        {tissue !== undefined && (
-          <span className="text-xs text-text-muted">tissue: {tissue}</span>
-        )}
+        {tissue !== undefined && <span className="text-xs text-text-muted">tissue: {tissue}</span>}
         {replicate !== undefined && (
           <span className="text-xs text-text-muted">rep: {replicate}</span>
         )}

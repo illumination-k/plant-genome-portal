@@ -581,4 +581,71 @@ mod tests {
         assert!(parse_experiment_ids(None).unwrap().is_none());
         assert!(parse_experiment_ids(Some("")).unwrap().unwrap().is_empty());
     }
+
+    #[test]
+    fn parse_experiment_ids_accepts_up_to_max_and_rejects_above() {
+        // Pins the `> MAX_EXPERIMENT_IDS` boundary so swapping to `>=` (which
+        // would reject the at-limit case) or `==` is caught.
+        let at_limit = (0..MAX_EXPERIMENT_IDS)
+            .map(|i| format!("e{i}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert_eq!(
+            parse_experiment_ids(Some(&at_limit))
+                .unwrap()
+                .unwrap()
+                .len(),
+            MAX_EXPERIMENT_IDS
+        );
+
+        let above_limit = (0..=MAX_EXPERIMENT_IDS)
+            .map(|i| format!("e{i}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert!(parse_experiment_ids(Some(&above_limit)).is_err());
+    }
+
+    #[test]
+    fn endpoint_url_returns_path_when_base_is_empty_or_unset() {
+        // Pins the `!base_url.is_empty()` guard so deleting the `!` (which
+        // would prepend an empty base + reformat) is caught.
+        assert_eq!(endpoint_url(None, "/v2/foo"), "/v2/foo");
+        assert_eq!(endpoint_url(Some(""), "/v2/foo"), "/v2/foo");
+        assert_eq!(endpoint_url(Some("   "), "/v2/foo"), "/v2/foo");
+        assert_eq!(
+            endpoint_url(Some("http://api.test/"), "/v2/foo"),
+            "http://api.test/v2/foo"
+        );
+    }
+
+    #[test]
+    fn default_upstream_bp_matches_documented_default() {
+        // Pins the constant so silent edits to the promoter-window default
+        // are caught.
+        assert_eq!(default_upstream_bp(), 2_000);
+    }
+
+    fn make_region(start: u64, end: u64) -> genome_core::HalfOpenRegion {
+        HalfOpenRegion::new(
+            SequenceName::new("chr1").unwrap(),
+            Position0::new(start),
+            Position0::new(end),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn public_region_from_half_open_shifts_start_by_one() {
+        // PublicRegion in handlers maps half-open [start, end) → 1-based
+        // closed [start+1, end]. Pinning this with a tiny region kills
+        // arithmetic mutations on the `+ 1` in the gene_epigenome handler.
+        let half_open = make_region(99, 200);
+        let public = PublicRegion {
+            sequence_name: half_open.sequence_name.as_str().to_owned(),
+            start: half_open.start.get() + 1,
+            end: half_open.end.get(),
+        };
+        assert_eq!(public.start, 100);
+        assert_eq!(public.end, 200);
+    }
 }

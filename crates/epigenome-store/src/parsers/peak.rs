@@ -199,6 +199,44 @@ chr2\t2000\t9000\tbroad_2\t200\t.\t4.5\t12.0\t9.0
     }
 
     #[test]
+    fn narrow_peak_keeps_zero_summit_offset() {
+        // MACS uses -1 to mean "no summit"; a summit at offset 0 is real data
+        // and must round-trip as `Some(0)`, not `None`.
+        let input = "chr1\t100\t200\tp\t100\t.\t1\t1\t1\t0\n";
+        let peaks = parse_narrow_peak(input.as_bytes()).unwrap();
+        assert_eq!(peaks[0].summit_offset, Some(0));
+    }
+
+    #[test]
+    fn open_peaks_decompresses_gz_files() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use std::io::{Read as _, Write as _};
+
+        let dir = tempfile::tempdir().unwrap();
+        let gz_path = dir.path().join("peaks.narrowPeak.gz");
+        let plain_path = dir.path().join("peaks.narrowPeak");
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(NARROW_PEAK_SAMPLE.as_bytes()).unwrap();
+        std::fs::write(&gz_path, encoder.finish().unwrap()).unwrap();
+        std::fs::write(&plain_path, NARROW_PEAK_SAMPLE).unwrap();
+
+        let mut from_gz = String::new();
+        open_peaks(&gz_path)
+            .unwrap()
+            .read_to_string(&mut from_gz)
+            .unwrap();
+        let mut from_plain = String::new();
+        open_peaks(&plain_path)
+            .unwrap()
+            .read_to_string(&mut from_plain)
+            .unwrap();
+
+        assert_eq!(from_gz, from_plain);
+    }
+
+    #[test]
     fn broad_peak_parses_without_summit() {
         let peaks = parse_broad_peak(BROAD_PEAK_SAMPLE.as_bytes()).unwrap();
         assert_eq!(peaks.len(), 2);

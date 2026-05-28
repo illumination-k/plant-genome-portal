@@ -68,6 +68,12 @@ mod tests {
     }
 
     #[test]
+    fn as_str_returns_canonical_label() {
+        assert_eq!(Assay::ChipSeq.as_str(), "chip_seq");
+        assert_eq!(Assay::AtacSeq.as_str(), "atac_seq");
+    }
+
+    #[test]
     fn from_str_rejects_unknown() {
         assert!(Assay::from_str("rna_seq").is_err());
     }

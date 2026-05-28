@@ -446,6 +446,48 @@ mod tests {
     }
 
     #[test]
+    fn experiments_filter_by_assembly_excludes_other_assemblies() {
+        let repo = FileEpigenomeRepository::new(three_experiment_dataset()).unwrap();
+        let matching = repo.experiments(&ExperimentQuery {
+            assembly_accession: Some(assembly()),
+            ..Default::default()
+        });
+        assert_eq!(matching.len(), 3);
+
+        let other = repo.experiments(&ExperimentQuery {
+            assembly_accession: Some(AssemblyAccession::new("GCA_other").unwrap()),
+            ..Default::default()
+        });
+        assert!(other.is_empty());
+    }
+
+    #[test]
+    fn peaks_in_region_excludes_experiments_with_different_target() {
+        // Filtering by H3K4me3 must exclude H3K27me3 experiments — pins the
+        // target inequality so mutating `!=` to `==` is caught.
+        let repo = FileEpigenomeRepository::new(three_experiment_dataset()).unwrap();
+        let hits = repo.peaks_in_region(&PeakRegionQuery {
+            assembly_accession: assembly(),
+            region: region("chr1", 0, 10_000),
+            experiments: None,
+            assay: None,
+            target: Some(Target::new("H3K4me3").unwrap()),
+            limit: None,
+        });
+        assert!(!hits.is_empty());
+        assert!(
+            hits.iter()
+                .all(|h| h.experiment_id.as_str() == "h3k4me3_rep1")
+        );
+    }
+
+    #[test]
+    fn experiment_count_matches_inserted_experiments() {
+        let repo = FileEpigenomeRepository::new(three_experiment_dataset()).unwrap();
+        assert_eq!(repo.experiment_count(), 3);
+    }
+
+    #[test]
     fn experiment_returns_none_for_unknown_id() {
         let repo = FileEpigenomeRepository::new(three_experiment_dataset()).unwrap();
         assert!(

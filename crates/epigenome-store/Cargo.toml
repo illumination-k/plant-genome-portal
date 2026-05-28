@@ -7,8 +7,8 @@ license.workspace = true
 [dependencies]
 epigenome-core = { path = "../epigenome-core", version = "0.1.0" }
 expression-core = { path = "../expression-core", version = "0.1.0" }
-genome-core = { path = "../genome-core", version = "0.1.0" }
 flate2.workspace = true
+genome-core = { path = "../genome-core", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
