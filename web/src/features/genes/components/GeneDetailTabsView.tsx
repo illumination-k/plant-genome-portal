@@ -1,8 +1,10 @@
+/* oxlint-disable max-lines-per-function */
 import type { GeneRecord } from "@/api/client/types.gen";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 import GeneAnnotationTab from "@/features/genes/components/GeneAnnotationTab";
 import GeneBrowserTab from "@/features/genes/components/GeneBrowserTab";
+import GeneEpigenomeTab from "@/features/epigenome/components/GeneEpigenomeTab";
 import GeneExpressionTab from "@/features/expression/components/GeneExpressionTab";
 import GeneOverviewTab from "@/features/genes/components/GeneOverviewTab";
 import GeneSequenceTab from "@/features/genes/components/GeneSequenceTab";
@@ -30,6 +32,11 @@ const GeneDetailTabsView = (props: {
         label: "Expression",
         panel: <GeneExpressionTab geneRecord={props.geneRecord} />,
         value: "expression",
+      },
+      {
+        label: "Epigenome",
+        panel: <GeneEpigenomeTab geneRecord={props.geneRecord} />,
+        value: "epigenome",
       },
       {
         label: "Sequence",

@@ -13,6 +13,7 @@ const tabSchema = picklist([
   "overview",
   "annotation",
   "expression",
+  "epigenome",
   "sequence",
   "transcripts",
   "browser",

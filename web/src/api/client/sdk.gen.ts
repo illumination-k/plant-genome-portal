@@ -24,10 +24,22 @@ import type {
   EnrichmentAnalysisData,
   EnrichmentAnalysisErrors,
   EnrichmentAnalysisResponses,
+  EpigenomeExperimentData,
+  EpigenomeExperimentErrors,
+  EpigenomeExperimentResponses,
+  EpigenomeExperimentsData,
+  EpigenomeExperimentsErrors,
+  EpigenomeExperimentsResponses,
+  EpigenomePeaksData,
+  EpigenomePeaksErrors,
+  EpigenomePeaksResponses,
   ExpressionClustergramData,
   ExpressionClustergramErrors,
   ExpressionClustergramResponses,
   GeneData,
+  GeneEpigenomeData,
+  GeneEpigenomeErrors,
+  GeneEpigenomeResponses,
   GeneErrors,
   GeneExpressionData,
   GeneExpressionErrors,
@@ -166,6 +178,32 @@ export const enrichmentAnalysis = <ThrowOnError extends boolean = true>(
     },
   });
 
+export const epigenomeExperiment = <ThrowOnError extends boolean = true>(
+  options: Options<EpigenomeExperimentData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<
+    EpigenomeExperimentResponses,
+    EpigenomeExperimentErrors,
+    ThrowOnError
+  >({ url: "/v2/epigenome/experiment/{experiment_id}", ...options });
+
+export const epigenomeExperiments = <ThrowOnError extends boolean = true>(
+  options?: Options<EpigenomeExperimentsData, ThrowOnError>,
+) =>
+  (options?.client ?? client).get<
+    EpigenomeExperimentsResponses,
+    EpigenomeExperimentsErrors,
+    ThrowOnError
+  >({ url: "/v2/epigenome/experiments", ...options });
+
+export const epigenomePeaks = <ThrowOnError extends boolean = true>(
+  options: Options<EpigenomePeaksData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<EpigenomePeaksResponses, EpigenomePeaksErrors, ThrowOnError>({
+    url: "/v2/epigenome/peaks",
+    ...options,
+  });
+
 export const expressionClustergram = <ThrowOnError extends boolean = true>(
   options: Options<ExpressionClustergramData, ThrowOnError>,
 ) =>
@@ -180,6 +218,14 @@ export const gene = <ThrowOnError extends boolean = true>(
 ) =>
   (options.client ?? client).get<GeneResponses, GeneErrors, ThrowOnError>({
     url: "/v2/gene/id/{gene_id}",
+    ...options,
+  });
+
+export const geneEpigenome = <ThrowOnError extends boolean = true>(
+  options: Options<GeneEpigenomeData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<GeneEpigenomeResponses, GeneEpigenomeErrors, ThrowOnError>({
+    url: "/v2/gene/id/{gene_id}/epigenome",
     ...options,
   });
 

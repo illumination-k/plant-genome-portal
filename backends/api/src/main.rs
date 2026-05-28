@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
 };
 use clap::{Parser, Subcommand};
+use epigenome_store::FileEpigenomeRepository;
 use expression_store::FileExpressionRepository;
 use routes::blast::{BlastJobManager, BlastMethod, BlastWorkerCommand, BlastpJobManager};
 use serde::Serialize;
@@ -23,16 +24,22 @@ use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
 use storage::{FastaReference, FileGenomeRepository};
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 use utoipa::{OpenApi, ToSchema};
 
 pub(crate) type AppService = GenomeService<FileGenomeRepository>;
 pub(crate) type AppExpressionRepository = FileExpressionRepository;
+pub(crate) type AppEpigenomeRepository = FileEpigenomeRepository;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) service: AppService,
     pub(crate) expression_repository: Option<AppExpressionRepository>,
+    pub(crate) epigenome_repository: Option<AppEpigenomeRepository>,
+    /// URL prefix where bigWig signal files are served, e.g.
+    /// `/epigenome/signal` (default) or `https://cdn.example/epigenome`.
+    pub(crate) epigenome_base_path: Option<String>,
     pub(crate) default_assembly_accession: String,
     pub(crate) blast_jobs: Option<BlastJobManager>,
     pub(crate) blastp_jobs: Option<BlastpJobManager>,
@@ -74,6 +81,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_deref()
         .map(FileExpressionRepository::from_snapshot_path)
         .transpose()?;
+    let epigenome_repository = config
+        .epigenome_snapshot
+        .as_deref()
+        .map(FileEpigenomeRepository::from_snapshot_path)
+        .transpose()?;
+    let epigenome_signal_root = config.epigenome_signal_root.clone();
+    let epigenome_base_path = config.epigenome_base_path.clone();
     let blast_jobs = config.blast_db_prefix.clone().map(|blast_db_prefix| {
         routes::blast::BlastJobManager::new(BlastWorkerCommand {
             worker_bin: config.blast_worker_bin.clone(),
@@ -103,13 +117,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     axum::serve(
         listener,
-        router(
+        router(RouterBuild {
             service,
             expression_repository,
+            epigenome_repository,
+            epigenome_base_path,
+            epigenome_signal_root,
             default_assembly_accession,
             blast_jobs,
             blastp_jobs,
-        ),
+        }),
     )
     .await?;
 
@@ -140,14 +157,29 @@ fn write_openapi_schema(output: Option<&FsPath>) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn router(
+struct RouterBuild {
     service: AppService,
     expression_repository: Option<AppExpressionRepository>,
+    epigenome_repository: Option<AppEpigenomeRepository>,
+    epigenome_base_path: Option<String>,
+    epigenome_signal_root: Option<PathBuf>,
     default_assembly_accession: String,
     blast_jobs: Option<BlastJobManager>,
     blastp_jobs: Option<BlastpJobManager>,
-) -> Router {
-    Router::new()
+}
+
+fn router(build: RouterBuild) -> Router {
+    let RouterBuild {
+        service,
+        expression_repository,
+        epigenome_repository,
+        epigenome_base_path,
+        epigenome_signal_root,
+        default_assembly_accession,
+        blast_jobs,
+        blastp_jobs,
+    } = build;
+    let mut router = Router::new()
         .route("/health", get(health))
         .route("/openapi.json", get(openapi_json))
         .route("/jbrowse/config", get(routes::jbrowse::default_config))
@@ -219,14 +251,33 @@ fn router(
         )
         .route("/sequence/service-info", get(refget::service_info))
         .route("/sequence/{checksum}", get(refget::sequence))
-        .layer(CorsLayer::permissive())
-        .with_state(AppState {
-            service,
-            expression_repository,
-            default_assembly_accession,
-            blast_jobs,
-            blastp_jobs,
-        })
+        .route(
+            "/v2/epigenome/experiments",
+            get(routes::epigenome::experiments),
+        )
+        .route(
+            "/v2/epigenome/experiment/{experiment_id}",
+            get(routes::epigenome::experiment),
+        )
+        .route("/v2/epigenome/peaks", get(routes::epigenome::peaks))
+        .route(
+            "/v2/gene/id/{gene_id}/epigenome",
+            get(routes::epigenome::gene_epigenome),
+        );
+
+    if let Some(root) = epigenome_signal_root.as_ref() {
+        router = router.nest_service("/epigenome/signal", ServeDir::new(root));
+    }
+
+    router.layer(CorsLayer::permissive()).with_state(AppState {
+        service,
+        expression_repository,
+        epigenome_repository,
+        epigenome_base_path,
+        default_assembly_accession,
+        blast_jobs,
+        blastp_jobs,
+    })
 }
 
 fn init_tracing() {
@@ -267,6 +318,20 @@ struct Config {
     no_fasta: bool,
     #[arg(long)]
     expression_snapshot: Option<PathBuf>,
+    /// Path to `epigenome_snapshot.json` produced by `portal-cli import
+    /// epigenome-manifest`. Without this flag, epigenome endpoints return
+    /// empty results.
+    #[arg(long)]
+    epigenome_snapshot: Option<PathBuf>,
+    /// Filesystem root holding bigWig signal files. Mounted at
+    /// `/epigenome/signal` via tower-http's `ServeDir` (Range-aware).
+    #[arg(long)]
+    epigenome_signal_root: Option<PathBuf>,
+    /// Optional override for the URL prefix the API emits when constructing
+    /// signal URLs. Defaults to `/epigenome/signal`. Useful when bigWigs are
+    /// served by a CDN.
+    #[arg(long)]
+    epigenome_base_path: Option<String>,
     #[arg(long)]
     blast_db_prefix: Option<PathBuf>,
     #[arg(long)]
@@ -308,6 +373,10 @@ enum Command {
         routes::gene::kegg_pathway,
         routes::expression::gene_expression,
         routes::expression::clustergram,
+        routes::epigenome::experiments,
+        routes::epigenome::experiment,
+        routes::epigenome::peaks,
+        routes::epigenome::gene_epigenome,
         routes::enrichment::analysis,
         routes::gene::gene_search,
         routes::blast::create_blastn_job,
@@ -334,6 +403,27 @@ enum Command {
         routes::expression::ExpressionClustergramResponse,
         routes::expression::ExpressionGeneLabel,
         routes::expression::ExpressionSampleLabel,
+        routes::epigenome::EpigenomeExperimentSummary,
+        routes::epigenome::EpigenomeExperimentDetail,
+        routes::epigenome::EpigenomePeakHit,
+        routes::epigenome::EpigenomeExperimentWithPeaks,
+        routes::epigenome::EpigenomeGeneView,
+        routes::epigenome::PublicPeak,
+        routes::epigenome::PublicRegion,
+        routes::epigenome::ExperimentListQuery,
+        routes::epigenome::EpigenomePeaksQuery,
+        routes::epigenome::GeneEpigenomeQuery,
+        epigenome_core::Antibody,
+        epigenome_core::Assay,
+        epigenome_core::Experiment,
+        epigenome_core::ExperimentId,
+        epigenome_core::ExperimentQc,
+        epigenome_core::GeoSampleAccession,
+        epigenome_core::GeoSeriesAccession,
+        epigenome_core::Peak,
+        epigenome_core::PeakKind,
+        epigenome_core::Target,
+        expression_core::SraRunAccession,
         routes::enrichment::EnrichmentAnalysisRequest,
         routes::enrichment::EnrichmentAnalysisResponse,
         routes::enrichment::EnrichmentAnnotationKind,
@@ -353,7 +443,6 @@ enum Command {
         routes::jbrowse::JBrowseRendering,
         routes::jbrowse::JBrowseRootConfig,
         routes::jbrowse::JBrowseSequenceTrack,
-        routes::jbrowse::JBrowseTrack,
         routes::jbrowse::JBrowseUriLocation,
         protein::ProteinQuery,
         refget::RefgetQuery,

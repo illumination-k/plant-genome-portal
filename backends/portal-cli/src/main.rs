@@ -1,4 +1,12 @@
 use clap::{Args, Parser, Subcommand};
+use epigenome_core::Experiment;
+use epigenome_store::{
+    EpigenomeDataset, EpigenomeSnapshot, EpigenomeSnapshotManifest, ExperimentPeaks,
+    parsers::{
+        ExperimentManifestEntry, open_peaks, parse_broad_peak, parse_manifest, parse_narrow_peak,
+    },
+    write_snapshot as write_epigenome_snapshot,
+};
 use flate2::read::GzDecoder;
 use genome_core::{Assembly, AssemblyAccession, AssemblySource, TaxId, Taxon};
 use serde::Serialize;
@@ -208,6 +216,7 @@ impl ImportCommand {
     async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         match self.source {
             ImportSource::MarpolbaseMptak1V7_1(command) => command.run().await,
+            ImportSource::EpigenomeManifest(command) => command.run(),
         }
     }
 }
@@ -216,6 +225,136 @@ impl ImportCommand {
 enum ImportSource {
     #[command(name = "marpolbase-mptak1-v7-1")]
     MarpolbaseMptak1V7_1(MarpolbaseMptak1V7_1Import),
+    /// Import ChIP-seq / ATAC-seq peaks and metadata from a curator-written
+    /// TOML manifest, producing an `epigenome_snapshot.json` consumed by the
+    /// API server via `--epigenome-snapshot`.
+    #[command(name = "epigenome-manifest")]
+    EpigenomeManifest(EpigenomeManifestImport),
+}
+
+#[derive(Debug, Args)]
+struct EpigenomeManifestImport {
+    /// Path to the curator-facing TOML manifest. See
+    /// `crates/epigenome-store/src/parsers/manifest.rs` for the schema.
+    #[arg(long)]
+    manifest: PathBuf,
+    /// Output path for the resulting `epigenome_snapshot.json`.
+    #[arg(long)]
+    out: PathBuf,
+    /// Free-form source label written into the snapshot manifest (e.g.
+    /// `"marpolbase-curated-2026-04"`).
+    #[arg(long, default_value = "curator-manifest")]
+    source_label: String,
+    #[arg(long)]
+    description: Option<String>,
+}
+
+impl EpigenomeManifestImport {
+    fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+        let entries = parse_manifest(&self.manifest)?;
+        let manifest_dir = self.manifest.parent().unwrap_or_else(|| Path::new("."));
+
+        let assembly = entries[0].assembly_accession.clone();
+        for entry in &entries {
+            if entry.assembly_accession != assembly {
+                return Err(format!(
+                    "manifest mixes assemblies: {} vs {} in experiment {}",
+                    assembly, entry.assembly_accession, entry.id
+                )
+                .into());
+            }
+        }
+
+        let mut experiments: Vec<Experiment> = Vec::with_capacity(entries.len());
+        let mut peaks_groups: Vec<ExperimentPeaks> = Vec::with_capacity(entries.len());
+
+        for entry in &entries {
+            let peak_path = entry.peak_path(manifest_dir);
+            tracing::info!(
+                experiment = %entry.id,
+                peak_file = %peak_path.display(),
+                "parsing peak file"
+            );
+            let reader = open_peaks(&peak_path)?;
+            let peaks = match entry.peak_kind {
+                epigenome_core::PeakKind::Narrow => parse_narrow_peak(reader)?,
+                epigenome_core::PeakKind::Broad => parse_broad_peak(reader)?,
+            };
+
+            let signal_file = entry.signal_path(manifest_dir).as_ref().and_then(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .map(str::to_owned)
+            });
+
+            experiments.push(build_experiment(entry, signal_file));
+            peaks_groups.push(ExperimentPeaks {
+                experiment_id: entry.id.clone(),
+                kind: entry.peak_kind,
+                peaks,
+            });
+        }
+
+        let snapshot = EpigenomeSnapshot {
+            manifest: EpigenomeSnapshotManifest {
+                source: self.source_label,
+                description: self.description,
+            },
+            dataset: EpigenomeDataset {
+                assembly_accession: assembly,
+                experiments,
+                peaks: peaks_groups,
+            },
+        };
+
+        if let Some(parent) = self
+            .out
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            std::fs::create_dir_all(parent)?;
+        }
+        write_epigenome_snapshot(&self.out, &snapshot)?;
+
+        let mut stdout = std::io::stdout().lock();
+        writeln!(
+            stdout,
+            "wrote {} experiments ({} peak groups) to {}",
+            snapshot.dataset.experiments.len(),
+            snapshot.dataset.peaks.len(),
+            self.out.display()
+        )?;
+        Ok(())
+    }
+}
+
+fn build_experiment(entry: &ExperimentManifestEntry, signal_file: Option<String>) -> Experiment {
+    Experiment {
+        id: entry.id.clone(),
+        assay: entry.assay,
+        target: entry.target.clone(),
+        antibody: entry.antibody.clone(),
+        assembly_accession: entry.assembly_accession.clone(),
+        geo_series: entry.geo_series.clone(),
+        geo_sample: entry.geo_sample.clone(),
+        sra_runs: entry.sra_runs.clone(),
+        tissue: entry.tissue.clone(),
+        dev_stage: entry.dev_stage.clone(),
+        treatment: entry.treatment.clone(),
+        replicate: entry.replicate,
+        pipeline: entry.pipeline.clone(),
+        qvalue_cutoff: entry.qvalue_cutoff,
+        qc: epigenome_core::ExperimentQc {
+            frip: entry.qc.frip,
+            nrf: entry.qc.nrf,
+            nsc: entry.qc.nsc,
+            rsc: entry.qc.rsc,
+            mapped_reads: entry.qc.mapped_reads,
+        },
+        peak_kind: entry.peak_kind,
+        signal_file,
+        attributes: entry.attributes.clone(),
+    }
 }
 
 #[derive(Debug, Args)]

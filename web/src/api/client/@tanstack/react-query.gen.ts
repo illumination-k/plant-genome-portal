@@ -17,8 +17,12 @@ import {
   createBlastnJob,
   createBlastpJob,
   enrichmentAnalysis,
+  epigenomeExperiment,
+  epigenomeExperiments,
+  epigenomePeaks,
   expressionClustergram,
   gene,
+  geneEpigenome,
   geneExpression,
   geneKegg,
   geneSearch,
@@ -59,10 +63,22 @@ import type {
   EnrichmentAnalysisData,
   EnrichmentAnalysisError,
   EnrichmentAnalysisResponse2,
+  EpigenomeExperimentData,
+  EpigenomeExperimentError,
+  EpigenomeExperimentResponse,
+  EpigenomeExperimentsData,
+  EpigenomeExperimentsError,
+  EpigenomeExperimentsResponse,
+  EpigenomePeaksData,
+  EpigenomePeaksError,
+  EpigenomePeaksResponse,
   ExpressionClustergramData,
   ExpressionClustergramError,
   ExpressionClustergramResponse2,
   GeneData,
+  GeneEpigenomeData,
+  GeneEpigenomeError,
+  GeneEpigenomeResponse,
   GeneError,
   GeneExpressionData,
   GeneExpressionError,
@@ -438,6 +454,72 @@ export const enrichmentAnalysisMutation = (
   return mutationOptions;
 };
 
+export const epigenomeExperimentQueryKey = (options: Options<EpigenomeExperimentData>) =>
+  createQueryKey("epigenomeExperiment", options);
+
+export const epigenomeExperimentOptions = (options: Options<EpigenomeExperimentData>) =>
+  queryOptions<
+    EpigenomeExperimentResponse,
+    EpigenomeExperimentError,
+    EpigenomeExperimentResponse,
+    ReturnType<typeof epigenomeExperimentQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await epigenomeExperiment({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: epigenomeExperimentQueryKey(options),
+  });
+
+export const epigenomeExperimentsQueryKey = (options?: Options<EpigenomeExperimentsData>) =>
+  createQueryKey("epigenomeExperiments", options);
+
+export const epigenomeExperimentsOptions = (options?: Options<EpigenomeExperimentsData>) =>
+  queryOptions<
+    EpigenomeExperimentsResponse,
+    EpigenomeExperimentsError,
+    EpigenomeExperimentsResponse,
+    ReturnType<typeof epigenomeExperimentsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await epigenomeExperiments({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: epigenomeExperimentsQueryKey(options),
+  });
+
+export const epigenomePeaksQueryKey = (options: Options<EpigenomePeaksData>) =>
+  createQueryKey("epigenomePeaks", options);
+
+export const epigenomePeaksOptions = (options: Options<EpigenomePeaksData>) =>
+  queryOptions<
+    EpigenomePeaksResponse,
+    EpigenomePeaksError,
+    EpigenomePeaksResponse,
+    ReturnType<typeof epigenomePeaksQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await epigenomePeaks({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: epigenomePeaksQueryKey(options),
+  });
+
 export const expressionClustergramQueryKey = (options: Options<ExpressionClustergramData>) =>
   createQueryKey("expressionClustergram", options);
 
@@ -474,6 +556,28 @@ export const geneOptions = (options: Options<GeneData>) =>
       return data;
     },
     queryKey: geneQueryKey(options),
+  });
+
+export const geneEpigenomeQueryKey = (options: Options<GeneEpigenomeData>) =>
+  createQueryKey("geneEpigenome", options);
+
+export const geneEpigenomeOptions = (options: Options<GeneEpigenomeData>) =>
+  queryOptions<
+    GeneEpigenomeResponse,
+    GeneEpigenomeError,
+    GeneEpigenomeResponse,
+    ReturnType<typeof geneEpigenomeQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await geneEpigenome({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: geneEpigenomeQueryKey(options),
   });
 
 export const geneExpressionQueryKey = (options: Options<GeneExpressionData>) =>

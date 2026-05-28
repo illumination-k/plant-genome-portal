@@ -22,6 +22,10 @@ locus_tag = "MpPBT00010"
 limit = 10
 start = 0
 end = 20
+experiment_id = "mp_atac_thallus_rep1"
+assemblyAccession = "GCA_PBT000001.1"
+upstreamBp = 2000
+downstreamBp = 0
 
 [reports]
 directory = "target/schemathesis"

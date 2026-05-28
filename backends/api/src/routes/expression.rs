@@ -152,6 +152,7 @@ pub(crate) async fn gene_expression(
 #[utoipa::path(
     get,
     path = "/v2/expression/clustergram",
+    operation_id = "expression_clustergram",
     params(ExpressionClustergramQuery),
     responses(
         (status = 200, description = "Expression matrix with Rust-computed cluster ordering", body = ExpressionClustergramResponse),

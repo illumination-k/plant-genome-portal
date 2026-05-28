@@ -5,9 +5,9 @@ mod sequence;
 
 use genome_core::{
     Assembly, AssemblyAccession, ClosedRegion, FunctionalAnnotation, Gene, GeneId, GeneRecord,
-    GeneSearch, GenomeRepository, KeggEntryId, KeggKoLinks, KeggModule, KeggModuleId, KeggPathway,
-    KeggPathwayId, KeggReaction, KeggReactionId, Sequence, TaxId, Taxon, Transcript, TranscriptId,
-    ko_entry_id,
+    GeneSearch, GenomeRepository, HalfOpenRegion, KeggEntryId, KeggKoLinks, KeggModule,
+    KeggModuleId, KeggPathway, KeggPathwayId, KeggReaction, KeggReactionId, Position0, Sequence,
+    Strand, TaxId, Taxon, Transcript, TranscriptId, ko_entry_id,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -157,6 +157,55 @@ where
         }
 
         Ok(self.repository.features_in_region(&accession, &region))
+    }
+
+    /// Returns the gene body extended by `upstream_bp` on the 5' side and
+    /// `downstream_bp` on the 3' side (relative to the gene's strand), clamped
+    /// to the sequence boundaries.
+    ///
+    /// Used by the gene-centric epigenome view to find peaks overlapping the
+    /// gene + its promoter / terminator flanks.
+    pub fn gene_flank_region(
+        &self,
+        gene_id: &str,
+        upstream_bp: u64,
+        downstream_bp: u64,
+    ) -> Result<(GeneRecord, HalfOpenRegion), ServiceError> {
+        let record = self.gene(gene_id)?;
+        let gene = &record.gene;
+        let sequence_length = self
+            .repository
+            .sequences_for_assembly(&gene.assembly_accession)
+            .into_iter()
+            .find(|sequence| sequence.name == gene.sequence_name)
+            .map(|sequence| sequence.length)
+            .ok_or_else(|| {
+                ServiceError::SequenceNotFound(gene.sequence_name.as_str().to_owned())
+            })?;
+
+        let (left_flank, right_flank) = match gene.strand {
+            Strand::Reverse => (downstream_bp, upstream_bp),
+            // Treat Unknown like Forward: callers asked for upstream/downstream
+            // in genomic coordinates when strand is unknown.
+            Strand::Forward | Strand::Unknown => (upstream_bp, downstream_bp),
+        };
+
+        let start = gene.region.start.get().saturating_sub(left_flank);
+        let end = gene
+            .region
+            .end
+            .get()
+            .saturating_add(right_flank)
+            .min(sequence_length);
+
+        let region = HalfOpenRegion::new(
+            gene.sequence_name.clone(),
+            Position0::new(start),
+            Position0::new(end),
+        )
+        .map_err(|error| ServiceError::InvalidRequest(error.to_string()))?;
+
+        Ok((record, region))
     }
 
     /// Pathway view: pathway info + the KOs that belong to it + the genes in
@@ -608,6 +657,101 @@ mod tests {
     fn gene_kegg_view_returns_not_found_for_missing_gene() {
         let service = kegg_service();
         let err = service.gene_kegg_view("MpZZZ").unwrap_err();
+        assert!(matches!(err, ServiceError::GeneNotFound(_)));
+    }
+
+    fn flank_service(strand: Strand) -> GenomeService<FileGenomeRepository> {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let dataset = GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: accession.clone(),
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: vec![Sequence {
+                name: SequenceName::new("chr1").unwrap(),
+                assembly_accession: accession.clone(),
+                length: 10_000,
+                refget_checksum: String::new(),
+            }],
+            genes: vec![Gene {
+                id: GeneId::new("MpFlank").unwrap(),
+                assembly_accession: accession,
+                symbol: None,
+                locus_tag: None,
+                sequence_name: SequenceName::new("chr1").unwrap(),
+                region: HalfOpenRegion::new(
+                    SequenceName::new("chr1").unwrap(),
+                    Position0::new(3_000),
+                    Position0::new(4_000),
+                )
+                .unwrap(),
+                strand,
+                feature_type: "gene".to_owned(),
+                annotations: Vec::new(),
+                attributes: BTreeMap::new(),
+            }],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
+        };
+
+        GenomeService::new(FileGenomeRepository::new(dataset), None)
+    }
+
+    #[test]
+    fn gene_flank_region_extends_forward_strand_upstream() {
+        let service = flank_service(Strand::Forward);
+        let (_, region) = service.gene_flank_region("MpFlank", 2_000, 100).unwrap();
+        // Forward: [start - upstream, end + downstream) = [1000, 4100)
+        assert_eq!(region.start.get(), 1_000);
+        assert_eq!(region.end.get(), 4_100);
+    }
+
+    #[test]
+    fn gene_flank_region_swaps_flanks_for_reverse_strand() {
+        let service = flank_service(Strand::Reverse);
+        let (_, region) = service.gene_flank_region("MpFlank", 2_000, 100).unwrap();
+        // Reverse: [start - downstream, end + upstream) = [2900, 6000)
+        assert_eq!(region.start.get(), 2_900);
+        assert_eq!(region.end.get(), 6_000);
+    }
+
+    #[test]
+    fn gene_flank_region_clamps_to_sequence_boundaries() {
+        let service = flank_service(Strand::Forward);
+        // upstream larger than the gene's start → clamp to 0; downstream larger
+        // than the remaining sequence → clamp to sequence length.
+        let (_, region) = service
+            .gene_flank_region("MpFlank", 10_000, 10_000_000)
+            .unwrap();
+        assert_eq!(region.start.get(), 0);
+        assert_eq!(region.end.get(), 10_000);
+    }
+
+    #[test]
+    fn gene_flank_region_treats_unknown_strand_as_forward() {
+        let service = flank_service(Strand::Unknown);
+        let (_, region) = service.gene_flank_region("MpFlank", 2_000, 100).unwrap();
+        assert_eq!(region.start.get(), 1_000);
+        assert_eq!(region.end.get(), 4_100);
+    }
+
+    #[test]
+    fn gene_flank_region_returns_not_found_for_missing_gene() {
+        let service = flank_service(Strand::Forward);
+        let err = service
+            .gene_flank_region("MpGhost", 1_000, 1_000)
+            .unwrap_err();
         assert!(matches!(err, ServiceError::GeneNotFound(_)));
     }
 }
