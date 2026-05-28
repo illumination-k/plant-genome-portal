@@ -289,11 +289,7 @@ pub(crate) async fn gene_epigenome(
             .gene_flank_region(&gene_id, query.upstream_bp, query.downstream_bp)?;
 
     let assembly_accession = record.gene.assembly_accession.clone();
-    let region = PublicRegion {
-        sequence_name: flank.sequence_name.as_str().to_owned(),
-        start: flank.start.get() + 1,
-        end: flank.end.get(),
-    };
+    let region = public_region_from(&flank);
 
     let Some(repository) = state.epigenome_repository.as_ref() else {
         return Ok(Json(EpigenomeGeneView {
@@ -367,6 +363,16 @@ fn public_hit(hit: PeakHit) -> EpigenomePeakHit {
     EpigenomePeakHit {
         experiment_id: hit.experiment_id.into_string(),
         peak: hit.peak.into(),
+    }
+}
+
+/// Project an internal half-open region to the API's 1-based closed shape.
+fn public_region_from(region: &genome_core::HalfOpenRegion) -> PublicRegion {
+    PublicRegion {
+        sequence_name: region.sequence_name.as_str().to_owned(),
+        // half-open [start, end) → 1-based closed [start+1, end]
+        start: region.start.get() + 1,
+        end: region.end.get(),
     }
 }
 
@@ -636,16 +642,12 @@ mod tests {
 
     #[test]
     fn public_region_from_half_open_shifts_start_by_one() {
-        // PublicRegion in handlers maps half-open [start, end) → 1-based
-        // closed [start+1, end]. Pinning this with a tiny region kills
-        // arithmetic mutations on the `+ 1` in the gene_epigenome handler.
-        let half_open = make_region(99, 200);
-        let public = PublicRegion {
-            sequence_name: half_open.sequence_name.as_str().to_owned(),
-            start: half_open.start.get() + 1,
-            end: half_open.end.get(),
-        };
+        // half-open [99, 200) → 1-based closed [100, 200]. Pinning this
+        // boundary kills arithmetic mutations on the `+ 1` in
+        // public_region_from (called by gene_epigenome).
+        let public = public_region_from(&make_region(99, 200));
         assert_eq!(public.start, 100);
         assert_eq!(public.end, 200);
+        assert_eq!(public.sequence_name, "chr1");
     }
 }
