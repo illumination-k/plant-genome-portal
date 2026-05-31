@@ -1,8 +1,10 @@
+/* oxlint-disable max-lines-per-function */
 import type { GeneRecord } from "@/api/client/types.gen";
 import type { ReactElement, ReactNode } from "react";
 import { useMemo } from "react";
 import GeneAnnotationTab from "@/features/genes/components/GeneAnnotationTab";
 import GeneBrowserTab from "@/features/genes/components/GeneBrowserTab";
+import GeneEpigenomeTab from "@/features/epigenome/components/GeneEpigenomeTab";
 import GeneExpressionTab from "@/features/expression/components/GeneExpressionTab";
 import GeneOrthologsTab from "@/features/genes/components/GeneOrthologsTab";
 import GeneOverviewTab from "@/features/genes/components/GeneOverviewTab";
@@ -36,6 +38,11 @@ const buildTabs = (geneRecord: GeneRecord): Tab[] => [
     label: "Orthologs",
     panel: <GeneOrthologsTab geneRecord={geneRecord} />,
     value: "orthologs",
+  },
+  {
+    label: "Epigenome",
+    panel: <GeneEpigenomeTab geneRecord={geneRecord} />,
+    value: "epigenome",
   },
   {
     label: "Sequence",

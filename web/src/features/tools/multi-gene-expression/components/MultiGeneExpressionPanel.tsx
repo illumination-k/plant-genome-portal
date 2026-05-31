@@ -4,8 +4,8 @@ import type { ExpressionClustergramResponse } from "@/api/client/types.gen";
 import { useQuery } from "@tanstack/react-query";
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
 import { useMemo, useState } from "react";
-import ExpressionClustergram from "@/features/analysis/components/ExpressionClustergram";
-import ExpressionLinePlot from "@/features/analysis/components/ExpressionLinePlot";
+import ExpressionLinePlot from "@/features/tools/multi-gene-expression/components/ExpressionLinePlot";
+import ExpressionClustergram from "@/shared/bio/ExpressionClustergram";
 import geneRecordUtils from "@/shared/lib/geneRecordUtils";
 import Tabs from "@/shared/ui/Tabs";
 import EmptyState from "@/shared/ui/EmptyState";
@@ -42,7 +42,7 @@ const hasMatrixData = (matrix: ExpressionClustergramResponse | undefined): boole
     matrix && matrix.genes.length > 0 && matrix.samples.length > 0 && matrix.values.length > 0,
   );
 
-const AnalysisPanel = (): ReactElement => {
+const MultiGeneExpressionPanel = (): ReactElement => {
   const [form, setForm] = useState<AnalysisForm>(initialForm);
   const [submitted, setSubmitted] = useState<AnalysisForm>(initialForm);
   const [tab, setTab] = useState("lineplot");
@@ -186,4 +186,4 @@ const AnalysisPanel = (): ReactElement => {
   );
 };
 
-export default AnalysisPanel;
+export default MultiGeneExpressionPanel;

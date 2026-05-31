@@ -14,6 +14,7 @@ const tabSchema = picklist([
   "annotation",
   "expression",
   "orthologs",
+  "epigenome",
   "sequence",
   "transcripts",
   "browser",

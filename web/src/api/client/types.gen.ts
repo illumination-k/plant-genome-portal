@@ -27,6 +27,16 @@ export type AnnotationSource = 'inter_pro_scan' | 'go' | 'kegg' | 'manual' | {
     other: string;
 };
 
+export type Antibody = string;
+
+/**
+ * Epigenome assay supported in MVP.
+ *
+ * Only ChIP-seq and ATAC-seq are modelled. CUT&RUN / CUT&Tag / DNase-seq are
+ * out of MVP scope; add new variants when those assays are imported.
+ */
+export type Assay = 'chip_seq' | 'atac_seq';
+
 export type Assembly = {
     accession: AssemblyAccession;
     name: string;
@@ -139,6 +149,54 @@ export type EnrichmentTermResult = {
     term: EnrichmentTerm;
 };
 
+export type EpigenomeExperimentDetail = {
+    experiment: Experiment;
+    peakCount: number;
+    signalUrl?: string | null;
+};
+
+export type EpigenomeExperimentSummary = {
+    assay: Assay;
+    devStage?: string | null;
+    experimentId: string;
+    frip?: number | null;
+    peakKind: PeakKind;
+    replicate?: number | null;
+    signalUrl?: string | null;
+    target?: string | null;
+    tissue?: string | null;
+    treatment?: string | null;
+};
+
+export type EpigenomeExperimentWithPeaks = {
+    experiment: EpigenomeExperimentSummary;
+    peaks: Array<PublicPeak>;
+};
+
+export type EpigenomeGeneView = {
+    assemblyAccession: string;
+    experiments: Array<EpigenomeExperimentWithPeaks>;
+    geneId: string;
+    region: PublicRegion;
+};
+
+export type EpigenomePeakHit = {
+    experimentId: string;
+    peak: PublicPeak;
+};
+
+export type EpigenomePeaksQuery = {
+    assay?: null | Assay;
+    assemblyAccession: string;
+    experimentIds?: string | null;
+    limit?: number | null;
+    /**
+     * 1-based closed region, e.g. `chr1:1-100000`.
+     */
+    region: string;
+    target?: string | null;
+};
+
 export type ErrorResponse = {
     error: string;
 };
@@ -148,6 +206,91 @@ export type Exon = {
     sequence_name: SequenceName;
     strand: Strand;
     transcript_id: TranscriptId;
+};
+
+/**
+ * One ChIP-seq or ATAC-seq experiment.
+ *
+ * "Experiment" here means *one peak-called dataset* — usually one biological
+ * replicate that has been aligned and processed end-to-end. Replicates are
+ * kept as separate `Experiment`s rather than merged; this mirrors how
+ * ChIP-Atlas / ENCODE expose data and lets users see per-replicate QC.
+ */
+export type Experiment = {
+    antibody?: null | Antibody;
+    assay: Assay;
+    assembly_accession: AssemblyAccession;
+    /**
+     * Free-form extension point for curator-specific keys (e.g. raw
+     * repository fields that don't have a first-class home yet).
+     */
+    attributes?: {
+        [key: string]: string;
+    };
+    dev_stage?: string | null;
+    geo_sample?: null | GeoSampleAccession;
+    geo_series?: null | GeoSeriesAccession;
+    id: ExperimentId;
+    peak_kind: PeakKind;
+    /**
+     * Free-form pipeline description, e.g. `"MACS2 2.2.9 q<0.01"`.
+     */
+    pipeline?: string | null;
+    qc?: ExperimentQc;
+    qvalue_cutoff?: number | null;
+    replicate?: number | null;
+    /**
+     * Basename of the bigWig signal file (resolved against
+     * `--epigenome-signal-root` by the API at config time). `None` when no
+     * signal track is available for this experiment.
+     */
+    signal_file?: string | null;
+    sra_runs?: Array<SraRunAccession>;
+    target?: null | Target;
+    tissue?: string | null;
+    treatment?: string | null;
+};
+
+export type ExperimentId = string;
+
+export type ExperimentListQuery = {
+    assay?: null | Assay;
+    assemblyAccession?: string | null;
+    limit?: number | null;
+    target?: string | null;
+};
+
+/**
+ * Quality-control metrics for a ChIP-seq / ATAC-seq experiment, following
+ * ENCODE conventions.
+ *
+ * All fields are `Option` because public datasets often only report a subset.
+ * Pass thresholds (for surfacing badges in the UI):
+ * * FRiP ≥ 0.01 (ChIP) / ≥ 0.20 (ATAC)
+ * * NSC ≥ 1.05, RSC ≥ 0.8 (ChIP cross-correlation)
+ * * NRF ≥ 0.8 (library complexity)
+ */
+export type ExperimentQc = {
+    /**
+     * Fraction of Reads in Peaks.
+     */
+    frip?: number | null;
+    /**
+     * Number of mapped reads in the alignment used for peak calling.
+     */
+    mapped_reads?: number | null;
+    /**
+     * Non-Redundant read Fraction.
+     */
+    nrf?: number | null;
+    /**
+     * Normalized Strand-cross-correlation Coefficient.
+     */
+    nsc?: number | null;
+    /**
+     * Relative Strand-cross-correlation Coefficient.
+     */
+    rsc?: number | null;
 };
 
 export type ExpressionClustergramQuery = {
@@ -220,6 +363,14 @@ export type Gene = {
     symbol?: string | null;
 };
 
+export type GeneEpigenomeQuery = {
+    assay?: null | Assay;
+    downstreamBp?: number;
+    limit?: number | null;
+    target?: string | null;
+    upstreamBp?: number;
+};
+
 export type GeneExpressionPoint = {
     geneId: string;
     label: string;
@@ -263,6 +414,10 @@ export type GeneSearchQuery = {
     symbol?: string | null;
     tax_id?: number | null;
 };
+
+export type GeoSampleAccession = string;
+
+export type GeoSeriesAccession = string;
 
 export type GoNamespace = 'biological_process' | 'molecular_function' | 'cellular_component';
 
@@ -382,7 +537,14 @@ export type JBrowseRootConfig = {
     assemblies: Array<JBrowseAssembly>;
     defaultSession: JBrowseDefaultSession;
     plantGenomePortal: JBrowsePortalConfig;
-    tracks: Array<JBrowseTrack>;
+    /**
+     * Opaque JBrowse track configs. JBrowse supports many track / adapter
+     * types that don't share a single Rust schema, so we ship them as
+     * `serde_json::Value` and let the frontend's JBrowse typings interpret.
+     */
+    tracks: Array<{
+        [key: string]: unknown;
+    }>;
 };
 
 export type JBrowseSequenceTrack = {
@@ -390,10 +552,6 @@ export type JBrowseSequenceTrack = {
     rendering: JBrowseRendering;
     trackId: string;
     type: string;
-};
-
-export type JBrowseTrack = {
-    [key: string]: unknown;
 };
 
 export type JBrowseUriLocation = {
@@ -508,6 +666,51 @@ export type OrthogroupMember = {
     tax_id: TaxId;
 };
 
+/**
+ * One peak call (narrowPeak or broadPeak row), normalised to the portal's
+ * internal 0-based half-open coordinate system.
+ *
+ * `summit_offset` is `Some` for narrowPeak (column 10, summit offset from
+ * `region.start`) and `None` for broadPeak.
+ */
+export type Peak = {
+    name: string;
+    /**
+     * `-log10(pvalue)`. `-1` in the source file means "not reported".
+     */
+    p_value: number;
+    /**
+     * `-log10(qvalue)`. `-1` in the source file means "not reported".
+     */
+    q_value: number;
+    region: HalfOpenRegion;
+    /**
+     * BED score (column 5), `0..=1000`. Conventionally
+     * `min(int(-10*log10(qvalue)), 1000)` as written by MACS.
+     */
+    score: number;
+    /**
+     * MACS `signalValue` column — typically fold enrichment over input.
+     */
+    signal_value: number;
+    strand: Strand;
+    /**
+     * Summit offset relative to `region.start`, 0-based. `Some` only for
+     * narrowPeak.
+     */
+    summit_offset?: number | null;
+};
+
+/**
+ * Whether a peak file is narrowPeak (BED6+4, has summit offset) or broadPeak
+ * (BED6+3, no summit).
+ *
+ * Histone marks form broad domains (H3K27me3, H3K9me3, H3K36me3) and are
+ * usually called with `--broad`; sharp marks (H3K4me3, H3K27ac) and
+ * transcription factors give narrow peaks. ATAC-seq peaks are narrow.
+ */
+export type PeakKind = 'narrow' | 'broad';
+
 export type PfamAccession = string;
 
 export type PfamAnnotation = {
@@ -523,6 +726,35 @@ export type Position1 = number;
 
 export type ProteinQuery = {
     format?: null | SequenceOutputFormat;
+};
+
+/**
+ * A peak emitted on the public API: coordinates are re-projected to 1-based
+ * closed form so the wire shape matches the portal's other region payloads.
+ */
+export type PublicPeak = {
+    /**
+     * 1-based, inclusive.
+     */
+    end: number;
+    name: string;
+    pValue: number;
+    qValue: number;
+    score: number;
+    sequenceName: string;
+    signalValue: number;
+    /**
+     * 1-based, inclusive.
+     */
+    start: number;
+    strand: Strand;
+    summitOffset?: number | null;
+};
+
+export type PublicRegion = {
+    end: number;
+    sequenceName: string;
+    start: number;
 };
 
 export type RefgetQuery = {
@@ -561,7 +793,11 @@ export type SequenceSegmentsQuery = {
     strand?: null | Strand;
 };
 
+export type SraRunAccession = string;
+
 export type Strand = 'forward' | 'reverse' | 'unknown';
+
+export type Target = string;
 
 export type TaxId = number;
 
@@ -839,6 +1075,105 @@ export type EnrichmentAnalysisResponses = {
 
 export type EnrichmentAnalysisResponse2 = EnrichmentAnalysisResponses[keyof EnrichmentAnalysisResponses];
 
+export type EpigenomeExperimentData = {
+    body?: never;
+    path: {
+        /**
+         * Portal-local experiment id
+         */
+        experiment_id: string;
+    };
+    query?: never;
+    url: '/v2/epigenome/experiment/{experiment_id}';
+};
+
+export type EpigenomeExperimentErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Experiment not found
+     */
+    404: ErrorResponse;
+};
+
+export type EpigenomeExperimentError = EpigenomeExperimentErrors[keyof EpigenomeExperimentErrors];
+
+export type EpigenomeExperimentResponses = {
+    /**
+     * Experiment metadata + QC + signal URL
+     */
+    200: EpigenomeExperimentDetail;
+};
+
+export type EpigenomeExperimentResponse = EpigenomeExperimentResponses[keyof EpigenomeExperimentResponses];
+
+export type EpigenomeExperimentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        assemblyAccession?: string | null;
+        assay?: null | Assay;
+        target?: string | null;
+        limit?: number | null;
+    };
+    url: '/v2/epigenome/experiments';
+};
+
+export type EpigenomeExperimentsErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+};
+
+export type EpigenomeExperimentsError = EpigenomeExperimentsErrors[keyof EpigenomeExperimentsErrors];
+
+export type EpigenomeExperimentsResponses = {
+    /**
+     * Epigenome experiments matching the filters
+     */
+    200: Array<EpigenomeExperimentSummary>;
+};
+
+export type EpigenomeExperimentsResponse = EpigenomeExperimentsResponses[keyof EpigenomeExperimentsResponses];
+
+export type EpigenomePeaksData = {
+    body?: never;
+    path?: never;
+    query: {
+        assemblyAccession: string;
+        /**
+         * 1-based closed region, e.g. `chr1:1-100000`.
+         */
+        region: string;
+        experimentIds?: string | null;
+        assay?: null | Assay;
+        target?: string | null;
+        limit?: number | null;
+    };
+    url: '/v2/epigenome/peaks';
+};
+
+export type EpigenomePeaksErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+};
+
+export type EpigenomePeaksError = EpigenomePeaksErrors[keyof EpigenomePeaksErrors];
+
+export type EpigenomePeaksResponses = {
+    /**
+     * Peaks overlapping the region
+     */
+    200: Array<EpigenomePeakHit>;
+};
+
+export type EpigenomePeaksResponse = EpigenomePeaksResponses[keyof EpigenomePeaksResponses];
+
 export type ExpressionClustergramData = {
     body?: never;
     path?: never;
@@ -904,6 +1239,46 @@ export type GeneResponses = {
 };
 
 export type GeneResponse = GeneResponses[keyof GeneResponses];
+
+export type GeneEpigenomeData = {
+    body?: never;
+    path: {
+        /**
+         * Gene identifier
+         */
+        gene_id: string;
+    };
+    query?: {
+        upstreamBp?: number;
+        downstreamBp?: number;
+        assay?: null | Assay;
+        target?: string | null;
+        limit?: number | null;
+    };
+    url: '/v2/gene/id/{gene_id}/epigenome';
+};
+
+export type GeneEpigenomeErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Gene not found
+     */
+    404: ErrorResponse;
+};
+
+export type GeneEpigenomeError = GeneEpigenomeErrors[keyof GeneEpigenomeErrors];
+
+export type GeneEpigenomeResponses = {
+    /**
+     * Experiments with peaks overlapping the gene body + flanks
+     */
+    200: EpigenomeGeneView;
+};
+
+export type GeneEpigenomeResponse = GeneEpigenomeResponses[keyof GeneEpigenomeResponses];
 
 export type GeneExpressionData = {
     body?: never;

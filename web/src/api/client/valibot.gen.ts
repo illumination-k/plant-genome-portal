@@ -18,6 +18,16 @@ export const vAnnotationEvidence = v.object({
     source: vAnnotationSource
 });
 
+export const vAntibody = v.string();
+
+/**
+ * Epigenome assay supported in MVP.
+ *
+ * Only ChIP-seq and ATAC-seq are modelled. CUT&RUN / CUT&Tag / DNase-seq are
+ * out of MVP scope; add new variants when those assays are imported.
+ */
+export const vAssay = v.picklist(['chip_seq', 'atac_seq']);
+
 export const vAssemblyAccession = v.string();
 
 export const vAssemblySource = v.picklist([
@@ -87,8 +97,48 @@ export const vEnrichmentAnalysisRequest = v.object({
     ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')))
 });
 
+export const vEpigenomePeaksQuery = v.object({
+    assay: v.nullish(vAssay),
+    assemblyAccession: v.string(),
+    experimentIds: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    region: v.string(),
+    target: v.nullish(v.string())
+});
+
 export const vErrorResponse = v.object({
     error: v.string()
+});
+
+export const vExperimentId = v.string();
+
+export const vExperimentListQuery = v.object({
+    assay: v.nullish(vAssay),
+    assemblyAccession: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    target: v.nullish(v.string())
+});
+
+/**
+ * Quality-control metrics for a ChIP-seq / ATAC-seq experiment, following
+ * ENCODE conventions.
+ *
+ * All fields are `Option` because public datasets often only report a subset.
+ * Pass thresholds (for surfacing badges in the UI):
+ * * FRiP ≥ 0.01 (ChIP) / ≥ 0.20 (ATAC)
+ * * NSC ≥ 1.05, RSC ≥ 0.8 (ChIP cross-correlation)
+ * * NRF ≥ 0.8 (library complexity)
+ */
+export const vExperimentQc = v.object({
+    frip: v.nullish(v.number()),
+    mapped_reads: v.nullish(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    nrf: v.nullish(v.number()),
+    nsc: v.nullish(v.number()),
+    rsc: v.nullish(v.number())
 });
 
 export const vExpressionGeneLabel = v.object({
@@ -139,6 +189,22 @@ export const vExpressionClustergramResponse = v.object({
     zScores: v.array(v.number())
 });
 
+export const vGeneEpigenomeQuery = v.object({
+    assay: v.nullish(vAssay),
+    downstreamBp: v.optional(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    target: v.nullish(v.string()),
+    upstreamBp: v.optional(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')))
+});
+
 export const vGeneExpressionPoint = v.object({
     geneId: v.string(),
     label: v.string(),
@@ -162,6 +228,10 @@ export const vGeneSearchQuery = v.object({
     symbol: v.nullish(v.string()),
     tax_id: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647')))
 });
+
+export const vGeoSampleAccession = v.string();
+
+export const vGeoSeriesAccession = v.string();
 
 export const vGoNamespace = v.picklist([
     'biological_process',
@@ -309,8 +379,6 @@ export const vJBrowseRendering = v.object({
     type: v.string()
 });
 
-export const vJBrowseTrack = v.record(v.string(), v.unknown());
-
 export const vJBrowseUriLocation = v.object({
     locationType: v.string(),
     uri: v.string()
@@ -338,7 +406,7 @@ export const vJBrowseRootConfig = v.object({
     assemblies: v.array(vJBrowseAssembly),
     defaultSession: vJBrowseDefaultSession,
     plantGenomePortal: vJBrowsePortalConfig,
-    tracks: v.array(vJBrowseTrack)
+    tracks: v.array(v.record(v.string(), v.unknown()))
 });
 
 export const vJobStatusResponse = v.picklist([
@@ -457,6 +525,29 @@ export const vNcbiFamAnnotation = v.object({
 
 export const vOrthogroupId = v.string();
 
+/**
+ * Whether a peak file is narrowPeak (BED6+4, has summit offset) or broadPeak
+ * (BED6+3, no summit).
+ *
+ * Histone marks form broad domains (H3K27me3, H3K9me3, H3K36me3) and are
+ * usually called with `--broad`; sharp marks (H3K4me3, H3K27ac) and
+ * transcription factors give narrow peaks. ATAC-seq peaks are narrow.
+ */
+export const vPeakKind = v.picklist(['narrow', 'broad']);
+
+export const vEpigenomeExperimentSummary = v.object({
+    assay: vAssay,
+    devStage: v.nullish(v.string()),
+    experimentId: v.string(),
+    frip: v.nullish(v.number()),
+    peakKind: vPeakKind,
+    replicate: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647'))),
+    signalUrl: v.nullish(v.string()),
+    target: v.nullish(v.string()),
+    tissue: v.nullish(v.string()),
+    treatment: v.nullish(v.string())
+});
+
 export const vPfamAccession = v.string();
 
 export const vPfamAnnotation = v.object({
@@ -498,6 +589,20 @@ export const vPosition1 = v.pipe(v.union([
     v.string(),
     v.bigint()
 ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'));
+
+export const vPublicRegion = v.object({
+    end: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')),
+    sequenceName: v.string(),
+    start: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))
+});
 
 export const vRefgetQuery = v.object({
     end: v.nullish(v.pipe(v.union([
@@ -553,6 +658,8 @@ export const vSequenceOutputFormat = v.picklist(['plain', 'fasta']);
 export const vProteinQuery = v.object({
     format: v.nullish(vSequenceOutputFormat)
 });
+
+export const vSraRunAccession = v.string();
 
 export const vStrand = v.picklist([
     'forward',
@@ -624,6 +731,66 @@ export const vBlastnJobResponse = v.object({
     status: vJobStatusResponse
 });
 
+/**
+ * One peak call (narrowPeak or broadPeak row), normalised to the portal's
+ * internal 0-based half-open coordinate system.
+ *
+ * `summit_offset` is `Some` for narrowPeak (column 10, summit offset from
+ * `region.start`) and `None` for broadPeak.
+ */
+export const vPeak = v.object({
+    name: v.string(),
+    p_value: v.number(),
+    q_value: v.number(),
+    region: vHalfOpenRegion,
+    score: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647')),
+    signal_value: v.number(),
+    strand: vStrand,
+    summit_offset: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647')))
+});
+
+/**
+ * A peak emitted on the public API: coordinates are re-projected to 1-based
+ * closed form so the wire shape matches the portal's other region payloads.
+ */
+export const vPublicPeak = v.object({
+    end: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')),
+    name: v.string(),
+    pValue: v.number(),
+    qValue: v.number(),
+    score: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647')),
+    sequenceName: v.string(),
+    signalValue: v.number(),
+    start: v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807')),
+    strand: vStrand,
+    summitOffset: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647')))
+});
+
+export const vEpigenomeExperimentWithPeaks = v.object({
+    experiment: vEpigenomeExperimentSummary,
+    peaks: v.array(vPublicPeak)
+});
+
+export const vEpigenomeGeneView = v.object({
+    assemblyAccession: v.string(),
+    experiments: v.array(vEpigenomeExperimentWithPeaks),
+    geneId: v.string(),
+    region: vPublicRegion
+});
+
+export const vEpigenomePeakHit = v.object({
+    experimentId: v.string(),
+    peak: vPublicPeak
+});
+
 export const vSequenceSegmentsQuery = v.object({
     end: v.array(v.pipe(v.union([
         v.number(),
@@ -637,6 +804,43 @@ export const vSequenceSegmentsQuery = v.object({
         v.bigint()
     ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
     strand: v.nullish(vStrand)
+});
+
+export const vTarget = v.string();
+
+/**
+ * One ChIP-seq or ATAC-seq experiment.
+ *
+ * "Experiment" here means *one peak-called dataset* — usually one biological
+ * replicate that has been aligned and processed end-to-end. Replicates are
+ * kept as separate `Experiment`s rather than merged; this mirrors how
+ * ChIP-Atlas / ENCODE expose data and lets users see per-replicate QC.
+ */
+export const vExperiment = v.object({
+    antibody: v.nullish(vAntibody),
+    assay: vAssay,
+    assembly_accession: vAssemblyAccession,
+    attributes: v.optional(v.record(v.string(), v.string())),
+    dev_stage: v.nullish(v.string()),
+    geo_sample: v.nullish(vGeoSampleAccession),
+    geo_series: v.nullish(vGeoSeriesAccession),
+    id: vExperimentId,
+    peak_kind: vPeakKind,
+    pipeline: v.nullish(v.string()),
+    qc: v.optional(vExperimentQc),
+    qvalue_cutoff: v.nullish(v.number()),
+    replicate: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647'))),
+    signal_file: v.nullish(v.string()),
+    sra_runs: v.optional(v.array(vSraRunAccession)),
+    target: v.nullish(vTarget),
+    tissue: v.nullish(v.string()),
+    treatment: v.nullish(v.string())
+});
+
+export const vEpigenomeExperimentDetail = v.object({
+    experiment: vExperiment,
+    peakCount: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    signalUrl: v.nullish(v.string())
 });
 
 export const vTaxId = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2147483647, 'Invalid value: Expected int32 to be <= 2147483647'));
@@ -812,6 +1016,41 @@ export const vEnrichmentAnalysisBody = vEnrichmentAnalysisRequest;
  */
 export const vEnrichmentAnalysisResponse2 = vEnrichmentAnalysisResponse;
 
+export const vEpigenomeExperimentPath = v.object({
+    experiment_id: v.string()
+});
+
+/**
+ * Experiment metadata + QC + signal URL
+ */
+export const vEpigenomeExperimentResponse = vEpigenomeExperimentDetail;
+
+export const vEpigenomeExperimentsQuery = v.object({
+    assemblyAccession: v.nullish(v.string()),
+    assay: v.nullish(vAssay),
+    target: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
+/**
+ * Epigenome experiments matching the filters
+ */
+export const vEpigenomeExperimentsResponse = v.array(vEpigenomeExperimentSummary);
+
+export const vEpigenomePeaksQuery2 = v.object({
+    assemblyAccession: v.string(),
+    region: v.string(),
+    experimentIds: v.nullish(v.string()),
+    assay: v.nullish(vAssay),
+    target: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
+/**
+ * Peaks overlapping the region
+ */
+export const vEpigenomePeaksResponse = v.array(vEpigenomePeakHit);
+
 export const vExpressionClustergramQuery2 = v.object({
     assemblyAccession: v.string(),
     geneIds: v.string(),
@@ -834,6 +1073,31 @@ export const vGenePath = v.object({
  * Gene detail
  */
 export const vGeneResponse = vGeneRecord;
+
+export const vGeneEpigenomePath = v.object({
+    gene_id: v.string()
+});
+
+export const vGeneEpigenomeQuery2 = v.object({
+    upstreamBp: v.optional(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    downstreamBp: v.optional(v.pipe(v.union([
+        v.number(),
+        v.string(),
+        v.bigint()
+    ]), v.transform(x => BigInt(x)), v.minValue(BigInt(0)), v.maxValue(BigInt('9223372036854775807'), 'Invalid value: Expected int64 to be <= 9223372036854775807'))),
+    assay: v.nullish(vAssay),
+    target: v.nullish(v.string()),
+    limit: v.nullish(v.pipe(v.number(), v.integer(), v.minValue(0)))
+});
+
+/**
+ * Experiments with peaks overlapping the gene body + flanks
+ */
+export const vGeneEpigenomeResponse = vEpigenomeGeneView;
 
 export const vGeneExpressionPath = v.object({
     gene_id: v.string()

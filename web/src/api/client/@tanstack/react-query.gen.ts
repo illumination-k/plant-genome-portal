@@ -3,8 +3,8 @@
 import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { assembly, assemblySequences, blastnJob, blastpJob, createBlastnJob, createBlastpJob, enrichmentAnalysis, expressionClustergram, gene, geneExpression, geneKegg, geneOrthogroups, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, keggPathway, keggPathways, type Options, orthogroup, refgetSequence, refgetServiceInfo, regionFeatures, sequenceSegments, taxon, transcriptProtein } from '../sdk.gen';
-import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, BlastpJobData, BlastpJobError, BlastpJobResponse, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, CreateBlastpJobData, CreateBlastpJobError, CreateBlastpJobResponse, EnrichmentAnalysisData, EnrichmentAnalysisError, EnrichmentAnalysisResponse2, ExpressionClustergramData, ExpressionClustergramError, ExpressionClustergramResponse2, GeneData, GeneError, GeneExpressionData, GeneExpressionError, GeneExpressionResponse, GeneKeggData, GeneKeggError, GeneKeggResponse, GeneOrthogroupsData, GeneOrthogroupsError, GeneOrthogroupsResponse, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, KeggPathwayData, KeggPathwayError, KeggPathwayResponse, KeggPathwaysData, KeggPathwaysResponse, OrthogroupData, OrthogroupError, OrthogroupResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, SequenceSegmentsData, SequenceSegmentsError, SequenceSegmentsResponse, TaxonData, TaxonError, TaxonResponse2, TranscriptProteinData, TranscriptProteinError, TranscriptProteinResponse } from '../types.gen';
+import { assembly, assemblySequences, blastnJob, blastpJob, createBlastnJob, createBlastpJob, enrichmentAnalysis, epigenomeExperiment, epigenomeExperiments, epigenomePeaks, expressionClustergram, gene, geneEpigenome, geneExpression, geneKegg, geneOrthogroups, geneSearch, health, jbrowseChromSizes, jbrowseConfig, jbrowseDefaultConfig, jbrowseFeatures, keggPathway, keggPathways, type Options, orthogroup, refgetSequence, refgetServiceInfo, regionFeatures, sequenceSegments, taxon, transcriptProtein } from '../sdk.gen';
+import type { AssemblyData, AssemblyError, AssemblyResponse, AssemblySequencesData, AssemblySequencesError, AssemblySequencesResponse, BlastnJobData, BlastnJobError, BlastnJobResponse2, BlastpJobData, BlastpJobError, BlastpJobResponse, CreateBlastnJobData, CreateBlastnJobError, CreateBlastnJobResponse, CreateBlastpJobData, CreateBlastpJobError, CreateBlastpJobResponse, EnrichmentAnalysisData, EnrichmentAnalysisError, EnrichmentAnalysisResponse2, EpigenomeExperimentData, EpigenomeExperimentError, EpigenomeExperimentResponse, EpigenomeExperimentsData, EpigenomeExperimentsError, EpigenomeExperimentsResponse, EpigenomePeaksData, EpigenomePeaksError, EpigenomePeaksResponse, ExpressionClustergramData, ExpressionClustergramError, ExpressionClustergramResponse2, GeneData, GeneEpigenomeData, GeneEpigenomeError, GeneEpigenomeResponse, GeneError, GeneExpressionData, GeneExpressionError, GeneExpressionResponse, GeneKeggData, GeneKeggError, GeneKeggResponse, GeneOrthogroupsData, GeneOrthogroupsError, GeneOrthogroupsResponse, GeneResponse, GeneSearchData, GeneSearchResponse, HealthData, HealthResponse2, JbrowseChromSizesData, JbrowseChromSizesError, JbrowseChromSizesResponse, JbrowseConfigData, JbrowseConfigError, JbrowseConfigResponse, JbrowseDefaultConfigData, JbrowseDefaultConfigError, JbrowseDefaultConfigResponse, JbrowseFeaturesData, JbrowseFeaturesError, JbrowseFeaturesResponse, KeggPathwayData, KeggPathwayError, KeggPathwayResponse, KeggPathwaysData, KeggPathwaysResponse, OrthogroupData, OrthogroupError, OrthogroupResponse, RefgetSequenceData, RefgetSequenceError, RefgetSequenceResponse, RefgetServiceInfoData, RefgetServiceInfoResponse, RegionFeaturesData, RegionFeaturesError, RegionFeaturesResponse, SequenceSegmentsData, SequenceSegmentsError, SequenceSegmentsResponse, TaxonData, TaxonError, TaxonResponse2, TranscriptProteinData, TranscriptProteinError, TranscriptProteinResponse } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -235,6 +235,51 @@ export const enrichmentAnalysisMutation = (options?: Partial<Options<EnrichmentA
     return mutationOptions;
 };
 
+export const epigenomeExperimentQueryKey = (options: Options<EpigenomeExperimentData>) => createQueryKey('epigenomeExperiment', options);
+
+export const epigenomeExperimentOptions = (options: Options<EpigenomeExperimentData>) => queryOptions<EpigenomeExperimentResponse, EpigenomeExperimentError, EpigenomeExperimentResponse, ReturnType<typeof epigenomeExperimentQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await epigenomeExperiment({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: epigenomeExperimentQueryKey(options)
+});
+
+export const epigenomeExperimentsQueryKey = (options?: Options<EpigenomeExperimentsData>) => createQueryKey('epigenomeExperiments', options);
+
+export const epigenomeExperimentsOptions = (options?: Options<EpigenomeExperimentsData>) => queryOptions<EpigenomeExperimentsResponse, EpigenomeExperimentsError, EpigenomeExperimentsResponse, ReturnType<typeof epigenomeExperimentsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await epigenomeExperiments({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: epigenomeExperimentsQueryKey(options)
+});
+
+export const epigenomePeaksQueryKey = (options: Options<EpigenomePeaksData>) => createQueryKey('epigenomePeaks', options);
+
+export const epigenomePeaksOptions = (options: Options<EpigenomePeaksData>) => queryOptions<EpigenomePeaksResponse, EpigenomePeaksError, EpigenomePeaksResponse, ReturnType<typeof epigenomePeaksQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await epigenomePeaks({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: epigenomePeaksQueryKey(options)
+});
+
 export const expressionClustergramQueryKey = (options: Options<ExpressionClustergramData>) => createQueryKey('expressionClustergram', options);
 
 export const expressionClustergramOptions = (options: Options<ExpressionClustergramData>) => queryOptions<ExpressionClustergramResponse2, ExpressionClustergramError, ExpressionClustergramResponse2, ReturnType<typeof expressionClustergramQueryKey>>({
@@ -263,6 +308,21 @@ export const geneOptions = (options: Options<GeneData>) => queryOptions<GeneResp
         return data;
     },
     queryKey: geneQueryKey(options)
+});
+
+export const geneEpigenomeQueryKey = (options: Options<GeneEpigenomeData>) => createQueryKey('geneEpigenome', options);
+
+export const geneEpigenomeOptions = (options: Options<GeneEpigenomeData>) => queryOptions<GeneEpigenomeResponse, GeneEpigenomeError, GeneEpigenomeResponse, ReturnType<typeof geneEpigenomeQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await geneEpigenome({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: geneEpigenomeQueryKey(options)
 });
 
 export const geneExpressionQueryKey = (options: Options<GeneExpressionData>) => createQueryKey('geneExpression', options);

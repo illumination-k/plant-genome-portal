@@ -9,6 +9,8 @@ axum.workspace = true
 clap.workspace = true
 co-expression = { path = "../../crates/co-expression", version = "0.1.0" }
 enrichment-core = { path = "../../crates/enrichment-core", version = "0.1.0" }
+epigenome-core = { path = "../../crates/epigenome-core", version = "0.1.0" }
+epigenome-store = { path = "../../crates/epigenome-store", version = "0.1.0" }
 expression-core = { path = "../../crates/expression-core", version = "0.1.0" }
 expression-store = { path = "../../crates/expression-store", version = "0.1.0" }
 genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
@@ -18,7 +20,7 @@ serde_json.workspace = true
 service = { path = "../../crates/service", version = "0.1.0" }
 storage = { path = "../../crates/storage", version = "0.1.0" }
 tokio.workspace = true
-tower-http = { workspace = true, features = ["cors"] }
+tower-http = { workspace = true, features = ["cors", "fs"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 utoipa.workspace = true

@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
+epigenome-core = { path = "../../crates/epigenome-core", version = "0.1.0" }
+epigenome-store = { path = "../../crates/epigenome-store", version = "0.1.0" }
 flate2.workspace = true
 genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
 reqwest.workspace = true

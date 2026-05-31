@@ -83,13 +83,14 @@
       }
     },
     {
+      "comment": "AnalysisPage is an aggregator that composes panels from tools/ — other feature imports stay forbidden.",
       "from": {
         "path": "^src/features/analysis/"
       },
       "name": "analysis-stays-in-lane",
       "severity": "error",
       "to": {
-        "path": "^src/features/(datasets|expression|genes|genome-browser|landing|tools)/"
+        "path": "^src/features/(datasets|expression|genes|genome-browser|landing)/"
       }
     },
     {
