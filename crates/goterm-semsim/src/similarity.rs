@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use genome_core::GoTermId;
+use genome_domain::GoTermId;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -294,7 +294,7 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use genome_core::GoNamespace;
+    use genome_domain::GoNamespace;
 
     use super::*;
     use crate::dag::GoNode;

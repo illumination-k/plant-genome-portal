@@ -87,16 +87,16 @@ dependencies = [
  "clap",
  "co-expression",
  "enrichment-core",
- "epigenome-core",
+ "epigenome-domain",
  "epigenome-store",
- "expression-core",
+ "expression-domain",
  "expression-store",
- "genome-core",
+ "genome-domain",
+ "genome-service",
+ "genome-store",
  "rmp-serde",
  "serde",
  "serde_json",
- "service",
- "storage",
  "tokio",
  "tower-http",
  "tracing",
@@ -368,8 +368,8 @@ name = "co-expression"
 version = "0.1.0"
 dependencies = [
  "blas-src",
- "expression-core",
- "genome-core",
+ "expression-domain",
+ "genome-domain",
  "ndarray",
  "ndarray-stats",
  "openblas-src",
@@ -608,11 +608,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "epigenome-core"
+name = "epigenome-domain"
 version = "0.1.0"
 dependencies = [
- "expression-core",
- "genome-core",
+ "expression-domain",
+ "genome-domain",
  "rstest",
  "serde",
  "serde_json",
@@ -624,10 +624,10 @@ dependencies = [
 name = "epigenome-store"
 version = "0.1.0"
 dependencies = [
- "epigenome-core",
- "expression-core",
+ "epigenome-domain",
+ "expression-domain",
  "flate2",
- "genome-core",
+ "genome-domain",
  "rstest",
  "serde",
  "serde_json",
@@ -653,10 +653,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "expression-core"
+name = "expression-domain"
 version = "0.1.0"
 dependencies = [
- "genome-core",
+ "genome-domain",
  "rstest",
  "serde",
  "thiserror",
@@ -667,8 +667,8 @@ dependencies = [
 name = "expression-store"
 version = "0.1.0"
 dependencies = [
- "expression-core",
- "genome-core",
+ "expression-domain",
+ "genome-domain",
  "serde",
  "serde_json",
  "tempfile",
@@ -842,13 +842,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "genome-core"
+name = "genome-domain"
 version = "0.1.0"
 dependencies = [
  "rstest",
  "serde",
  "thiserror",
  "utoipa",
+]
+
+[[package]]
+name = "genome-service"
+version = "0.1.0"
+dependencies = [
+ "genome-domain",
+ "genome-store",
+ "serde",
+ "thiserror",
+ "utoipa",
+]
+
+[[package]]
+name = "genome-store"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "fastobo",
+ "flate2",
+ "genome-domain",
+ "goterm-semsim",
+ "noodles-fasta",
+ "noodles-gff",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -901,7 +930,7 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 name = "goterm-semsim"
 version = "0.1.0"
 dependencies = [
- "genome-core",
+ "genome-domain",
  "serde",
  "thiserror",
  "utoipa",
@@ -1742,14 +1771,14 @@ name = "portal-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "epigenome-core",
+ "epigenome-domain",
  "epigenome-store",
  "flate2",
- "genome-core",
+ "genome-domain",
+ "genome-store",
  "reqwest",
  "serde",
  "serde_json",
- "storage",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2346,17 +2375,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "service"
-version = "0.1.0"
-dependencies = [
- "genome-core",
- "serde",
- "storage",
- "thiserror",
- "utoipa",
-]
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2478,24 +2496,6 @@ checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
 dependencies = [
  "approx",
  "num-traits",
-]
-
-[[package]]
-name = "storage"
-version = "0.1.0"
-dependencies = [
- "base64",
- "fastobo",
- "flate2",
- "genome-core",
- "goterm-semsim",
- "noodles-fasta",
- "noodles-gff",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "thiserror",
 ]
 
 [[package]]
@@ -3443,12 +3443,12 @@ name = "worker"
 version = "0.1.0"
 dependencies = [
  "clap",
- "genome-core",
+ "genome-domain",
+ "genome-service",
+ "genome-store",
  "rmp-serde",
  "serde",
  "serde_json",
- "service",
- "storage",
  "thiserror",
 ]
 

@@ -1,8 +1,10 @@
 use axum::{Json, extract::State};
 use enrichment_core::{EnrichmentInput, EnrichmentOptions, run_enrichment};
-use genome_core::{AssemblyAccession, FunctionalAnnotation, Gene, GeneId, GeneSearch, GoNamespace};
+use genome_domain::{
+    AssemblyAccession, FunctionalAnnotation, Gene, GeneId, GeneSearch, GoNamespace,
+};
+use genome_service::ServiceError;
 use serde::{Deserialize, Serialize};
-use service::ServiceError;
 use std::collections::{HashMap, HashSet};
 use utoipa::ToSchema;
 
@@ -414,14 +416,14 @@ fn enrichment_kind_rank(kind: EnrichmentAnnotationKind) -> u8 {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use genome_core::{
+    use genome_domain::{
         AnnotationEvidence, AnnotationSource, Assembly, AssemblySource, GoTermAnnotation,
         HalfOpenRegion, InterProAnnotation, InterProId, KeggAnnotation, KeggEntryId, KogAnnotation,
         KogEntryId, NcbiFamAccession, NcbiFamAnnotation, PfamAccession, PfamAnnotation, Position0,
         SequenceName, Strand, TaxId, Taxon,
     };
+    use genome_store::FileGenomeRepository;
     use std::collections::BTreeMap;
-    use storage::FileGenomeRepository;
 
     const ASSEMBLY: &str = "GCA_test";
     const OTHER_ASSEMBLY: &str = "GCA_other";
@@ -460,7 +462,7 @@ mod tests {
 
     fn service_with_genes(genes: Vec<Gene>) -> AppService {
         let accession = accession(ASSEMBLY);
-        let dataset = genome_core::GenomeDataset {
+        let dataset = genome_domain::GenomeDataset {
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
                 scientific_name: "Marchantia polymorpha".to_owned(),
@@ -479,15 +481,15 @@ mod tests {
             transcripts: Vec::new(),
             exons: Vec::new(),
             cdss: Vec::new(),
-            kegg_catalog: genome_core::KeggCatalog::default(),
-            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
+            kegg_catalog: genome_domain::KeggCatalog::default(),
+            orthogroup_catalog: genome_domain::OrthogroupCatalog::default(),
         };
-        service::GenomeService::new(FileGenomeRepository::new(dataset), None)
+        genome_service::GenomeService::new(FileGenomeRepository::new(dataset), None)
     }
 
     fn go_annotation(id: &str) -> FunctionalAnnotation {
         FunctionalAnnotation::GoTerm(GoTermAnnotation {
-            term_id: genome_core::GoTermId::new(id).unwrap(),
+            term_id: genome_domain::GoTermId::new(id).unwrap(),
             name: Some(id.to_owned()),
             namespace: Some(GoNamespace::BiologicalProcess),
             evidence: evidence(),

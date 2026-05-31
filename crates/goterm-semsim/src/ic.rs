@@ -22,7 +22,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use genome_core::{GoNamespace, GoTermId};
+use genome_domain::{GoNamespace, GoTermId};
 
 use crate::dag::GoDag;
 

@@ -4,14 +4,14 @@ use axum::{
     http::header,
     response::IntoResponse,
 };
-use genome_core::{Gene, Sequence, Strand};
+use genome_domain::{Gene, Sequence, Strand};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::routes::epigenome::jbrowse_tracks;
 use crate::{ApiError, AppEpigenomeRepository, AppService, AppState};
-use service::ServiceError;
+use genome_service::ServiceError;
 
 #[utoipa::path(
     get,
@@ -151,7 +151,7 @@ fn config_for_accession(
 }
 
 pub(crate) fn build_config(
-    assembly: &genome_core::Assembly,
+    assembly: &genome_domain::Assembly,
     sequences: &[Sequence],
     base_url: Option<&str>,
     extra_tracks: Vec<serde_json::Value>,
@@ -390,7 +390,7 @@ impl From<Gene> for JBrowseFeature {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use genome_core::{
+    use genome_domain::{
         Assembly, AssemblyAccession, AssemblySource, HalfOpenRegion, Position0, SequenceName, TaxId,
     };
 
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn gene_converts_to_jbrowse_feature_coordinates() {
         let gene = Gene {
-            id: genome_core::GeneId::new("gene1").unwrap(),
+            id: genome_domain::GeneId::new("gene1").unwrap(),
             assembly_accession: AssemblyAccession::new("GCA_test").unwrap(),
             symbol: Some("SYMBOL1".to_owned()),
             locus_tag: None,

@@ -1,16 +1,16 @@
-use genome_core::{
+use genome_domain::{
     AssemblyAccession, HomologyHit, HomologySearchMethod, Position1, SequenceName, TranscriptId,
 };
-use serde::{Deserialize, Serialize};
-use service::{
+use genome_service::{
     AnnotatedHomologyHit, AnnotatedHomologySearchResult, HomologyService, Worker, WorkerJob,
 };
+use genome_store::FileGenomeRepository;
+use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
-use storage::FileGenomeRepository;
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -111,7 +111,7 @@ impl BlastRunner {
 
         let stdout = String::from_utf8(output.stdout)?;
         let hits = parse_tabular_hits(&stdout, &input.assembly_accession, &self.method)?;
-        let result = genome_core::HomologySearchResult {
+        let result = genome_domain::HomologySearchResult {
             method: self.method.clone(),
             task: input.task.clone(),
             hits,
@@ -193,7 +193,7 @@ pub enum BlastWorkerError {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    Storage(#[from] storage::StorageError),
+    Storage(#[from] genome_store::StorageError),
     #[error(transparent)]
     Utf8(#[from] std::string::FromUtf8Error),
 }

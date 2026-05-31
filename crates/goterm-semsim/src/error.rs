@@ -1,4 +1,4 @@
-use genome_core::GoTermId;
+use genome_domain::GoTermId;
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum SemSimError {

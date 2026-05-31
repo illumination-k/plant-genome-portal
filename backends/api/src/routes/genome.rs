@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
-use genome_core::TaxId;
+use genome_domain::TaxId;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -10,8 +10,8 @@ use crate::{ApiError, AppState};
 
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct TaxonResponse {
-    taxon: genome_core::Taxon,
-    assemblies: Vec<genome_core::Assembly>,
+    taxon: genome_domain::Taxon,
+    assemblies: Vec<genome_domain::Assembly>,
 }
 
 #[utoipa::path(
@@ -19,7 +19,7 @@ pub(crate) struct TaxonResponse {
     path = "/v2/genome/accession/{accession}",
     params(("accession" = String, Path, description = "Assembly accession")),
     responses(
-        (status = 200, description = "Assembly metadata", body = genome_core::Assembly),
+        (status = 200, description = "Assembly metadata", body = genome_domain::Assembly),
         (status = 404, description = "Assembly not found", body = crate::ErrorResponse),
         (status = 400, description = "Invalid request", body = crate::ErrorResponse),
     )
@@ -27,7 +27,7 @@ pub(crate) struct TaxonResponse {
 pub(crate) async fn assembly(
     State(state): State<AppState>,
     Path(accession): Path<String>,
-) -> Result<Json<genome_core::Assembly>, ApiError> {
+) -> Result<Json<genome_domain::Assembly>, ApiError> {
     Ok(Json(state.service.assembly(&accession)?))
 }
 
@@ -36,7 +36,7 @@ pub(crate) async fn assembly(
     path = "/v2/genome/accession/{accession}/sequences",
     params(("accession" = String, Path, description = "Assembly accession")),
     responses(
-        (status = 200, description = "Assembly sequences", body = Vec<genome_core::Sequence>),
+        (status = 200, description = "Assembly sequences", body = Vec<genome_domain::Sequence>),
         (status = 404, description = "Assembly not found", body = crate::ErrorResponse),
         (status = 400, description = "Invalid request", body = crate::ErrorResponse),
     )
@@ -44,7 +44,7 @@ pub(crate) async fn assembly(
 pub(crate) async fn assembly_sequences(
     State(state): State<AppState>,
     Path(accession): Path<String>,
-) -> Result<Json<Vec<genome_core::Sequence>>, ApiError> {
+) -> Result<Json<Vec<genome_domain::Sequence>>, ApiError> {
     Ok(Json(state.service.sequences_for_assembly(&accession)?))
 }
 
@@ -76,7 +76,7 @@ pub(crate) async fn taxon(
         ("region" = String, Path, description = "1-based closed region, e.g. chr1:1-100000"),
     ),
     responses(
-        (status = 200, description = "Overlapping genes", body = Vec<genome_core::Gene>),
+        (status = 200, description = "Overlapping genes", body = Vec<genome_domain::Gene>),
         (status = 404, description = "Assembly not found", body = crate::ErrorResponse),
         (status = 400, description = "Invalid request", body = crate::ErrorResponse),
     )
@@ -84,6 +84,6 @@ pub(crate) async fn taxon(
 pub(crate) async fn region_features(
     State(state): State<AppState>,
     Path((accession, region)): Path<(String, String)>,
-) -> Result<Json<Vec<genome_core::Gene>>, ApiError> {
+) -> Result<Json<Vec<genome_domain::Gene>>, ApiError> {
     Ok(Json(state.service.features_in_region(&accession, &region)?))
 }

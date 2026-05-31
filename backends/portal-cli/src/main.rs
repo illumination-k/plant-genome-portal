@@ -1,5 +1,5 @@
 use clap::{Args, Parser, Subcommand};
-use epigenome_core::Experiment;
+use epigenome_domain::Experiment;
 use epigenome_store::{
     EpigenomeDataset, EpigenomeSnapshot, EpigenomeSnapshotManifest, ExperimentPeaks,
     parsers::{
@@ -8,16 +8,16 @@ use epigenome_store::{
     write_snapshot as write_epigenome_snapshot,
 };
 use flate2::read::GzDecoder;
-use genome_core::{Assembly, AssemblyAccession, AssemblySource, TaxId, Taxon};
+use genome_domain::{Assembly, AssemblyAccession, AssemblySource, TaxId, Taxon};
+use genome_store::{
+    GenomeSnapshot, GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest,
+    build_genome_snapshot, write_snapshot,
+};
 use serde::Serialize;
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
-use storage::{
-    GenomeSnapshot, GenomeSnapshotBuild, KeggCatalogPaths, KeggManifest, SnapshotManifest,
-    build_genome_snapshot, write_snapshot,
-};
 use tracing_subscriber::EnvFilter;
 
 const MARPOLBASE_MPTAK1_V7_1_BASE_URL: &str = "https://marchantia.info/data/MpTak1_v7.1";
@@ -235,7 +235,7 @@ enum ImportSource {
 #[derive(Debug, Args)]
 struct EpigenomeManifestImport {
     /// Path to the curator-facing TOML manifest. See
-    /// `crates/epigenome-store/src/parsers/manifest.rs` for the schema.
+    /// `crates/epigenome/store/src/parsers/manifest.rs` for the schema.
     #[arg(long)]
     manifest: PathBuf,
     /// Output path for the resulting `epigenome_snapshot.json`.
@@ -277,8 +277,8 @@ impl EpigenomeManifestImport {
             );
             let reader = open_peaks(&peak_path)?;
             let peaks = match entry.peak_kind {
-                epigenome_core::PeakKind::Narrow => parse_narrow_peak(reader)?,
-                epigenome_core::PeakKind::Broad => parse_broad_peak(reader)?,
+                epigenome_domain::PeakKind::Narrow => parse_narrow_peak(reader)?,
+                epigenome_domain::PeakKind::Broad => parse_broad_peak(reader)?,
             };
 
             let signal_file = entry.signal_path(manifest_dir).as_ref().and_then(|path| {
@@ -344,7 +344,7 @@ fn build_experiment(entry: &ExperimentManifestEntry, signal_file: Option<String>
         replicate: entry.replicate,
         pipeline: entry.pipeline.clone(),
         qvalue_cutoff: entry.qvalue_cutoff,
-        qc: epigenome_core::ExperimentQc {
+        qc: epigenome_domain::ExperimentQc {
             frip: entry.qc.frip,
             nrf: entry.qc.nrf,
             nsc: entry.qc.nsc,

@@ -5,12 +5,12 @@
 //! ancestor / descendant closure (over both edge kinds, matching the GO
 //! "true path rule"). It exists as the substrate every semantic-similarity
 //! algorithm in this crate operates on; callers build it once from any
-//! source (the OBO loader in `storage`, a hand-written test fixture, etc.)
+//! source (the OBO loader in genome-store, a hand-written test fixture, etc.)
 //! via [`GoDag::builder`].
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use genome_core::{GoNamespace, GoTermId};
+use genome_domain::{GoNamespace, GoTermId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GoNode {

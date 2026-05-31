@@ -3,12 +3,12 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use genome_core::AssemblyAccession;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use service::{
+use genome_domain::AssemblyAccession;
+use genome_service::{
     AnnotatedHomologySearchResult, InMemoryJobManager, JobExecutor, JobManager, JobRecord,
     JobStatus, ServiceError, WorkerJob,
 };
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
@@ -488,7 +488,7 @@ impl From<JobStatus> for JobStatusResponse {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AnnotatedHomologySearchResultResponse {
-    method: genome_core::HomologySearchMethod,
+    method: genome_domain::HomologySearchMethod,
     task: String,
     hits: Vec<AnnotatedHomologyHitResponse>,
 }
@@ -506,12 +506,12 @@ impl From<AnnotatedHomologySearchResult> for AnnotatedHomologySearchResultRespon
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AnnotatedHomologyHitResponse {
-    hit: genome_core::HomologyHit,
-    overlapping_gene_ids: Vec<genome_core::GeneId>,
+    hit: genome_domain::HomologyHit,
+    overlapping_gene_ids: Vec<genome_domain::GeneId>,
 }
 
-impl From<service::AnnotatedHomologyHit> for AnnotatedHomologyHitResponse {
-    fn from(hit: service::AnnotatedHomologyHit) -> Self {
+impl From<genome_service::AnnotatedHomologyHit> for AnnotatedHomologyHitResponse {
+    fn from(hit: genome_service::AnnotatedHomologyHit) -> Self {
         Self {
             hit: hit.hit,
             overlapping_gene_ids: hit.overlapping_gene_ids,

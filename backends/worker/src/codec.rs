@@ -38,8 +38,8 @@ pub enum MessagePackError {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use genome_service::WorkerJob;
     use serde::Deserialize;
-    use service::WorkerJob;
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct TestPayload {

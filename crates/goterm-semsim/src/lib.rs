@@ -8,12 +8,12 @@
 //! Average, Max, or Average — lets callers compare two gene's GO term
 //! sets.
 //!
-//! No I/O, no async, no dependency on `storage` or `axum`: the DAG is
+//! No I/O, no async, no dependency on `genome-store` or `axum`: the DAG is
 //! built via [`GoDag::builder`] from any source, including the OBO loader
-//! in `storage`.
+//! in genome-store.
 //!
 //! ```
-//! use genome_core::{GoNamespace, GoTermId};
+//! use genome_domain::{GoNamespace, GoTermId};
 //! use goterm_semsim::{GoDag, GoNode, IntrinsicIc, SimilarityMethod, similarity};
 //!
 //! let mut b = GoDag::builder();

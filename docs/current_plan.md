@@ -4,7 +4,7 @@
 
 ## 目標
 
-Genome MVP は完了扱いにする。次は MarpolBase Expression (MBEX) 相当のうち、まず **Expression の可視化** に絞る。
+Genome layer は稼働済みとして扱う。次は MarpolBase Expression (MBEX) 相当のうち、まず **Expression の可視化** に絞る。
 
 最初の目的は、gene detail から「この遺伝子がどのサンプル・組織・条件で発現しているか」を直感的に見られる状態にすること。co-expression、DEG、functional enrichment、set relation、orthology は後続フェーズに回す。
 
@@ -34,7 +34,7 @@ Genome MVP は完了扱いにする。次は MarpolBase Expression (MBEX) 相当
 - Organism-specific sample metadata
   - sample schema is not fixed globally
   - Marchantia can define fields such as organ, tissue, developmental stage, genotype, treatment, time point, sex, thallus region, gemma/cup context, light condition, stress condition
-  - other species can define their own metadata fields without changing expression-core
+  - other species can define their own metadata fields without changing expression-domain
   - raw metadata is preserved as typed organism metadata plus a string attribute map
 - Gene-level expression matrix
   - TPM
@@ -94,7 +94,7 @@ Genome MVP は完了扱いにする。次は MarpolBase Expression (MBEX) 相当
 
 ### P0: 現状棚卸し
 
-- `expression-core` の型を確認する
+- `expression-domain` の型を確認する
 - `expression-store` の snapshot / repository 実装を確認する
 - sample metadata を固定 schema にしないための trait 境界を決める
 - 既存型で足りない identity / metadata profile / summary 型を洗い出す
@@ -163,7 +163,7 @@ Done 条件:
 
 ## 直近の作業
 
-1. `expression-core` / `expression-store` の現状棚卸し
+1. `expression-domain` / `expression-store` の現状棚卸し
 2. sample identity trait / metadata profile trait の設計
 3. Marchantia metadata profile の設計
 4. Expression visualization 用 response model の設計
@@ -176,7 +176,7 @@ Done 条件:
 
 Expression visualization が固まった後に、次の順で広げる。
 
-1. Co-expression MVP
+1. Co-expression
 2. Functional enrichment
 3. DEG viewer
 4. Heatmap / clustergram

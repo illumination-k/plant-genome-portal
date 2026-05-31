@@ -215,4 +215,4 @@ results/atacseq/
   substantially different peak boundaries than expected.
 - **HMMRATAC** (Tarbell & Liu 2019) — purpose-built for ATAC, segments
   nucleosome-free vs nucleosome-bound regions. Heavier dependency, fewer
-  downstream tools support its output. Out of scope for the MVP.
+  downstream tools support its output. Not part of the default pipeline.

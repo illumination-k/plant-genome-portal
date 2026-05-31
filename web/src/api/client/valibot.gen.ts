@@ -21,10 +21,10 @@ export const vAnnotationEvidence = v.object({
 export const vAntibody = v.string();
 
 /**
- * Epigenome assay supported in MVP.
+ * Epigenome assays currently represented in the portal model.
  *
- * Only ChIP-seq and ATAC-seq are modelled. CUT&RUN / CUT&Tag / DNase-seq are
- * out of MVP scope; add new variants when those assays are imported.
+ * ChIP-seq and ATAC-seq are modelled now. Add CUT&RUN / CUT&Tag / DNase-seq
+ * variants when those assays are imported.
  */
 export const vAssay = v.picklist(['chip_seq', 'atac_seq']);
 
