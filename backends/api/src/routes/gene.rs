@@ -45,6 +45,40 @@ pub(crate) async fn gene_kegg(
 
 #[utoipa::path(
     get,
+    path = "/v2/gene/id/{gene_id}/orthogroups",
+    params(("gene_id" = String, Path, description = "Gene identifier")),
+    responses(
+        (status = 200, description = "Orthogroups containing the gene", body = Vec<genome_core::Orthogroup>),
+        (status = 404, description = "Gene not found", body = crate::ErrorResponse),
+        (status = 400, description = "Invalid request", body = crate::ErrorResponse),
+    )
+)]
+pub(crate) async fn gene_orthogroups(
+    State(state): State<AppState>,
+    Path(gene_id): Path<String>,
+) -> Result<Json<Vec<genome_core::Orthogroup>>, ApiError> {
+    Ok(Json(state.service.gene_orthogroups(&gene_id)?))
+}
+
+#[utoipa::path(
+    get,
+    path = "/v2/orthogroup/{orthogroup_id}",
+    params(("orthogroup_id" = String, Path, description = "Orthogroup identifier")),
+    responses(
+        (status = 200, description = "Orthogroup detail", body = genome_core::Orthogroup),
+        (status = 404, description = "Orthogroup not found", body = crate::ErrorResponse),
+        (status = 400, description = "Invalid request", body = crate::ErrorResponse),
+    )
+)]
+pub(crate) async fn orthogroup(
+    State(state): State<AppState>,
+    Path(orthogroup_id): Path<String>,
+) -> Result<Json<genome_core::Orthogroup>, ApiError> {
+    Ok(Json(state.service.orthogroup(&orthogroup_id)?))
+}
+
+#[utoipa::path(
+    get,
     path = "/v2/kegg/pathways",
     responses(
         (status = 200, description = "KEGG pathway catalog with dataset-level KO and gene counts", body = Vec<KeggPathwaySummary>),

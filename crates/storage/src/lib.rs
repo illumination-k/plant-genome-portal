@@ -5,6 +5,7 @@ mod gff;
 mod kegg;
 mod nomenclature;
 mod obo;
+mod orthogroup;
 mod protein;
 mod repository;
 mod snapshot;
@@ -74,10 +75,12 @@ mod tests {
                 nomenclature_file: None,
                 kegg_files: None,
                 protein_fasta_file: None,
+                orthogroup_file: None,
             },
             functional_annotation_path: None,
             nomenclature_path: None,
             protein_fasta_path: None,
+            orthogroup_path: None,
             kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
@@ -169,10 +172,12 @@ mod tests {
                 nomenclature_file: Some("nomenclature.tsv".to_owned()),
                 kegg_files: None,
                 protein_fasta_file: None,
+                orthogroup_file: None,
             },
             functional_annotation_path: Some(functional_annotation_path),
             nomenclature_path: Some(nomenclature_path),
             protein_fasta_path: None,
+            orthogroup_path: None,
             kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),
@@ -243,6 +248,150 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_builder_imports_orthogroups() {
+        let dir = tempfile::tempdir().unwrap();
+        let fasta_path = dir.path().join("test.fa");
+        let gff_path = dir.path().join("test.gff");
+        let orthogroup_path = dir.path().join("orthogroups.tsv");
+
+        let mut fasta = File::create(&fasta_path).unwrap();
+        writeln!(fasta, ">chr1").unwrap();
+        writeln!(fasta, "ACGTACGTACGT").unwrap();
+
+        let mut gff = File::create(&gff_path).unwrap();
+        writeln!(gff, "##gff-version 3").unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=TEST"
+        )
+        .unwrap();
+
+        let mut orthogroups = File::create(&orthogroup_path).unwrap();
+        writeln!(
+            orthogroups,
+            "orthogroup_id\tgene_id\ttax_id\tscientific_name\tassembly_accession\tsymbol"
+        )
+        .unwrap();
+        writeln!(
+            orthogroups,
+            "OG1\tMp1g00010\t3197\tMarchantia polymorpha\tGCA_test\tMpFOO"
+        )
+        .unwrap();
+        writeln!(
+            orthogroups,
+            "OG1\tAT1G01010\t3702\tArabidopsis thaliana\t\tATFOO"
+        )
+        .unwrap();
+
+        let snapshot = build_genome_snapshot(&GenomeSnapshotBuild {
+            fasta_path,
+            gff_path,
+            manifest: SnapshotManifest {
+                source_base_url: "https://example.test".to_owned(),
+                fasta_file: "test.fa".to_owned(),
+                gff_file: "test.gff".to_owned(),
+                functional_annotation_file: None,
+                nomenclature_file: None,
+                kegg_files: None,
+                protein_fasta_file: None,
+                orthogroup_file: Some("orthogroups.tsv".to_owned()),
+            },
+            functional_annotation_path: None,
+            nomenclature_path: None,
+            protein_fasta_path: None,
+            orthogroup_path: Some(orthogroup_path),
+            kegg_catalog_paths: Default::default(),
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: AssemblyAccession::new("GCA_test").unwrap(),
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: genome_core::AssemblySource::Local,
+                refget_checksum: None,
+            },
+        })
+        .unwrap();
+
+        let groups = &snapshot.dataset.orthogroup_catalog.groups;
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].members.len(), 2);
+        assert_eq!(groups[0].members[0].scientific_name, "Arabidopsis thaliana");
+    }
+
+    #[test]
+    fn snapshot_builder_rejects_missing_current_assembly_orthogroup_gene() {
+        let dir = tempfile::tempdir().unwrap();
+        let fasta_path = dir.path().join("test.fa");
+        let gff_path = dir.path().join("test.gff");
+        let orthogroup_path = dir.path().join("orthogroups.tsv");
+
+        let mut fasta = File::create(&fasta_path).unwrap();
+        writeln!(fasta, ">chr1").unwrap();
+        writeln!(fasta, "ACGTACGTACGT").unwrap();
+
+        let mut gff = File::create(&gff_path).unwrap();
+        writeln!(gff, "##gff-version 3").unwrap();
+        writeln!(
+            gff,
+            "chr1\tMarpolBase\tgene\t1\t8\t.\t+\t.\tID=Mp1g00010;Name=TEST"
+        )
+        .unwrap();
+
+        let mut orthogroups = File::create(&orthogroup_path).unwrap();
+        writeln!(
+            orthogroups,
+            "orthogroup_id\tgene_id\ttax_id\tscientific_name\tassembly_accession"
+        )
+        .unwrap();
+        writeln!(
+            orthogroups,
+            "OG1\tMp9g99999\t3197\tMarchantia polymorpha\tGCA_test"
+        )
+        .unwrap();
+
+        let error = build_genome_snapshot(&GenomeSnapshotBuild {
+            fasta_path,
+            gff_path,
+            manifest: SnapshotManifest {
+                source_base_url: "https://example.test".to_owned(),
+                fasta_file: "test.fa".to_owned(),
+                gff_file: "test.gff".to_owned(),
+                functional_annotation_file: None,
+                nomenclature_file: None,
+                kegg_files: None,
+                protein_fasta_file: None,
+                orthogroup_file: Some("orthogroups.tsv".to_owned()),
+            },
+            functional_annotation_path: None,
+            nomenclature_path: None,
+            protein_fasta_path: None,
+            orthogroup_path: Some(orthogroup_path),
+            kegg_catalog_paths: Default::default(),
+            taxon: Taxon {
+                tax_id: TaxId::new(3197),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: AssemblyAccession::new("GCA_test").unwrap(),
+                tax_id: TaxId::new(3197),
+                name: "test".to_owned(),
+                source: genome_core::AssemblySource::Local,
+                refget_checksum: None,
+            },
+        })
+        .expect_err("should reject missing current assembly member");
+
+        assert!(matches!(error, StorageError::InvalidTsvValue { .. }));
+    }
+
+    #[test]
     fn snapshot_builder_attaches_protein_checksum_to_transcripts() {
         let dir = tempfile::tempdir().unwrap();
         let fasta_path = dir.path().join("test.fa");
@@ -281,10 +430,12 @@ mod tests {
                 nomenclature_file: None,
                 kegg_files: None,
                 protein_fasta_file: Some("proteins.fa".to_owned()),
+                orthogroup_file: None,
             },
             functional_annotation_path: None,
             nomenclature_path: None,
             protein_fasta_path: Some(protein_path),
+            orthogroup_path: None,
             kegg_catalog_paths: Default::default(),
             taxon: Taxon {
                 tax_id: TaxId::new(3197),

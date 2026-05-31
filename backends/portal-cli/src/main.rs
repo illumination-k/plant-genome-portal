@@ -371,6 +371,9 @@ struct MarpolbaseMptak1V7_1Import {
     rebuild_snapshot: bool,
     #[arg(long)]
     force: bool,
+    /// Optional normalized orthogroup TSV to include in the genome snapshot.
+    #[arg(long)]
+    orthogroups: Option<PathBuf>,
 }
 
 impl MarpolbaseMptak1V7_1Import {
@@ -400,6 +403,7 @@ impl MarpolbaseMptak1V7_1Import {
             || !config.input_files_exist()
             || self.force
             || self.rebuild_snapshot
+            || self.orthogroups.is_some()
         {
             return Ok(false);
         }
@@ -432,6 +436,15 @@ impl MarpolbaseMptak1V7_1Import {
         if let Some(protein_fasta_path) = &config.snapshot.protein_fasta_path {
             download_if_needed(&config.protein_fasta_url, protein_fasta_path, self.force).await?;
         }
+        if let Some(orthogroup_path) = &config.snapshot.orthogroup_path
+            && !orthogroup_path.exists()
+        {
+            return Err(format!(
+                "orthogroup TSV does not exist: {}",
+                orthogroup_path.display()
+            )
+            .into());
+        }
         for download in &config.kegg_downloads {
             download_if_needed(&download.url, &download.path, self.force).await?;
         }
@@ -444,6 +457,7 @@ impl MarpolbaseMptak1V7_1Import {
         let functional_annotation_path = self.out.join(MARPOLBASE_MPTAK1_V7_1_FUNC_ANNOTATION_FILE);
         let nomenclature_path = self.out.join(MARPOLBASE_NOMENCLATURE_FILE);
         let protein_fasta_path = self.out.join(MARPOLBASE_MPTAK1_V7_1_PROTEIN_FILE);
+        let orthogroup_path = self.orthogroups.clone();
         let snapshot_path = self.out.join("snapshot.json");
         let tax_id = TaxId::new(3197);
 
@@ -483,6 +497,7 @@ impl MarpolbaseMptak1V7_1Import {
                 functional_annotation_path: Some(functional_annotation_path),
                 nomenclature_path: Some(nomenclature_path),
                 protein_fasta_path: Some(protein_fasta_path),
+                orthogroup_path,
                 kegg_catalog_paths,
                 manifest: SnapshotManifest {
                     source_base_url: MARPOLBASE_MPTAK1_V7_1_BASE_URL.to_owned(),
@@ -494,6 +509,11 @@ impl MarpolbaseMptak1V7_1Import {
                     nomenclature_file: Some(MARPOLBASE_NOMENCLATURE_FILE.to_owned()),
                     kegg_files: kegg_manifest,
                     protein_fasta_file: Some(MARPOLBASE_MPTAK1_V7_1_PROTEIN_FILE.to_owned()),
+                    orthogroup_file: self
+                        .orthogroups
+                        .as_ref()
+                        .and_then(|path| path.file_name())
+                        .map(|name| name.to_string_lossy().into_owned()),
                 },
                 taxon: Taxon {
                     tax_id,
@@ -630,6 +650,11 @@ impl ImportConfig {
             && self
                 .snapshot
                 .protein_fasta_path
+                .as_ref()
+                .is_none_or(|path| path.exists())
+            && self
+                .snapshot
+                .orthogroup_path
                 .as_ref()
                 .is_none_or(|path| path.exists())
             && self

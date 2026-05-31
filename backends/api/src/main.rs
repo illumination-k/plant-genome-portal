@@ -203,6 +203,14 @@ fn router(build: RouterBuild) -> Router {
         .route("/v2/genome/taxon/{tax_id}", get(routes::genome::taxon))
         .route("/v2/gene/id/{gene_id}", get(routes::gene::gene))
         .route("/v2/gene/id/{gene_id}/kegg", get(routes::gene::gene_kegg))
+        .route(
+            "/v2/gene/id/{gene_id}/orthogroups",
+            get(routes::gene::gene_orthogroups),
+        )
+        .route(
+            "/v2/orthogroup/{orthogroup_id}",
+            get(routes::gene::orthogroup),
+        )
         .route("/v2/kegg/pathways", get(routes::gene::kegg_pathways))
         .route(
             "/v2/kegg/pathway/{pathway_id}",
@@ -369,6 +377,8 @@ enum Command {
         routes::genome::taxon,
         routes::gene::gene,
         routes::gene::gene_kegg,
+        routes::gene::gene_orthogroups,
+        routes::gene::orthogroup,
         routes::gene::kegg_pathways,
         routes::gene::kegg_pathway,
         routes::expression::gene_expression,
@@ -492,6 +502,10 @@ enum Command {
         genome_core::KogEntryId,
         genome_core::NcbiFamAccession,
         genome_core::NcbiFamAnnotation,
+        genome_core::Orthogroup,
+        genome_core::OrthogroupCatalog,
+        genome_core::OrthogroupId,
+        genome_core::OrthogroupMember,
         genome_core::PfamAccession,
         genome_core::PfamAnnotation,
         genome_core::Position0,
@@ -544,7 +558,8 @@ impl IntoResponse for ApiError {
                 | ServiceError::TranscriptNotFound(_)
                 | ServiceError::SequenceNotFound(_)
                 | ServiceError::ProteinSequenceUnavailable(_)
-                | ServiceError::KeggPathwayNotFound(_),
+                | ServiceError::KeggPathwayNotFound(_)
+                | ServiceError::OrthogroupNotFound(_),
             )
             | Self::Job(JobManagerError::JobNotFound(_)) => StatusCode::NOT_FOUND,
             Self::Service(ServiceError::InvalidRequest(_)) => StatusCode::BAD_REQUEST,

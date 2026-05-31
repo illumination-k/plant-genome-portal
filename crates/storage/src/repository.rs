@@ -4,7 +4,7 @@ use std::path::Path;
 use genome_core::{
     Assembly, AssemblyAccession, Cds, Exon, FunctionalAnnotation, Gene, GeneId, GeneRecord,
     GeneSearch, GenomeDataset, GenomeRepository, HalfOpenRegion, KeggCatalog, KeggEntryId,
-    Sequence, TaxId, Taxon, Transcript, TranscriptId, ko_entry_id,
+    Orthogroup, OrthogroupId, Sequence, TaxId, Taxon, Transcript, TranscriptId, ko_entry_id,
 };
 
 use crate::error::StorageError;
@@ -17,6 +17,7 @@ pub struct FileGenomeRepository {
     transcripts: TranscriptIndex,
     sequences: SequenceIndex,
     kegg: KeggKoIndex,
+    orthogroups: OrthogroupIndex,
 }
 
 #[derive(Debug, Clone)]
@@ -157,12 +158,56 @@ impl KeggKoIndex {
     }
 }
 
+#[derive(Debug, Clone)]
+struct OrthogroupIndex {
+    by_id: HashMap<OrthogroupId, Orthogroup>,
+    by_gene: HashMap<GeneId, Vec<OrthogroupId>>,
+}
+
+impl OrthogroupIndex {
+    fn new(groups: &[Orthogroup]) -> Self {
+        let mut by_id = HashMap::new();
+        let mut by_gene: HashMap<GeneId, Vec<OrthogroupId>> = HashMap::new();
+        for group in groups {
+            by_id.insert(group.id.clone(), group.clone());
+            for member in &group.members {
+                by_gene
+                    .entry(member.gene_id.clone())
+                    .or_default()
+                    .push(group.id.clone());
+            }
+        }
+        for group_ids in by_gene.values_mut() {
+            group_ids.sort();
+            group_ids.dedup();
+        }
+        Self { by_id, by_gene }
+    }
+
+    fn groups_for_gene(&self, gene_id: &GeneId) -> Vec<Orthogroup> {
+        self.by_gene
+            .get(gene_id)
+            .map(|group_ids| {
+                group_ids
+                    .iter()
+                    .filter_map(|group_id| self.by_id.get(group_id).cloned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn get(&self, orthogroup_id: &OrthogroupId) -> Option<Orthogroup> {
+        self.by_id.get(orthogroup_id).cloned()
+    }
+}
+
 impl FileGenomeRepository {
     pub fn new(dataset: GenomeDataset) -> Self {
         let genes = GeneIndex::new(&dataset.genes);
         let transcripts = TranscriptIndex::new(&dataset.transcripts, &dataset.exons, &dataset.cdss);
         let sequences = SequenceIndex::new(&dataset.sequences);
         let kegg = KeggKoIndex::new(&dataset.genes);
+        let orthogroups = OrthogroupIndex::new(&dataset.orthogroup_catalog.groups);
 
         Self {
             dataset,
@@ -170,6 +215,7 @@ impl FileGenomeRepository {
             transcripts,
             sequences,
             kegg,
+            orthogroups,
         }
     }
 
@@ -269,6 +315,14 @@ impl GenomeRepository for FileGenomeRepository {
 
     fn genes_with_kegg_ko(&self, ko: &KeggEntryId) -> Vec<Gene> {
         self.kegg.genes_with_ko(ko, &self.genes)
+    }
+
+    fn orthogroups_for_gene(&self, gene_id: &GeneId) -> Vec<Orthogroup> {
+        self.orthogroups.groups_for_gene(gene_id)
+    }
+
+    fn orthogroup(&self, orthogroup_id: &OrthogroupId) -> Option<Orthogroup> {
+        self.orthogroups.get(orthogroup_id)
     }
 }
 
@@ -429,6 +483,7 @@ mod tests {
             exons: vec![exon],
             cdss: vec![cds],
             kegg_catalog: KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         })
     }
 
@@ -646,6 +701,7 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         })
     }
 
@@ -722,11 +778,112 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: catalog,
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         });
 
         let exposed = repo.kegg_catalog();
         assert_eq!(exposed.pathways.len(), 1);
         assert_eq!(exposed.pathways[0].id.as_str(), "map00010");
         assert_eq!(exposed.pathways[0].name.as_deref(), Some("Glycolysis"));
+    }
+
+    #[test]
+    fn orthogroups_for_gene_returns_sorted_groups_and_unknown_empty() {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let repo = repository_with_orthogroups(vec![
+            orthogroup(
+                "OG2",
+                vec![orthogroup_member(
+                    "MpAAA",
+                    &accession,
+                    "Marchantia polymorpha",
+                )],
+            ),
+            orthogroup(
+                "OG1",
+                vec![
+                    orthogroup_member("AT1G01010", &accession, "Arabidopsis thaliana"),
+                    orthogroup_member("MpAAA", &accession, "Marchantia polymorpha"),
+                ],
+            ),
+        ]);
+
+        let hits = repo.orthogroups_for_gene(&GeneId::new("MpAAA").unwrap());
+
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].id.as_str(), "OG1");
+        assert_eq!(hits[1].id.as_str(), "OG2");
+        assert!(
+            repo.orthogroups_for_gene(&GeneId::new("missing").unwrap())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn orthogroup_returns_group_by_id() {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        let repo = repository_with_orthogroups(vec![orthogroup(
+            "OG1",
+            vec![orthogroup_member(
+                "MpAAA",
+                &accession,
+                "Marchantia polymorpha",
+            )],
+        )]);
+
+        let hit = repo.orthogroup(&OrthogroupId::new("OG1").unwrap()).unwrap();
+
+        assert_eq!(hit.id.as_str(), "OG1");
+        assert!(
+            repo.orthogroup(&OrthogroupId::new("OG404").unwrap())
+                .is_none()
+        );
+    }
+
+    fn orthogroup(id: &str, members: Vec<genome_core::OrthogroupMember>) -> Orthogroup {
+        Orthogroup {
+            id: OrthogroupId::new(id).unwrap(),
+            members,
+        }
+    }
+
+    fn orthogroup_member(
+        id: &str,
+        accession: &AssemblyAccession,
+        scientific_name: &str,
+    ) -> genome_core::OrthogroupMember {
+        genome_core::OrthogroupMember {
+            gene_id: GeneId::new(id).unwrap(),
+            tax_id: TaxId::new(TAX_ID),
+            scientific_name: scientific_name.to_owned(),
+            assembly_accession: Some(accession.clone()),
+            symbol: None,
+        }
+    }
+
+    fn repository_with_orthogroups(groups: Vec<Orthogroup>) -> FileGenomeRepository {
+        let accession = AssemblyAccession::new("GCA_test").unwrap();
+        FileGenomeRepository::new(GenomeDataset {
+            taxon: Taxon {
+                tax_id: TaxId::new(TAX_ID),
+                scientific_name: "Marchantia polymorpha".to_owned(),
+                common_name: None,
+                rank: "species".to_owned(),
+            },
+            assembly: Assembly {
+                accession: accession.clone(),
+                tax_id: TaxId::new(TAX_ID),
+                name: "test".to_owned(),
+                source: AssemblySource::Local,
+                refget_checksum: None,
+            },
+            sequences: Vec::new(),
+            genes: vec![gene_with_kegg("MpAAA", &[])],
+            transcripts: Vec::new(),
+            exons: Vec::new(),
+            cdss: Vec::new(),
+            kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog { groups },
+        })
     }
 }

@@ -480,6 +480,7 @@ mod tests {
             exons: Vec::new(),
             cdss: Vec::new(),
             kegg_catalog: genome_core::KeggCatalog::default(),
+            orthogroup_catalog: genome_core::OrthogroupCatalog::default(),
         };
         service::GenomeService::new(FileGenomeRepository::new(dataset), None)
     }
