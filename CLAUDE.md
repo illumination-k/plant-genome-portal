@@ -197,7 +197,7 @@ crates/
                             # nomenclature/functional-annotation TSV parsers,
                             # refget checksum, FastaReference, FileGenomeRepository
                             # (in-memory), GenomeSnapshot I/O, GoOntology (OBO loader,
-                            # `to_dag()` projects into goterm-semsim)
+                            # `to_dag()` projects into enrichment/goterm-semsim)
     service/                # package: genome-service; GenomeService ユースケース層
                             # (lookup + region → half-open), WorkerJob<Input> /
                             # Worker trait application contracts
@@ -208,10 +208,11 @@ crates/
   epigenome/
     domain/                 # package: epigenome-domain; assay / experiment / peak / repository traits
     store/                  # package: epigenome-store; manifest + peak parsers and snapshot-backed repository
-  goterm-semsim/            # GO semantic similarity (pure lib, no IO):
-                            # GoDag (is_a + part_of), IntrinsicIc / CorpusIc,
-                            # Resnik / Lin / Jiang-Conrath / Wang pairwise,
-                            # set_similarity (BMA / Max / Average)
+  enrichment/
+    domain/                 # package: enrichment-core; hypergeometric enrichment + FDR
+    goterm-semsim/          # package: goterm-semsim; GO semantic similarity (pure lib, no IO)
+                            # GoDag, IntrinsicIc / CorpusIc, Resnik / Lin /
+                            # Jiang-Conrath / Wang pairwise, set_similarity
 ```
 
 Workspace `lints.clippy` denies `print_stdout`, `print_stderr`, `unwrap_used`, `expect_used`. Tests opt out with `#[allow(clippy::unwrap_used, clippy::expect_used)]` and gate behind `#[cfg(test)]`.

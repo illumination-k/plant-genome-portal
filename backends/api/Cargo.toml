@@ -8,7 +8,7 @@ license.workspace = true
 axum.workspace = true
 clap.workspace = true
 co-expression = { path = "../../crates/expression/coexpression", version = "0.1.0" }
-enrichment-core = { path = "../../crates/enrichment-core", version = "0.1.0" }
+enrichment-core = { path = "../../crates/enrichment/domain", version = "0.1.0" }
 epigenome-domain = { path = "../../crates/epigenome/domain", version = "0.1.0" }
 epigenome-store = { path = "../../crates/epigenome/store", version = "0.1.0" }
 expression-domain = { path = "../../crates/expression/domain", version = "0.1.0" }

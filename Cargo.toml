@@ -2,7 +2,8 @@
 resolver = "3"
 members = [
   "backends/*",
-  "crates/enrichment-core",
+  "crates/enrichment/domain",
+  "crates/enrichment/goterm-semsim",
   "crates/epigenome/domain",
   "crates/epigenome/store",
   "crates/expression/coexpression",
@@ -11,7 +12,6 @@ members = [
   "crates/genome/domain",
   "crates/genome/service",
   "crates/genome/store",
-  "crates/goterm-semsim",
 ]
 
 [workspace.package]
