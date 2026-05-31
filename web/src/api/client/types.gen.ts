@@ -30,10 +30,10 @@ export type AnnotationSource = 'inter_pro_scan' | 'go' | 'kegg' | 'manual' | {
 export type Antibody = string;
 
 /**
- * Epigenome assay supported in MVP.
+ * Epigenome assays currently represented in the portal model.
  *
- * Only ChIP-seq and ATAC-seq are modelled. CUT&RUN / CUT&Tag / DNase-seq are
- * out of MVP scope; add new variants when those assays are imported.
+ * ChIP-seq and ATAC-seq are modelled now. Add CUT&RUN / CUT&Tag / DNase-seq
+ * variants when those assays are imported.
  */
 export type Assay = 'chip_seq' | 'atac_seq';
 

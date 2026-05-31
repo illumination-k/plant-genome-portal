@@ -7,18 +7,18 @@ license.workspace = true
 [dependencies]
 axum.workspace = true
 clap.workspace = true
-co-expression = { path = "../../crates/co-expression", version = "0.1.0" }
-enrichment-core = { path = "../../crates/enrichment-core", version = "0.1.0" }
-epigenome-core = { path = "../../crates/epigenome-core", version = "0.1.0" }
-epigenome-store = { path = "../../crates/epigenome-store", version = "0.1.0" }
-expression-core = { path = "../../crates/expression-core", version = "0.1.0" }
-expression-store = { path = "../../crates/expression-store", version = "0.1.0" }
-genome-core = { path = "../../crates/genome-core", version = "0.1.0" }
+co-expression = { path = "../../crates/expression/coexpression", version = "0.1.0" }
+enrichment-core = { path = "../../crates/enrichment/domain", version = "0.1.0" }
+epigenome-domain = { path = "../../crates/epigenome/domain", version = "0.1.0" }
+epigenome-store = { path = "../../crates/epigenome/store", version = "0.1.0" }
+expression-domain = { path = "../../crates/expression/domain", version = "0.1.0" }
+expression-store = { path = "../../crates/expression/store", version = "0.1.0" }
+genome-domain = { path = "../../crates/genome/domain", version = "0.1.0" }
+genome-service = { path = "../../crates/genome/service", version = "0.1.0" }
+genome-store = { path = "../../crates/genome/store", version = "0.1.0" }
 rmp-serde.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-service = { path = "../../crates/service", version = "0.1.0" }
-storage = { path = "../../crates/storage", version = "0.1.0" }
 tokio.workspace = true
 tower-http = { workspace = true, features = ["cors", "fs"] }
 tracing.workspace = true

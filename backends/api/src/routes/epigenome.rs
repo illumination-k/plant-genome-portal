@@ -2,13 +2,13 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use epigenome_core::{
+use epigenome_domain::{
     Assay, EpigenomeRepository, Experiment, ExperimentId, ExperimentQuery, Peak, PeakHit,
     PeakRegionQuery, Target,
 };
-use genome_core::{AssemblyAccession, ClosedRegion};
+use genome_domain::{AssemblyAccession, ClosedRegion};
+use genome_service::ServiceError;
 use serde::{Deserialize, Serialize};
-use service::ServiceError;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use utoipa::{IntoParams, ToSchema};
@@ -67,7 +67,7 @@ pub(crate) struct EpigenomeExperimentSummary {
     pub dev_stage: Option<String>,
     pub treatment: Option<String>,
     pub replicate: Option<u16>,
-    pub peak_kind: epigenome_core::PeakKind,
+    pub peak_kind: epigenome_domain::PeakKind,
     pub frip: Option<f64>,
     pub signal_url: Option<String>,
 }
@@ -92,7 +92,7 @@ pub(crate) struct PublicPeak {
     pub end: u64,
     pub name: String,
     pub score: u16,
-    pub strand: genome_core::Strand,
+    pub strand: genome_domain::Strand,
     pub signal_value: f64,
     pub p_value: f64,
     pub q_value: f64,
@@ -367,7 +367,7 @@ fn public_hit(hit: PeakHit) -> EpigenomePeakHit {
 }
 
 /// Project an internal half-open region to the API's 1-based closed shape.
-fn public_region_from(region: &genome_core::HalfOpenRegion) -> PublicRegion {
+fn public_region_from(region: &genome_domain::HalfOpenRegion) -> PublicRegion {
     PublicRegion {
         sequence_name: region.sequence_name.as_str().to_owned(),
         // half-open [start, end) → 1-based closed [start+1, end]
@@ -497,8 +497,8 @@ fn endpoint_url(base_url: Option<&str>, path: &str) -> String {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use epigenome_core::{ExperimentQc, PeakKind};
-    use genome_core::{HalfOpenRegion, Position0, SequenceName, Strand};
+    use epigenome_domain::{ExperimentQc, PeakKind};
+    use genome_domain::{HalfOpenRegion, Position0, SequenceName, Strand};
 
     fn assembly() -> AssemblyAccession {
         AssemblyAccession::new("GCA_test").unwrap()
@@ -631,7 +631,7 @@ mod tests {
         assert_eq!(default_upstream_bp(), 2_000);
     }
 
-    fn make_region(start: u64, end: u64) -> genome_core::HalfOpenRegion {
+    fn make_region(start: u64, end: u64) -> genome_domain::HalfOpenRegion {
         HalfOpenRegion::new(
             SequenceName::new("chr1").unwrap(),
             Position0::new(start),

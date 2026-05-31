@@ -5,12 +5,12 @@ use axum::{
 use co_expression::{
     ClusterDendrogram, cluster_dendrogram_columns, cluster_dendrogram_rows, row_z_scores,
 };
-use expression_core::{
+use expression_domain::{
     ExpressionMatrix, ExpressionQuery, ExpressionRepository, ExpressionUnit, SraRunAccession,
 };
-use genome_core::{AssemblyAccession, GeneId};
+use genome_domain::{AssemblyAccession, GeneId};
+use genome_service::ServiceError;
 use serde::{Deserialize, Serialize};
-use service::ServiceError;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{ApiError, AppExpressionRepository, AppState};
@@ -131,7 +131,7 @@ pub(crate) async fn gene_expression(
             let sample = expression_repository.sample(&measurement.run);
             let label = sample
                 .as_ref()
-                .map(expression_core::Sample::display_label)
+                .map(expression_domain::Sample::display_label)
                 .unwrap_or_else(|| measurement.run.to_string());
             let primary_group = sample.as_ref().and_then(sample_primary_group);
 
@@ -217,8 +217,8 @@ pub(crate) async fn clustergram(
 
 fn clustergram_response(
     matrix: ExpressionMatrix,
-    genes: Vec<genome_core::GeneRecord>,
-    samples: Vec<expression_core::Sample>,
+    genes: Vec<genome_domain::GeneRecord>,
+    samples: Vec<expression_domain::Sample>,
 ) -> ExpressionClustergramResponse {
     let values = matrix
         .values
@@ -266,7 +266,7 @@ fn clustergram_response(
     }
 }
 
-fn sample_primary_group(sample: &expression_core::Sample) -> Option<String> {
+fn sample_primary_group(sample: &expression_domain::Sample) -> Option<String> {
     sample
         .metadata
         .primary_group
@@ -275,13 +275,13 @@ fn sample_primary_group(sample: &expression_core::Sample) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn parse_csv_gene_ids(value: &str) -> Result<Vec<genome_core::GeneId>, ApiError> {
+fn parse_csv_gene_ids(value: &str) -> Result<Vec<genome_domain::GeneId>, ApiError> {
     value
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| {
-            genome_core::GeneId::new(value)
+            genome_domain::GeneId::new(value)
                 .map_err(|error| ServiceError::InvalidRequest(error.to_string()).into())
         })
         .collect()
@@ -300,7 +300,7 @@ fn parse_csv_runs(value: &str) -> Result<Vec<SraRunAccession>, ApiError> {
 }
 
 fn ensure_clustergram_genes_belong_to_assembly(
-    genes: &[genome_core::GeneRecord],
+    genes: &[genome_domain::GeneRecord],
     accession: &AssemblyAccession,
 ) -> Result<(), ApiError> {
     if genes
@@ -319,7 +319,7 @@ fn expression_samples_for_query(
     repository: &AppExpressionRepository,
     accession: &AssemblyAccession,
     query: &ExpressionClustergramQuery,
-) -> Result<Vec<expression_core::Sample>, ApiError> {
+) -> Result<Vec<expression_domain::Sample>, ApiError> {
     let mut samples = repository.samples_for_assembly(accession);
     samples.sort_by_key(sample_sort_key);
 
@@ -348,11 +348,11 @@ fn expression_clustergram_matrix(
     repository: &AppExpressionRepository,
     accession: &AssemblyAccession,
     gene_ids: Vec<GeneId>,
-    genes: Vec<genome_core::GeneRecord>,
+    genes: Vec<genome_domain::GeneRecord>,
     runs: &[SraRunAccession],
     unit: ExpressionUnit,
     drop_missing_genes: bool,
-) -> Result<Option<(ExpressionMatrix, Vec<genome_core::GeneRecord>)>, ApiError> {
+) -> Result<Option<(ExpressionMatrix, Vec<genome_domain::GeneRecord>)>, ApiError> {
     if let Some(matrix) = repository.expression_matrix(accession, &gene_ids, runs, unit) {
         return Ok(Some((matrix, genes)));
     }
@@ -378,10 +378,10 @@ fn available_expression_genes(
     repository: &AppExpressionRepository,
     accession: &AssemblyAccession,
     gene_ids: Vec<GeneId>,
-    genes: Vec<genome_core::GeneRecord>,
+    genes: Vec<genome_domain::GeneRecord>,
     runs: &[SraRunAccession],
     unit: ExpressionUnit,
-) -> Vec<(GeneId, genome_core::GeneRecord)> {
+) -> Vec<(GeneId, genome_domain::GeneRecord)> {
     gene_ids
         .into_iter()
         .zip(genes)
@@ -393,7 +393,7 @@ fn available_expression_genes(
         .collect()
 }
 
-fn sample_sort_key(sample: &expression_core::Sample) -> (String, String, String) {
+fn sample_sort_key(sample: &expression_domain::Sample) -> (String, String, String) {
     (
         sample.metadata.sort_key.clone().unwrap_or_default(),
         sample.display_label(),
@@ -409,9 +409,9 @@ fn finite_or_zero(value: f64) -> f64 {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use expression_core::{Sample, SampleIdentity, SampleMetadata};
+    use expression_domain::{Sample, SampleIdentity, SampleMetadata};
     use expression_store::ExpressionDataset;
-    use genome_core::{
+    use genome_domain::{
         AssemblyAccession, Gene, GeneRecord, HalfOpenRegion, Position0, SequenceName, Strand,
     };
     use std::collections::BTreeMap;

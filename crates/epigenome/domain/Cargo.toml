@@ -1,0 +1,19 @@
+[package]
+name = "epigenome-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+expression-domain = { path = "../../expression/domain", version = "0.1.0" }
+genome-domain = { path = "../../genome/domain", version = "0.1.0" }
+serde.workspace = true
+thiserror.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

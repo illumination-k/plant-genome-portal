@@ -280,7 +280,7 @@ GENOMES
   ├─ Species            /species
   └─ Assemblies         /assemblies
 
-TOOLS                  (MVP では disabled w/ "Coming soon")
+TOOLS                  (disabled w/ "Coming soon" until wired)
   ├─ BLAST              /tools/blast
   └─ Region lookup      /tools/region
 
@@ -400,7 +400,7 @@ DATA
 
 ### 5.5 `/species` — Species index
 
-カード grid。12-col 上で各カードは `col-span-4` (xl: 3 列) / `md:col-span-6` (md: 2 列) / `col-span-12` (sm: 1 列)。カード内容は種学名 (italic) + TaxID + assembly 数 + 代表 thumbnail (chromosomes の小さな karyotype mini)。MVP は Marchantia 1 種のみだが、layout は複数前提で作る。
+カード grid。12-col 上で各カードは `col-span-4` (xl: 3 列) / `md:col-span-6` (md: 2 列) / `col-span-12` (sm: 1 列)。カード内容は種学名 (italic) + TaxID + assembly 数 + 代表 thumbnail (chromosomes の小さな karyotype mini)。現在は Marchantia 1 種のみだが、layout は複数前提で作る。
 
 ### 5.6 `/downloads`
 
@@ -689,6 +689,6 @@ sizes: `sm` (28px), `md` (32px), `lg` (40px)。Icon 専用は `IconButton` (squa
 - 学名以外で italic を使う場面 (遺伝子記号は species によって italic が慣習。Marchantia ではどうか — 要確認)。
 - ⌘K の global 検索 backend: 現在の `/v2/gene/search` で十分か、専用 search index (tantivy 等) を別途立てるか。
 - 印刷スタイル: gene detail のクリーンな PDF export を提供すべきか。
-- 認証: MVP は public read-only だが、ヘッダーに account slot を置いておくか (将来 v2 で復活させやすい)。
+- 認証: public read-only を基本にしつつ、ヘッダーに account slot を置いておくか。
 
 これらは実装フェーズで判断する。

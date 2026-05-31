@@ -4,8 +4,8 @@ mod codec;
 use blast::{BlastHomologySearchInput, BlastRunner};
 use clap::{Parser, Subcommand};
 use codec::{JobCodec, MessagePack};
-use genome_core::AssemblyAccession;
-use service::{Worker, WorkerJob};
+use genome_domain::AssemblyAccession;
+use genome_service::{Worker, WorkerJob};
 use std::fs::{self, File};
 use std::path::PathBuf;
 

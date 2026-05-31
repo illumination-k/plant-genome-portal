@@ -1,6 +1,18 @@
 [workspace]
 resolver = "3"
-members = ["backends/*", "crates/*"]
+members = [
+  "backends/*",
+  "crates/enrichment/domain",
+  "crates/enrichment/goterm-semsim",
+  "crates/epigenome/domain",
+  "crates/epigenome/store",
+  "crates/expression/coexpression",
+  "crates/expression/domain",
+  "crates/expression/store",
+  "crates/genome/domain",
+  "crates/genome/service",
+  "crates/genome/store",
+]
 
 [workspace.package]
 version = "0.1.0"

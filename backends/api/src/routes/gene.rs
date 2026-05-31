@@ -2,9 +2,9 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use genome_core::{GeneSearch, TaxId};
+use genome_domain::{GeneSearch, TaxId};
+use genome_service::{GeneKeggView, KeggPathwayDetail, KeggPathwaySummary};
 use serde::Deserialize;
-use service::{GeneKeggView, KeggPathwayDetail, KeggPathwaySummary};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{ApiError, AppState};
@@ -14,7 +14,7 @@ use crate::{ApiError, AppState};
     path = "/v2/gene/id/{gene_id}",
     params(("gene_id" = String, Path, description = "Gene identifier")),
     responses(
-        (status = 200, description = "Gene detail", body = genome_core::GeneRecord),
+        (status = 200, description = "Gene detail", body = genome_domain::GeneRecord),
         (status = 404, description = "Gene not found", body = crate::ErrorResponse),
         (status = 400, description = "Invalid request", body = crate::ErrorResponse),
     )
@@ -22,7 +22,7 @@ use crate::{ApiError, AppState};
 pub(crate) async fn gene(
     State(state): State<AppState>,
     Path(gene_id): Path<String>,
-) -> Result<Json<genome_core::GeneRecord>, ApiError> {
+) -> Result<Json<genome_domain::GeneRecord>, ApiError> {
     Ok(Json(state.service.gene(&gene_id)?))
 }
 
@@ -48,7 +48,7 @@ pub(crate) async fn gene_kegg(
     path = "/v2/gene/id/{gene_id}/orthogroups",
     params(("gene_id" = String, Path, description = "Gene identifier")),
     responses(
-        (status = 200, description = "Orthogroups containing the gene", body = Vec<genome_core::Orthogroup>),
+        (status = 200, description = "Orthogroups containing the gene", body = Vec<genome_domain::Orthogroup>),
         (status = 404, description = "Gene not found", body = crate::ErrorResponse),
         (status = 400, description = "Invalid request", body = crate::ErrorResponse),
     )
@@ -56,7 +56,7 @@ pub(crate) async fn gene_kegg(
 pub(crate) async fn gene_orthogroups(
     State(state): State<AppState>,
     Path(gene_id): Path<String>,
-) -> Result<Json<Vec<genome_core::Orthogroup>>, ApiError> {
+) -> Result<Json<Vec<genome_domain::Orthogroup>>, ApiError> {
     Ok(Json(state.service.gene_orthogroups(&gene_id)?))
 }
 
@@ -65,7 +65,7 @@ pub(crate) async fn gene_orthogroups(
     path = "/v2/orthogroup/{orthogroup_id}",
     params(("orthogroup_id" = String, Path, description = "Orthogroup identifier")),
     responses(
-        (status = 200, description = "Orthogroup detail", body = genome_core::Orthogroup),
+        (status = 200, description = "Orthogroup detail", body = genome_domain::Orthogroup),
         (status = 404, description = "Orthogroup not found", body = crate::ErrorResponse),
         (status = 400, description = "Invalid request", body = crate::ErrorResponse),
     )
@@ -73,7 +73,7 @@ pub(crate) async fn gene_orthogroups(
 pub(crate) async fn orthogroup(
     State(state): State<AppState>,
     Path(orthogroup_id): Path<String>,
-) -> Result<Json<genome_core::Orthogroup>, ApiError> {
+) -> Result<Json<genome_domain::Orthogroup>, ApiError> {
     Ok(Json(state.service.orthogroup(&orthogroup_id)?))
 }
 
@@ -110,13 +110,13 @@ pub(crate) async fn kegg_pathway(
     path = "/v2/gene/search",
     params(GeneSearchQuery),
     responses(
-        (status = 200, description = "Matching genes", body = Vec<genome_core::Gene>),
+        (status = 200, description = "Matching genes", body = Vec<genome_domain::Gene>),
     )
 )]
 pub(crate) async fn gene_search(
     State(state): State<AppState>,
     Query(query): Query<GeneSearchQuery>,
-) -> Json<Vec<genome_core::Gene>> {
+) -> Json<Vec<genome_domain::Gene>> {
     Json(state.service.search_genes(query.into_search()))
 }
 

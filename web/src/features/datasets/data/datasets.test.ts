@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import datasetExport from "./datasets";
 
 describe("datasetExport", () => {
-  it("lists the Marchantia MVP assembly", () => {
+  it("lists the Marchantia assembly", () => {
     expect.assertions(1);
 
     expect(datasetExport.datasets).toEqual([

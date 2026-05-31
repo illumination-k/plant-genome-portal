@@ -100,28 +100,6 @@ Rust backend + React SPA frontend の monorepo。
 - Variant / Resequencing
 - Epigenome (ChIP-seq, ATAC-seq, methylation)
 
-## MVP scope
-
-**MVP は genome レイヤーのみ。** 他のオミクスは v2 以降。
-初期データは **Marchantia polymorpha** (TaxID: 3197) 1種、assembly は `GCA_037833805.1` (MpTak1_v7.1)。
-MVP 段階では annotation = assembly に固定 (annotation の別バージョン管理は v2 以降)。
-
-### MVP に入れる
-
-- 種 / アセンブリ一覧・詳細
-- 遺伝子検索 (symbol / locus_tag / free-text)
-- 遺伝子詳細 (座標 + 配列 + functional annotation: GO/Pfam/InterPro/KEGG/KOG/NCBIfam + nomenclature)
-- 領域内 feature 取得 (`Chr1:1000-2000` → 遺伝子リスト)
-- refget 準拠の参照配列取得
-- JBrowse 2 によるゲノムブラウザ表示 (`/jbrowse/*` API + フロント側 wrapper)
-
-### MVP に入れない (v2 以降)
-
-- 発現 / 共発現 / variant / epigenome
-- pangenome / liftover
-- annotation の別バージョン管理
-- 認証 (MVP は read-only public)
-
 ## Architecture
 
 ### Stack 概要
@@ -144,9 +122,9 @@ MVP 段階では annotation = assembly に固定 (annotation の別バージョ�
 | PBT                    | Schemathesis (`uvx`) against live API                                                     |
 | Genome browser         | JBrowse 2 (`@jbrowse/react-linear-genome-view2` + custom feature adapter)                 |
 
-### Snapshot-based data flow (MVP)
+### Snapshot-based data flow
 
-The current implementation deliberately skips PostgreSQL. The `portal-cli` parses input files (FASTA + GFF + functional annotation TSV + nomenclature TSV) into a single `GenomeSnapshot` (`crates/storage/src/snapshot.rs`), serialized as `snapshot.json`. At boot, `api` loads the snapshot into an in-memory `FileGenomeRepository` (`crates/storage/src/repository.rs`) that implements `GenomeRepository` from `genome-core`. PostgreSQL + `sqlx` move in when multi-assembly support arrives.
+The current implementation deliberately skips PostgreSQL. The `portal-cli` parses input files (FASTA + GFF + functional annotation TSV + nomenclature TSV) into a single `GenomeSnapshot` (`crates/genome/store/src/snapshot.rs`), serialized as `snapshot.json`. At boot, `api` loads the snapshot into an in-memory `FileGenomeRepository` (`crates/genome/store/src/repository.rs`) that implements `GenomeRepository` from `genome-domain`. PostgreSQL + `sqlx` move in when multi-assembly support arrives.
 
 ### データ階層 (3 層) — 将来像
 
@@ -189,14 +167,14 @@ GET /jbrowse/assemblies/{accession}/features?refName=&start=&end=
 
 - **API 境界は 1-based closed** (GFF/VCF 慣習、NCBI 互換)。
   例: `region/chr1:1-100000/features` の `start=1, end=100000` は両端を含む。
-- **内部 (storage/service) は 0-based half-open** で統一 (範囲 index の自然な扱い)。
-- `genome-core::coord` で `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を型レベルで区別。
+- **内部 (genome-store/genome-service) は 0-based half-open** で統一 (範囲 index の自然な扱い)。
+- `genome-domain::coord` で `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を型レベルで区別。
   暗黙変換禁止 — `ClosedRegion::to_half_open()` を明示的に呼ぶ。
 - JBrowse の `/jbrowse/assemblies/{accession}/features` だけは **0-based half-open** (JBrowse 慣習)。ハンドラ内で 1-based closed に変換してから service 層に渡す (`backends/api/src/main.rs:226`)。
 
 ### Workspace 構成 (Cargo)
 
-`Cargo.toml` の workspace は `backends/*` + `crates/*` (注: 旧 README の `backend/crates/*` ではない)。
+`Cargo.toml` の workspace は `backends/*` と明示リスト化された `crates/*` / `crates/genome/*` で構成する。
 
 ```
 backends/
@@ -207,23 +185,34 @@ backends/
                             # WorkerJob<Input> envelopes and MessagePack payload/result transport
 
 crates/
-  genome-core/              # 型のみ (no IO, no async, no axum/tokio/sqlx)
+  genome/
+    domain/                 # package: genome-domain; 型のみ (no IO, no async, no axum/tokio/sqlx)
                             # TaxId, AssemblyAccession, GeneId, GoTermId, InterProId,
                             # Position0/1, HalfOpenRegion, ClosedRegion, Strand,
                             # Gene/Transcript/Exon/GeneRecord, GenomeDataset,
                             # HomologySearchResult/HomologyHit domain result types,
                             # FunctionalAnnotation (GO/KEGG/Pfam/InterPro/NCBIfam/KOG),
                             # GenomeRepository trait, GeneSearch
-  storage/                  # noodles FASTA/GFF parsers, nomenclature/functional-annotation
-                            # TSV parsers, refget checksum, FastaReference,
-                            # FileGenomeRepository (in-memory), GenomeSnapshot I/O,
-                            # GoOntology (OBO loader, `to_dag()` projects into goterm-semsim)
-  goterm-semsim/            # GO semantic similarity (pure lib, no IO):
-                            # GoDag (is_a + part_of), IntrinsicIc / CorpusIc,
-                            # Resnik / Lin / Jiang-Conrath / Wang pairwise,
-                            # set_similarity (BMA / Max / Average)
-  service/                  # GenomeService: ユースケース層、薄い (lookup + region → half-open)
-                            # WorkerJob<Input> / Worker trait live here as application contracts.
+    store/                  # package: genome-store; noodles FASTA/GFF parsers,
+                            # nomenclature/functional-annotation TSV parsers,
+                            # refget checksum, FastaReference, FileGenomeRepository
+                            # (in-memory), GenomeSnapshot I/O, GoOntology (OBO loader,
+                            # `to_dag()` projects into enrichment/goterm-semsim)
+    service/                # package: genome-service; GenomeService ユースケース層
+                            # (lookup + region → half-open), WorkerJob<Input> /
+                            # Worker trait application contracts
+  expression/
+    domain/                 # package: expression-domain; sample / matrix / unit / repository traits
+    store/                  # package: expression-store; JSON snapshot-backed expression repository
+    coexpression/           # package: co-expression; clustering and co-expression metrics
+  epigenome/
+    domain/                 # package: epigenome-domain; assay / experiment / peak / repository traits
+    store/                  # package: epigenome-store; manifest + peak parsers and snapshot-backed repository
+  enrichment/
+    domain/                 # package: enrichment-core; hypergeometric enrichment + FDR
+    goterm-semsim/          # package: goterm-semsim; GO semantic similarity (pure lib, no IO)
+                            # GoDag, IntrinsicIc / CorpusIc, Resnik / Lin /
+                            # Jiang-Conrath / Wang pairwise, set_similarity
 ```
 
 Workspace `lints.clippy` denies `print_stdout`, `print_stderr`, `unwrap_used`, `expect_used`. Tests opt out with `#[allow(clippy::unwrap_used, clippy::expect_used)]` and gate behind `#[cfg(test)]`.
@@ -231,13 +220,13 @@ Workspace `lints.clippy` denies `print_stdout`, `print_stderr`, `unwrap_used`, `
 **Dependency direction** (enforced by the crate structure):
 
 ```
-      genome-core
-    /     |      \
-storage   |       (future: db, expression-store, coexpression)
-    \    |
-    service
-    /    \
-  api    portal-cli
+ genome-domain
+     |
+ genome-store
+     |
+ genome-service
+  /        \
+api     portal-cli / worker
 ```
 
 **まだ存在しない crate** (旧 CLAUDE.md で計画されていたもの):
@@ -280,25 +269,24 @@ transcripts     (id PK, gene_id FK, ...)
 exons           (id PK, transcript_id FK, start, end)
 ```
 
-`assemblies.source` is `'ncbi' | 'marpolbase' | 'tair' | 'phytozome' | 'community' | 'local'` (enum `AssemblySource` in `genome-core`). 植物では NCBI 以外の一次ソースが多いため、最初から複数 source を受け入れる前提。
+`assemblies.source` is `'ncbi' | 'marpolbase' | 'tair' | 'phytozome' | 'community' | 'local'` (enum `AssemblySource` in `genome-domain`). 植物では NCBI 以外の一次ソースが多いため、最初から複数 source を受け入れる前提。
 
 ## Coding guidelines
 
 - **解析ロジックと永続化 / HTTP は分離**。将来追加する解析 crate (`coexpression` 等) は `sqlx` / `axum` / `tokio` に依存しない pure lib として保つ。
-- **座標系は型で区別**。`u64` を生で持ち回さない。`genome-core::coord` の `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を経由する。
+- **座標系は型で区別**。`u64` を生で持ち回さない。`genome-domain::coord` の `Position0` / `Position1` / `HalfOpenRegion` / `ClosedRegion` を経由する。
 - **識別子は newtype**。`AssemblyAccession::new("GCA_…")?`, `GeneId::new(…)?`, `GoTermId::new("GO:0008150")?` 等。`GoTermId` / `InterProId` / `PfamAccession` は形式まで検証する。
 - **GA4GH 既存標準が使える場所では使う** (refget, htsget)。植物特有 / オミクス特有の部分だけ独自に設計する。
 - **アセンブリ accession は first-class identifier**。表示名 (`TAIR10` 等) は二次属性として持つが、内部参照は accession (`GCA_xxx` / `LOCAL_xxx`) で行う。
 - **`unwrap` / `expect` / `print*!` は禁止** (workspace `lints`)。エラーは `thiserror` で型を定義し、`?` で伝播する (`DomainError`, `StorageError`, `ServiceError`)。
 - **API ハンドラは薄く**: `ServiceError` を `ApiError` 経由で `IntoResponse` に落とし、status は `TaxonNotFound|AssemblyNotFound|GeneNotFound|SequenceNotFound → 404`, `InvalidRequest → 400` にマップする。
 - **utoipa スキーマを忘れず更新**。新しい response / request 型は `ApiDoc` の `components(schemas(...))` と `paths(...)` 両方に登録 → `pnpm --dir web run openapi:generate` で TS 側にも反映。
-- **MVP は genome に集中**。将来のオミクス層を意識した crate 境界は引いておくが、実装は genome に絞る。
 
 ## Testing
 
 - Rust unit tests live next to code in `#[cfg(test)] mod tests { ... }` blocks. Use `cargo-nextest` (the configured runner) for fast feedback; `cargo test --doc` covers doctests.
-- Repository tests in `crates/storage/src/repository.rs` build `FileGenomeRepository` directly from in-memory `GenomeDataset` — copy that pattern for new repository behavior.
-- Snapshot round-trip tests in `crates/storage/src/snapshot.rs` are the canonical example for parser additions.
+- Repository tests in `crates/genome/store/src/repository.rs` build `FileGenomeRepository` directly from in-memory `GenomeDataset` — copy that pattern for new repository behavior.
+- Snapshot round-trip tests in `crates/genome/store/src/snapshot.rs` are the canonical example for parser additions.
 - API integration is covered by Schemathesis PBT (`mise run pbt:backend`) — when you add a new endpoint, update `schemathesis.toml` `[parameters]` if the existing identifiers don't match your route.
 - Frontend tests with Vitest live alongside source; run with `pnpm --dir web run test` or `mise run test:ts`.
 - Mutation testing is part of CI — be especially deliberate with parsers and validators (e.g. ID format checks): write tests that pin down both positive and negative branches so mutants get killed.

@@ -3,9 +3,9 @@ use axum::{
     http::header,
     response::IntoResponse,
 };
-use genome_core::{HalfOpenRegion, Position0, SequenceName, Strand};
+use genome_domain::{HalfOpenRegion, Position0, SequenceName, Strand};
+use genome_service::ServiceError;
 use serde::Serialize;
-use service::ServiceError;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{ApiError, AppState, ErrorResponse};

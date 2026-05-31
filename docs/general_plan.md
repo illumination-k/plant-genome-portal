@@ -359,7 +359,7 @@ database paper として成立させるには、データ投入手順を再現�
 
 ## Architecture Direction
 
-### MVP / current
+### Current
 
 - in-memory genome snapshot
 - FASTA on disk

@@ -1,6 +1,6 @@
 # plant-genome-portal
 
-## Genome MVP
+## Genome Data
 
 Download and parse MarpolBase MpTak1_v7.1 into a local snapshot. This imports FASTA, GFF3,
 functional annotation, and the MarpolBase nomenclature table:
@@ -71,7 +71,7 @@ cargo run -p worker -- blastn-once \
   --output target/blast/result.json
 ```
 
-Worker jobs use the shared `service::WorkerJob<Input>` application envelope. The
+Worker jobs use the shared `genome_service::WorkerJob<Input>` application envelope. The
 worker's current infra adapter supports MessagePack job/result payloads via
 `worker blastn-job`, while `blastn-once` is a developer-friendly wrapper that builds
 the same typed job from CLI arguments.

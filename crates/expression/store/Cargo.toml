@@ -1,0 +1,18 @@
+[package]
+name = "expression-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+expression-domain = { path = "../domain", version = "0.1.0" }
+genome-domain = { path = "../../genome/domain", version = "0.1.0" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
