@@ -140,3 +140,135 @@ impl GeneSearchQuery {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::test_support::{TAX_ID, sample_state};
+    use genome_service::ServiceError;
+
+    fn search_query() -> GeneSearchQuery {
+        GeneSearchQuery {
+            tax_id: None,
+            symbol: None,
+            locus_tag: None,
+            q: None,
+            limit: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn gene_returns_record_for_existing_id() {
+        let Json(record) = gene(State(sample_state()), Path("Mp1g00010".to_owned()))
+            .await
+            .unwrap();
+
+        assert_eq!(record.gene.id.as_str(), "Mp1g00010");
+    }
+
+    #[tokio::test]
+    async fn gene_maps_missing_id_to_not_found() {
+        let error = gene(State(sample_state()), Path("Mp9g99999".to_owned()))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::GeneNotFound(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn gene_search_filters_by_symbol() {
+        let Json(genes) = gene_search(
+            State(sample_state()),
+            Query(GeneSearchQuery {
+                symbol: Some("FOO".to_owned()),
+                ..search_query()
+            }),
+        )
+        .await;
+
+        assert_eq!(genes.len(), 1);
+        assert_eq!(genes[0].id.as_str(), "Mp1g00010");
+    }
+
+    #[tokio::test]
+    async fn gene_search_query_matches_substring_and_respects_limit() {
+        let Json(matches) = gene_search(
+            State(sample_state()),
+            Query(GeneSearchQuery {
+                q: Some("bar".to_owned()),
+                ..search_query()
+            }),
+        )
+        .await;
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].id.as_str(), "Mp1g00020");
+
+        let Json(limited) = gene_search(
+            State(sample_state()),
+            Query(GeneSearchQuery {
+                limit: Some(1),
+                ..search_query()
+            }),
+        )
+        .await;
+        assert_eq!(limited.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn gene_search_filters_out_other_taxa() {
+        let Json(genes) = gene_search(
+            State(sample_state()),
+            Query(GeneSearchQuery {
+                tax_id: Some(TAX_ID + 1),
+                ..search_query()
+            }),
+        )
+        .await;
+
+        assert!(genes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn gene_orthogroups_is_empty_for_gene_without_membership() {
+        let Json(groups) = gene_orthogroups(State(sample_state()), Path("Mp1g00010".to_owned()))
+            .await
+            .unwrap();
+
+        assert!(groups.is_empty());
+    }
+
+    #[tokio::test]
+    async fn orthogroup_maps_missing_id_to_not_found() {
+        let error = orthogroup(State(sample_state()), Path("OG404".to_owned()))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::OrthogroupNotFound(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn kegg_pathways_is_empty_without_catalog() {
+        let Json(pathways) = kegg_pathways(State(sample_state())).await;
+
+        assert!(pathways.is_empty());
+    }
+
+    #[tokio::test]
+    async fn kegg_pathway_maps_missing_id_to_not_found() {
+        let error = kegg_pathway(State(sample_state()), Path("map99999".to_owned()))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::KeggPathwayNotFound(_))
+        ));
+    }
+}
