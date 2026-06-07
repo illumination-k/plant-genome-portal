@@ -87,3 +87,140 @@ pub(crate) async fn region_features(
 ) -> Result<Json<Vec<genome_domain::Gene>>, ApiError> {
     Ok(Json(state.service.features_in_region(&accession, &region)?))
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::test_support::{
+        DEFAULT_ACCESSION, MISSING_ACCESSION, MISSING_TAX_ID, TAX_ID, sample_state,
+    };
+    use genome_service::ServiceError;
+
+    fn gene_ids(genes: &[genome_domain::Gene]) -> Vec<&str> {
+        genes.iter().map(|gene| gene.id.as_str()).collect()
+    }
+
+    #[tokio::test]
+    async fn assembly_returns_metadata_for_known_accession() {
+        let Json(assembly) = assembly(State(sample_state()), Path(DEFAULT_ACCESSION.to_owned()))
+            .await
+            .unwrap();
+
+        assert_eq!(assembly.accession.as_str(), DEFAULT_ACCESSION);
+    }
+
+    #[tokio::test]
+    async fn assembly_maps_unknown_accession_to_not_found() {
+        let error = assembly(State(sample_state()), Path(MISSING_ACCESSION.to_owned()))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::AssemblyNotFound(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn assembly_sequences_lists_the_sequences() {
+        let Json(sequences) =
+            assembly_sequences(State(sample_state()), Path(DEFAULT_ACCESSION.to_owned()))
+                .await
+                .unwrap();
+
+        assert_eq!(sequences.len(), 1);
+        assert_eq!(sequences[0].name.as_str(), "chr1");
+    }
+
+    #[tokio::test]
+    async fn taxon_returns_taxon_and_its_assemblies() {
+        let Json(response) = taxon(State(sample_state()), Path(TAX_ID)).await.unwrap();
+
+        assert_eq!(response.taxon.tax_id, TaxId::new(TAX_ID));
+        assert_eq!(response.assemblies.len(), 1);
+        assert_eq!(response.assemblies[0].accession.as_str(), DEFAULT_ACCESSION);
+    }
+
+    #[tokio::test]
+    async fn taxon_maps_unknown_tax_id_to_not_found() {
+        let error = taxon(State(sample_state()), Path(MISSING_TAX_ID))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::TaxonNotFound(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn region_features_converts_1_based_closed_bounds() {
+        // 1-based closed chr1:1-10 maps to half-open [0, 10), which is exactly
+        // Mp1g00010's span and must not touch Mp1g00020 at [100, 200).
+        let Json(genes) = region_features(
+            State(sample_state()),
+            Path((DEFAULT_ACCESSION.to_owned(), "chr1:1-10".to_owned())),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(gene_ids(&genes), ["Mp1g00010"]);
+    }
+
+    #[tokio::test]
+    async fn region_features_excludes_genes_just_outside_the_window() {
+        // chr1:1-100 (half-open [0, 100)) stops one base short of Mp1g00020's
+        // 0-based start at 100, so only the first gene overlaps.
+        let Json(genes) = region_features(
+            State(sample_state()),
+            Path((DEFAULT_ACCESSION.to_owned(), "chr1:1-100".to_owned())),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(gene_ids(&genes), ["Mp1g00010"]);
+    }
+
+    #[tokio::test]
+    async fn region_features_spanning_window_returns_both_genes() {
+        let Json(genes) = region_features(
+            State(sample_state()),
+            Path((DEFAULT_ACCESSION.to_owned(), "chr1:1-200".to_owned())),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(gene_ids(&genes), ["Mp1g00010", "Mp1g00020"]);
+    }
+
+    #[tokio::test]
+    async fn region_features_rejects_a_malformed_region() {
+        let error = region_features(
+            State(sample_state()),
+            Path((DEFAULT_ACCESSION.to_owned(), "not-a-region".to_owned())),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::InvalidRequest(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn region_features_maps_unknown_assembly_to_not_found() {
+        let error = region_features(
+            State(sample_state()),
+            Path((MISSING_ACCESSION.to_owned(), "chr1:1-10".to_owned())),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ApiError::Service(ServiceError::AssemblyNotFound(_))
+        ));
+    }
+}

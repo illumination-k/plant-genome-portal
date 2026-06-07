@@ -2,6 +2,8 @@ mod protein;
 mod refget;
 mod routes;
 mod sequence;
+#[cfg(test)]
+mod test_support;
 
 use axum::{
     Json, Router,
@@ -579,4 +581,82 @@ impl IntoResponse for ApiError {
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ErrorResponse {
     error: String,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use genome_domain::TaxId;
+
+    fn status_of(error: ApiError) -> StatusCode {
+        error.into_response().status()
+    }
+
+    #[test]
+    fn service_not_found_variants_map_to_404() {
+        // Every "not found" variant must surface as 404. The match in
+        // `into_response` is exhaustive (no wildcard), so adding a new
+        // ServiceError variant forces a compile error there — this test pins the
+        // status for each variant that currently exists.
+        let not_found = [
+            ServiceError::TaxonNotFound(TaxId::new(1)),
+            ServiceError::AssemblyNotFound("a".to_owned()),
+            ServiceError::GeneNotFound("g".to_owned()),
+            ServiceError::TranscriptNotFound("t".to_owned()),
+            ServiceError::SequenceNotFound("s".to_owned()),
+            ServiceError::ProteinSequenceUnavailable("p".to_owned()),
+            ServiceError::KeggPathwayNotFound("k".to_owned()),
+            ServiceError::OrthogroupNotFound("o".to_owned()),
+        ];
+
+        for error in not_found {
+            assert_eq!(status_of(ApiError::Service(error)), StatusCode::NOT_FOUND);
+        }
+    }
+
+    #[test]
+    fn invalid_request_maps_to_400() {
+        assert_eq!(
+            status_of(ApiError::Service(ServiceError::InvalidRequest(
+                "bad".to_owned()
+            ))),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn job_errors_map_to_404_and_500() {
+        assert_eq!(
+            status_of(ApiError::Job(JobManagerError::JobNotFound("j".to_owned()))),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            status_of(ApiError::Job(JobManagerError::SubmissionFailed(
+                "boom".to_owned()
+            ))),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn blast_unavailable_maps_to_503() {
+        assert_eq!(
+            status_of(ApiError::BlastUnavailable("no blast".to_owned())),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+
+    #[tokio::test]
+    async fn error_response_body_carries_the_display_message() {
+        let response =
+            ApiError::Service(ServiceError::GeneNotFound("Mp9".to_owned())).into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["error"], "gene not found: Mp9");
+    }
 }
